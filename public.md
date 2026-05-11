@@ -1,5 +1,21 @@
 # AI Studio CLI — Public Changelog
 
+## v6.0 — 2026-05-11
+
+### New
+- **Web interface** (`web/`) — companion browser UI with SSE streaming, model picker, persona switcher, and dark terminal theme. Run via `npm start` in `web/`
+- **README** — full project documentation: install, commands, agents, plans, providers, web setup
+
+### Bug Fixes
+- Fixed creator analytics access gate — users with no `role` field could previously bypass the creator/admin/owner check due to `None` in the allowed-roles tuple
+- Fixed missing blank line between `track_usage` and `_clean_terminal_text` (caused some static analysis false positives)
+
+### Housekeeping
+- Added `.gitignore` — excludes `node_modules/`, `__pycache__/`, `profiles/`, `logs/`, and secrets
+- Version bumped from 5.9 → 6.0
+
+---
+
 ## v5.8 — 2026-05-06
 
 ### New Features

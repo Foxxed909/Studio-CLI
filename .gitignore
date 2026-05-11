@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+package-lock.json
+
+# Runtime data — not for VCS
+profiles/
+logs/
+web/node_modules/
+
+# IDE / tooling
+.playwright-mcp/
+.claude/settings.local.json
+*.log
+
+# Secrets / keys (never commit)
+.env
+*.key

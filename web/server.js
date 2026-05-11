@@ -205,6 +205,12 @@ app.post("/api/chat", (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`\n  StudioCLI Web  →  http://localhost:${PORT}\n`);
-});
+// Export for Vercel serverless
+module.exports = app;
+
+// Only bind port in local dev
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`\n  StudioCLI Web  →  http://localhost:${PORT}\n`);
+  });
+}

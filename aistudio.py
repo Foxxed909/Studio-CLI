@@ -24,7 +24,7 @@ except ImportError as e:
     print("Run: pip install rich prompt_toolkit")
     sys.exit(1)
 
-VERSION = "6.0"
+VERSION = "6.1"
 
 console = Console()
 
@@ -1270,7 +1270,7 @@ def cmd_cap(state, args):
 def cmd_tokens(state, args, last_turn=None):
     if last_turn:
         ui = state.get("ui_style") or load_ui_style()
-        label = "tokens" if ui != "gemini" else "Tokens"
+        label = "Tokens"
         console.print(f"[dim]{label}: in≈{last_turn.get('in',0)} out≈{last_turn.get('out',0)} ({last_turn.get('sec',0)}s)[/dim]")
         return
     console.print("[dim]Usage: /tokens (shows last turn token estimates)[/dim]")
@@ -2585,7 +2585,7 @@ def run_via_gemini_cli(prompt, system_prompt=None):
         except Exception: pass
 
 # ── GEMINI REST ───────────────────────────────────
-def call_gemini(api_key, model, history, prompt, system_prompt=None):
+def call_gemini(api_key, model, history, prompt, system_prompt=None, _retry=0):
     url      = f"{API_BASE}/{model}:generateContent"
     contents = [{"role": m["role"], "parts":[{"text":m["text"]}]} for m in history]
     contents.append({"role":"user","parts":[{"text":prompt}]})
@@ -2603,6 +2603,13 @@ def call_gemini(api_key, model, history, prompt, system_prompt=None):
         body2 = e.read().decode()
         try: msg = json.loads(body2)["error"]["message"]
         except Exception: msg = body2
+        if e.code in (401, 403):
+            return None, f"Invalid or expired API key — run /setup to update it. ({msg})"
+        if e.code in (429, 503) and _retry < 3:
+            wait = 2 ** _retry
+            console.print(f"[dim yellow]⏳ Rate limited — retrying in {wait}s ({_retry+1}/3)…[/dim yellow]")
+            time.sleep(wait)
+            return call_gemini(api_key, model, history, prompt, system_prompt, _retry + 1)
         return None, msg
     except Exception as e: return None, str(e)
 
@@ -4038,11 +4045,12 @@ def cmd_run(state, path, history):
         console.print(f"[red]{e}[/red]")
         return history
     ext     = p.suffix.lower()
-    runners = {".py":"python", ".js":"node", ".ts":"npx ts-node", ".sh":"bash", ".bat":str(p)}
+    runners = {".py": ["python"], ".js": ["node"], ".ts": ["npx", "ts-node"], ".sh": ["bash"], ".bat": [str(p)]}
     runner  = runners.get(ext)
     if not runner: console.print(f"[yellow]Don't know how to run {ext} files[/yellow]"); return history
     console.print(f"[dim]Running {p}...[/dim]")
-    result = subprocess.run(f'{runner} "{p}"', shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    cmd = runner if ext == ".bat" else runner + [str(p)]
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     output = result.stdout + result.stderr
     console.print(output or "[dim](no output)[/dim]")
     if output and result.returncode != 0:
@@ -4675,8 +4683,8 @@ def cmd_balance(state):
         f"  [bold]API Tier[/bold]         [dim]{api_type}[/dim]\n"
         f"  [bold]Active Rate[/bold]      [dim]{rate_label}[/dim]\n"
         f"\n"
-        f"  [bold]Session Spend[/bold]    {'[green]$0.000000[/green]' if rate == 0 else f'[yellow]-${session_cost:.6f}[/yellow]'}\n"
-        f"  [bold]Lifetime Spend[/bold]   [{'green' if lifetime_spend == 0 else 'yellow'}]${lifetime_spend:.6f}[/{'green' if lifetime_spend == 0 else 'yellow'}]\n"
+        f"  [bold]Session Spend[/bold]    {'[green]$0.000000[/green]' if rate == 0 else f'[yellow]-${session_cost:.6f}[/yellow]'} [dim](estimated)[/dim]\n"
+        f"  [bold]Lifetime Spend[/bold]   [{'green' if lifetime_spend == 0 else 'yellow'}]${lifetime_spend:.6f}[/{'green' if lifetime_spend == 0 else 'yellow'}] [dim](estimated)[/dim]\n"
         f"\n"
         f"  [bold]Tokens (session)[/bold] [dim]{total_in:,} in  /  {total_out:,} out[/dim]\n"
         f"{free_note}"
@@ -5175,6 +5183,20 @@ def _patch_autonomous_writes(state):
 # ═══════════════════════════════════════════════════════════════
 
 CHANGELOG = {
+    "6.1": [
+        "Fixed: shell=True removed from cmd_run() — eliminates shell injection risk",
+        "Fixed: call_gemini() now retries on 429/503 with exponential backoff (mirrors OpenRouter)",
+        "Fixed: call_gemini() now shows actionable error message on 401/403 (invalid API key)",
+        "Fixed: /tokens label standardized to 'Tokens' across all UI styles",
+        "Fixed: detect_gemini_cli() and _make_toolbar already cached — confirmed no regression",
+        "Fixed: install_windows.bat version comment bumped to v6.1",
+    ],
+    "6.0": [
+        "New: Web interface (web/) — companion browser UI with SSE streaming, model picker, persona switcher",
+        "New: Full project README with install, commands, agents, plans, providers",
+        "Fixed: creator analytics access gate bypass via missing 'role' field",
+        "Added: .gitignore — excludes node_modules/, __pycache__/, profiles/, logs/, secrets",
+    ],
     "5.9": [
         "Fixed: call_cursor streaming path no longer routes through OpenRouter",
         "Fixed: HELP_TEXT and CHANGELOG_TEXT version labels updated to v5.9",

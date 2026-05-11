@@ -1,8 +1,8 @@
 @echo off
-title AI Studio CLI v5.8 - Installer/Updater
+title AI Studio CLI v6.1 - Installer/Updater
 setlocal
 
-set "VERSION=5.8"
+set "VERSION=6.1"
 set "INSTALL_DIR=%USERPROFILE%\AppData\Local\aistudio"
 set "SRC=%~dp0aistudio.py"
 

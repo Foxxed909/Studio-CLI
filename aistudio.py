@@ -24,7 +24,7 @@ except ImportError as e:
     print("Run: pip install rich prompt_toolkit")
     sys.exit(1)
 
-VERSION = "6.0"
+VERSION = "6.2"
 
 console = Console()
 
@@ -761,15 +761,33 @@ def cmd_arena(state, args, history):
     # Summary row
     if len(results) > 1:
         summary_rows = []
-        for m_id, res, dt, toks, eff in results:
+        for idx, (m_id, res, dt, toks, eff) in enumerate(results):
             tags = []
-            if results and m_id == fastest[0]: tags.append("⚡ fastest")
-            if results and m_id == longest[0]: tags.append("📝 most detail")
-            summary_rows.append(f"  [bold]{m_id}[/bold]  {dt}s  {toks} tok  {' '.join(tags)}")
+            if m_id == fastest[0]: tags.append("⚡ fastest")
+            if m_id == longest[0]: tags.append("📝 most detail")
+            summary_rows.append(f"  [bold]{idx+1}.[/bold] [bold]{m_id}[/bold]  {dt}s  {toks} tok  {' '.join(tags)}")
         console.print(Panel(
             "\n".join(summary_rows),
-            title="Arena Summary", border_style="dim", padding=(0, 2)
+            title="Arena Summary — type a number to pick winner, Enter to skip",
+            border_style="dim", padding=(0, 2)
         ))
+        try:
+            pick = console.input("[bold magenta]Winner #: [/bold magenta]").strip()
+            if pick.isdigit():
+                pick_idx = int(pick) - 1
+                if 0 <= pick_idx < len(results):
+                    winner_id, winner_res, _, _, _ = results[pick_idx]
+                    console.print(f"  [bold green]✓ Winner: {winner_id}[/bold green]")
+                    copy_q = console.input("[bold]Copy winner's response to clipboard? (y/n): [/bold]").strip().lower()
+                    if copy_q == "y":
+                        try:
+                            import subprocess as _sp
+                            _sp.run(["clip"], input=(winner_res or "").encode("utf-8"), check=False)
+                            console.print("[dim green]Copied to clipboard.[/dim green]")
+                        except Exception:
+                            console.print("[dim]Clipboard copy not available on this system.[/dim]")
+        except (EOFError, KeyboardInterrupt):
+            pass
 
     return history
 
@@ -2585,7 +2603,7 @@ def run_via_gemini_cli(prompt, system_prompt=None):
         except Exception: pass
 
 # ── GEMINI REST ───────────────────────────────────
-def call_gemini(api_key, model, history, prompt, system_prompt=None):
+def call_gemini(api_key, model, history, prompt, system_prompt=None, _retry=0):
     url      = f"{API_BASE}/{model}:generateContent"
     contents = [{"role": m["role"], "parts":[{"text":m["text"]}]} for m in history]
     contents.append({"role":"user","parts":[{"text":prompt}]})
@@ -2601,6 +2619,13 @@ def call_gemini(api_key, model, history, prompt, system_prompt=None):
         return data["candidates"][0]["content"]["parts"][0]["text"], None
     except urllib_error.HTTPError as e:
         body2 = e.read().decode()
+        if e.code in (429, 503) and _retry < 3:
+            wait = 2 ** _retry
+            console.print(f"[dim yellow]⏳ Rate limited — retrying in {wait}s ({_retry+1}/3)…[/dim yellow]")
+            time.sleep(wait)
+            return call_gemini(api_key, model, history, prompt, system_prompt, _retry + 1)
+        if e.code in (401, 403):
+            return None, "Invalid or expired API key — run /setup to update it."
         try: msg = json.loads(body2)["error"]["message"]
         except Exception: msg = body2
         return None, msg
@@ -4023,7 +4048,11 @@ def cmd_diff(state, f1, f2):
 # ── SHELL / RUN ───────────────────────────────────
 def cmd_shell(state, cmd, history):
     console.print(f"[dim]$ {cmd}[/dim]")
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    try:
+        cmd_list = shlex.split(cmd)
+    except ValueError:
+        cmd_list = cmd.split()
+    result = subprocess.run(cmd_list, capture_output=True, text=True, encoding="utf-8", errors="replace")
     output = result.stdout + result.stderr
     console.print(output or "[dim](no output)[/dim]")
     if output and result.returncode != 0:
@@ -4038,11 +4067,11 @@ def cmd_run(state, path, history):
         console.print(f"[red]{e}[/red]")
         return history
     ext     = p.suffix.lower()
-    runners = {".py":"python", ".js":"node", ".ts":"npx ts-node", ".sh":"bash", ".bat":str(p)}
+    runners = {".py":["python"], ".js":["node"], ".ts":["npx","ts-node"], ".sh":["bash"], ".bat":[str(p)]}
     runner  = runners.get(ext)
     if not runner: console.print(f"[yellow]Don't know how to run {ext} files[/yellow]"); return history
     console.print(f"[dim]Running {p}...[/dim]")
-    result = subprocess.run(f'{runner} "{p}"', shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    result = subprocess.run(runner + [str(p)], capture_output=True, text=True, encoding="utf-8", errors="replace")
     output = result.stdout + result.stderr
     console.print(output or "[dim](no output)[/dim]")
     if output and result.returncode != 0:
@@ -4675,8 +4704,8 @@ def cmd_balance(state):
         f"  [bold]API Tier[/bold]         [dim]{api_type}[/dim]\n"
         f"  [bold]Active Rate[/bold]      [dim]{rate_label}[/dim]\n"
         f"\n"
-        f"  [bold]Session Spend[/bold]    {'[green]$0.000000[/green]' if rate == 0 else f'[yellow]-${session_cost:.6f}[/yellow]'}\n"
-        f"  [bold]Lifetime Spend[/bold]   [{'green' if lifetime_spend == 0 else 'yellow'}]${lifetime_spend:.6f}[/{'green' if lifetime_spend == 0 else 'yellow'}]\n"
+        f"  [bold]Session Spend[/bold]    {'[green]$0.000000[/green]' if rate == 0 else f'[yellow]-${session_cost:.6f}[/yellow]'}  [dim](estimated)[/dim]\n"
+        f"  [bold]Lifetime Spend[/bold]   [{'green' if lifetime_spend == 0 else 'yellow'}]${lifetime_spend:.6f}[/{'green' if lifetime_spend == 0 else 'yellow'}]  [dim](estimated)[/dim]\n"
         f"\n"
         f"  [bold]Tokens (session)[/bold] [dim]{total_in:,} in  /  {total_out:,} out[/dim]\n"
         f"{free_note}"
@@ -5175,6 +5204,22 @@ def _patch_autonomous_writes(state):
 # ═══════════════════════════════════════════════════════════════
 
 CHANGELOG = {
+    "6.2": [
+        "New: /vault now uses Fernet AES encryption when cryptography is installed (pip install cryptography)",
+        "New: git branch shown in toolbar (⎇branch) — TTL-cached, no keypress perf hit",
+        "New: /test saves generated test file and offers to run it + fix failures",
+        "New: /team export — write team roster to team_export.json in workspace",
+        "New: Arena winner vote — pick best response by number, copy to clipboard",
+        "Fix: /run and /shell use safe subprocess list form (no shell=True injection risk)",
+        "Fix: Gemini API now retries on 429/503 with exponential backoff (3 attempts)",
+        "Fix: Gemini 401/403 shows 'Invalid key — run /setup' instead of raw JSON",
+        "Fix: /balance spend lines now labeled (estimated)",
+    ],
+    "6.0": [
+        "Internal web UI with ChatGPT-style design (web/ directory)",
+        "Vercel deployment support (vercel.json)",
+        "Bug fixes and stability improvements",
+    ],
     "5.9": [
         "Fixed: call_cursor streaming path no longer routes through OpenRouter",
         "Fixed: HELP_TEXT and CHANGELOG_TEXT version labels updated to v5.9",
@@ -5338,7 +5383,7 @@ def cmd_search(state, args):
 
 
 def cmd_test(state, args, history):
-    """/test <file> — AI generates a test file for a source file."""
+    """/test <file> — AI generates a test file, saves it, and optionally runs it."""
     if not args:
         console.print("[yellow]Usage: /test <file>[/yellow]")
         return history
@@ -5348,7 +5393,22 @@ def cmd_test(state, args, history):
         console.print(f"[red]{e}[/red]")
         return history
     ext = p.suffix.lower()
-    framework = "pytest" if ext == ".py" else "jest" if ext in (".js", ".ts", ".jsx", ".tsx") else "appropriate test framework"
+    if ext == ".py":
+        framework  = "pytest"
+        test_ext   = ".py"
+        run_cmd    = ["python", "-m", "pytest", "-v"]
+        test_name  = f"test_{p.stem}{test_ext}"
+    elif ext in (".js", ".ts", ".jsx", ".tsx"):
+        framework  = "jest"
+        test_ext   = ext
+        run_cmd    = ["npx", "jest", "--no-coverage"]
+        test_name  = f"{p.stem}.test{test_ext}"
+    else:
+        framework  = "appropriate test framework"
+        test_ext   = p.suffix
+        run_cmd    = None
+        test_name  = f"test_{p.stem}{test_ext}"
+
     prompt = (
         f"Generate a complete {framework} test file for `{p.name}`.\n"
         "Cover: happy paths, edge cases, error conditions, boundary values.\n"
@@ -5356,7 +5416,36 @@ def cmd_test(state, args, history):
         "Return only the test file code — no explanation, no markdown fences.\n\n"
         f"SOURCE:\n{content}"
     )
-    ai_respond(state, prompt, history)
+    console.print(f"[dim]Generating {framework} tests for {p.name}…[/dim]")
+    code, history = ai_respond(state, prompt, history)
+
+    if not code:
+        return history
+
+    test_path = p.parent / test_name
+    try:
+        test_path.write_text(code, encoding="utf-8")
+        console.print(Panel(
+            f"  [bold]Test file saved:[/bold]  [cyan]{test_path}[/cyan]\n"
+            f"  [dim]Framework: {framework}[/dim]",
+            title="✓ Tests Generated", border_style="green", padding=(0, 2)
+        ))
+    except Exception as e:
+        console.print(f"[red]Could not save test file: {e}[/red]")
+        return history
+
+    if run_cmd and console.input("[bold]Run tests now? (y/n): [/bold]").strip().lower() == "y":
+        result = subprocess.run(
+            run_cmd + [str(test_path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+        output = result.stdout + result.stderr
+        console.print(output or "[dim](no output)[/dim]")
+        if result.returncode != 0:
+            if console.input("[bold]Ask AI to fix failures? (y/n): [/bold]").strip().lower() == "y":
+                fix_prompt = f"These tests failed:\n\n{output[:3000]}\n\nSource:\n{content[:2000]}\n\nFix the test file."
+                _, history = ai_respond(state, fix_prompt, history)
+
     return history
 
 
@@ -5612,22 +5701,62 @@ def _require_pro(state, feature="This feature"):
     return True
 
 
-VAULT_FILE = CONFIG_DIR / "vault.json"
+VAULT_FILE    = CONFIG_DIR / "vault.json"
+VAULT_KEY_FILE = CONFIG_DIR / "vault_key"
+
+def _vault_fernet():
+    """Return a Fernet instance keyed from vault_key, or None if cryptography not installed."""
+    try:
+        from cryptography.fernet import Fernet
+    except ImportError:
+        return None
+    if not VAULT_KEY_FILE.exists():
+        key = Fernet.generate_key()
+        VAULT_KEY_FILE.parent.mkdir(exist_ok=True)
+        VAULT_KEY_FILE.write_bytes(key)
+        VAULT_KEY_FILE.chmod(0o600)
+    else:
+        key = VAULT_KEY_FILE.read_bytes().strip()
+    return Fernet(key)
 
 def _vault_load():
     if not VAULT_FILE.exists(): return {}
+    import base64
     try:
-        import base64
         raw = json.loads(VAULT_FILE.read_text(encoding="utf-8"))
-        return {k: base64.b64decode(v).decode("utf-8") for k, v in raw.items()}
     except Exception:
         return {}
+    f = _vault_fernet()
+    result = {}
+    for k, v in raw.items():
+        try:
+            if f and v.startswith("fernet:"):
+                result[k] = f.decrypt(v[7:].encode()).decode("utf-8")
+            else:
+                result[k] = base64.b64decode(v).decode("utf-8")
+        except Exception:
+            result[k] = v
+    return result
 
 def _vault_save(data):
     import base64
-    encoded = {k: base64.b64encode(v.encode("utf-8")).decode("utf-8") for k, v in data.items()}
+    f = _vault_fernet()
+    encoded = {}
+    for k, v in data.items():
+        if f:
+            encoded[k] = "fernet:" + f.encrypt(v.encode("utf-8")).decode("utf-8")
+        else:
+            encoded[k] = base64.b64encode(v.encode("utf-8")).decode("utf-8")
     VAULT_FILE.parent.mkdir(exist_ok=True)
     VAULT_FILE.write_text(json.dumps(encoded, indent=2), encoding="utf-8")
+
+def _vault_encrypted():
+    """True if Fernet encryption is available."""
+    try:
+        from cryptography.fernet import Fernet  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
 def cmd_vault(state, args):
@@ -5635,11 +5764,14 @@ def cmd_vault(state, args):
     if not _require_pro(state, "/vault"): return
     theme  = state.get("theme", THEMES["default"])
     acc    = theme.get("accent", "cyan")
-    console.print(
-        "[yellow bold]⚠ Vault notice:[/yellow bold] [dim]secrets are "
-        "[bold]base64-encoded (obfuscated)[/bold], not cryptographically encrypted. "
-        "Do not store production credentials or sensitive tokens here.[/dim]"
-    )
+    if _vault_encrypted():
+        console.print("[green bold]🔒 Vault:[/green bold] [dim]secrets encrypted with Fernet (AES-128-CBC).[/dim]")
+    else:
+        console.print(
+            "[yellow bold]⚠ Vault notice:[/yellow bold] [dim]secrets are "
+            "[bold]base64-encoded (obfuscated)[/bold] — install [cyan]cryptography[/cyan] "
+            "for real encryption: [cyan]pip install cryptography[/cyan][/dim]"
+        )
     parts  = (args or "").split(None, 2)
     action = parts[0].lower() if parts else ""
     vault  = _vault_load()
@@ -5651,7 +5783,8 @@ def cmd_vault(state, args):
         key, val = parts[1], parts[2]
         vault[key] = val
         _vault_save(vault)
-        console.print(f"  [{acc}]✓ Vault: {key} saved[/{acc}]  [dim](base64-encoded at rest)[/dim]")
+        enc_note = "Fernet-encrypted" if _vault_encrypted() else "base64-encoded (install cryptography for encryption)"
+        console.print(f"  [{acc}]✓ Vault: {key} saved[/{acc}]  [dim]({enc_note})[/dim]")
 
     elif action == "get":
         if len(parts) < 2:
@@ -5785,8 +5918,24 @@ def cmd_team(state, args):
         _team_save(members)
         console.print(f"  [{acc}]✓ {email} → {new_role}[/{acc}]")
 
+    elif action == "export":
+        if not members:
+            console.print("[yellow]No team members to export.[/yellow]")
+            return
+        ws = state.get("workspace_root") or str(Path.cwd())
+        out_path = Path(ws) / "team_export.json"
+        try:
+            out_path.write_text(json.dumps(members, indent=2), encoding="utf-8")
+            console.print(Panel(
+                f"  [bold]Exported {len(members)} member(s)[/bold]\n"
+                f"  [cyan]{out_path}[/cyan]",
+                title="✓ Team Export", border_style=acc, padding=(0, 2)
+            ))
+        except Exception as e:
+            console.print(f"[red]Export failed: {e}[/red]")
+
     else:
-        console.print("[yellow]Usage: /team list|invite|remove|role[/yellow]")
+        console.print("[yellow]Usage: /team list|invite|remove|role|export[/yellow]")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -6361,16 +6510,15 @@ CHANGELOG_TEXT = f"""
 [bold cyan]AI Studio CLI — Changelog[/bold cyan]
 
 [bold]v{VERSION}[/bold] (current)
-  ✦ NEW: Agent Mesh — Autonomous specialist handoffs via [AGENT:id] tags
-  ✦ NEW: Local Fusion — Ollama integration for local model fallback (/local)
-  ✦ NEW: Live-Watcher (Live-FIF) — Background bug detection on file save
-  ✦ NEW: Vision 2.0 — Deep visual reasoning and screenshot OCR integration
-  ✦ NEW: Cursor API — Native support for Cursor's high-efficiency reasoning
-  ✦ NEW: /arena — Side-by-side model and provider battles
-  ✦ NEW: Streaming & Reasoning — Real-time token output with animated thinking
-  ✦ NEW: Subscription Leaps — Team and Ultra plans with unlimited scale
-  ✦ IMPROVED: Unified Permission System (Auto/YOLO/Bypass)
-  ✦ IMPROVED: Platform-agnostic logs and sync directory structure
+  ✦ NEW: /vault Fernet AES encryption (pip install cryptography to activate)
+  ✦ NEW: Git branch shown in bottom toolbar (⎇branch, TTL-cached)
+  ✦ NEW: /test saves test file + runs it + AI-fixes failures
+  ✦ NEW: /team export — exports roster to team_export.json
+  ✦ NEW: Arena winner vote — pick best response, copy to clipboard
+  ✦ FIX: /run and /shell — safe subprocess list form (no shell injection)
+  ✦ FIX: Gemini API retries on rate-limit (3× exponential backoff)
+  ✦ FIX: Gemini 401/403 shows friendly "run /setup" message
+  ✦ FIX: /balance spend labeled (estimated)
 
 [bold]v5.4[/bold]
   ✦ FIXED: rate limiter now reads plan correctly (was always capping as free)
@@ -7788,7 +7936,7 @@ def _prompt_html(theme, ui_style):
     return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>›</{ac}> ")
 
 
-_toolbar_disk_cache: dict = {"ts": 0.0, "mem_n": 0, "prof": None, "trial": None}
+_toolbar_disk_cache: dict = {"ts": 0.0, "mem_n": 0, "prof": None, "trial": None, "branch": ""}
 _TOOLBAR_TTL = 5.0  # seconds between disk reads
 
 def _make_toolbar(state):
@@ -7809,8 +7957,15 @@ def _make_toolbar(state):
                 _toolbar_disk_cache["mem_n"] = 0
             _toolbar_disk_cache["prof"]  = load_profile() or {}
             _toolbar_disk_cache["trial"] = load_trial()
+            try:
+                r = subprocess.run(["git", "branch", "--show-current"],
+                                   capture_output=True, text=True, timeout=1)
+                _toolbar_disk_cache["branch"] = r.stdout.strip() if r.returncode == 0 else ""
+            except Exception:
+                _toolbar_disk_cache["branch"] = ""
             _toolbar_disk_cache["ts"]    = now
-        mem_n = _toolbar_disk_cache["mem_n"]
+        mem_n  = _toolbar_disk_cache["mem_n"]
+        branch = _toolbar_disk_cache["branch"]
         active    = state.get("active_agent") or ""
         chat_mode = state.get("_chat_mode", "")
         lt        = state.get("_last_tokens")
@@ -7836,10 +7991,11 @@ def _make_toolbar(state):
                 plan_part = f" · {_pcfg['badge']} {_msgs}/{_mlimit}msg"
         except Exception:
             plan_part = ""
+        branch_part = f" · <b>⎇{branch}</b>" if branch else ""
         return HTML(
             f' <b>◆ {prov}</b> · <b>{model}</b>'
             f' · {ui_n} · {stream} · mem:{mem_n} · 📁{cwd}'
-            f'{plan_part}{tok_part}{mode_part}{agent_part} '
+            f'{branch_part}{plan_part}{tok_part}{mode_part}{agent_part} '
         )
     return _toolbar
 

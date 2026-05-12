@@ -1,8 +1,8 @@
 @echo off
-title AI Studio CLI v5.8 - Installer/Updater
+title AI Studio CLI v6.2 - Installer/Updater
 setlocal
 
-set "VERSION=5.8"
+set "VERSION=6.2"
 set "INSTALL_DIR=%USERPROFILE%\AppData\Local\aistudio"
 set "SRC=%~dp0aistudio.py"
 
@@ -42,8 +42,8 @@ if errorlevel 1 (
 
 :: Install dependencies
 echo.
-echo   Installing dependencies (rich, prompt_toolkit)...
-pip install rich prompt_toolkit --quiet --upgrade
+echo   Installing dependencies (rich, prompt_toolkit, cryptography)...
+pip install rich prompt_toolkit cryptography --quiet --upgrade
 if errorlevel 1 (
     echo   [ERROR] pip install failed.
     echo   Try: pip install rich prompt_toolkit

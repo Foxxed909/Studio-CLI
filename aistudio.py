@@ -24,7 +24,7 @@ except ImportError as e:
     print("Run: pip install rich prompt_toolkit")
     sys.exit(1)
 
-VERSION = "8.0"
+VERSION = "8.1"
 
 console = Console()
 

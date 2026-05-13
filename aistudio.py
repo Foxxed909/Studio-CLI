@@ -1,5 +1,5 @@
 import os, sys, json, argparse, subprocess, tempfile, shutil, time, threading
-import difflib, fnmatch, glob, re, shlex
+import difflib, fnmatch, glob, re, shlex, webbrowser, hashlib
 from pathlib import Path
 from urllib import request, error as urllib_error
 from datetime import datetime
@@ -24,7 +24,7 @@ except ImportError as e:
     print("Run: pip install rich prompt_toolkit")
     sys.exit(1)
 
-VERSION = "6.3"
+VERSION = "8.0"
 
 console = Console()
 
@@ -73,46 +73,50 @@ SLOT_GATED_PLANS = ("starter", "pro", "max")
 PLANS = {
     "free": {
         "name":        "Free",
+        "tier":        "v8+",
         "price":       "$0 / mo",
         "msg_limit":   10,
         "img_per_3h":  1,
         "models":      ["nvidia/nemotron-3-super-120b-a12b:free"],
         "color":       "dim",
         "badge":       "○",
-        "features":    ["10 messages / session", "1 image / 3 hrs", "Nemotron only"],
-        "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta"],
+        "features":    ["10 messages / session", "1 image / 3 hrs", "Nemotron only", "v8+ features"],
+        "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta", "Max tier: v8+"],
     },
     "pro": {
         "name":        "Pro",
+        "tier":        "v9",
         "price":       "$18 / mo",
         "msg_limit":   500,
         "img_per_3h":  10,
         "models":      None,
         "color":       "cyan",
         "badge":       "◆",
-        "features":    ["500 messages / session", "10 images / 3 hrs", "All models", "All agents", "Priority queue"],
+        "features":    ["500 messages / session", "10 images / 3 hrs", "All models", "All agents", "Priority queue", "v9 features"],
         "limitations": [],
     },
     "max": {
         "name":        "Max",
+        "tier":        "v9+",
         "price":       "$80 / mo",
         "msg_limit":   5000,
         "img_per_3h":  100,
         "models":      None,
         "color":       "magenta",
         "badge":       "◈",
-        "features":    ["5,000 messages / session", "100 images / 3 hrs", "Cursor API Support", "Surgical Patching", "Internal Reasoning Access", "/audit-log", "/priority-queue"],
+        "features":    ["5,000 messages / session", "100 images / 3 hrs", "Cursor API", "Surgical Patching", "Internal Reasoning", "/audit-log", "/priority-queue", "v9+ features"],
         "limitations": [],
     },
     "ultra": {
         "name":        "Ultra",
+        "tier":        "v9 Beta",
         "price":       "$250 / mo",
         "msg_limit":   999999,
         "img_per_3h":  999,
         "models":      None,
         "color":       "bold yellow",
         "badge":       "★",
-        "features":    ["Unlimited Usage", "Infinite images", "Real-time Token Streaming", "Magnificent Effort Mode", "XHigh Effort Mode"],
+        "features":    ["Unlimited usage", "Infinite images", "Real-time streaming", "Max Effort Mode", "v9 Beta features", "Early access to v10"],
         "limitations": [],
     },
     "starter": {
@@ -556,6 +560,66 @@ THEMES = {
         "banner_sub": "bold yellow",
         "icon": "🦊",
         "prompt_name": "foxxia",
+    },
+    "cobalt": {
+        "name": "cobalt",
+        "banner_color": "bold cyan",
+        "accent": "bold blue",
+        "prompt_user": "ansiblue",
+        "prompt_arrow": "ansicyan",
+        "border": "cyan",
+        "success": "cyan",
+        "error": "bold red",
+        "warning": "yellow",
+        "dim": "dim",
+        "banner_sub": "bold cyan",
+        "icon": "🔷",
+        "prompt_name": "cobalt",
+    },
+    "carbon": {
+        "name": "carbon",
+        "banner_color": "bold white",
+        "accent": "bold white",
+        "prompt_user": "ansiwhite",
+        "prompt_arrow": "ansigray",
+        "border": "white",
+        "success": "white",
+        "error": "bold red",
+        "warning": "bold yellow",
+        "dim": "dim",
+        "banner_sub": "white",
+        "icon": "⬛",
+        "prompt_name": "carbon",
+    },
+    "crimson": {
+        "name": "crimson",
+        "banner_color": "bold red",
+        "accent": "bold magenta",
+        "prompt_user": "ansired",
+        "prompt_arrow": "ansimagenta",
+        "border": "red",
+        "success": "magenta",
+        "error": "bold red",
+        "warning": "yellow",
+        "dim": "dim",
+        "banner_sub": "bold red",
+        "icon": "🔴",
+        "prompt_name": "crimson",
+    },
+    "slate": {
+        "name": "slate",
+        "banner_color": "bold bright_blue",
+        "accent": "bold blue",
+        "prompt_user": "ansiblue",
+        "prompt_arrow": "ansibrightblue",
+        "border": "bright_blue",
+        "success": "bright_blue",
+        "error": "red",
+        "warning": "yellow",
+        "dim": "dim",
+        "banner_sub": "bright_blue",
+        "icon": "🌐",
+        "prompt_name": "slate",
     },
 }
 
@@ -5488,6 +5552,10 @@ VIBE_PRESETS = {
     "aurora":    {"ui": "gemini",  "theme": "aurora"},
     "dracula":   {"ui": "gemini",  "theme": "dracula"},
     "chatgpt":   {"ui": "ghost",   "theme": "midnight"},
+    "cobalt":    {"ui": "codex",   "theme": "cobalt"},
+    "carbon":    {"ui": "ghost",   "theme": "carbon"},
+    "crimson":   {"ui": "studio",  "theme": "crimson"},
+    "slate":     {"ui": "claude",  "theme": "slate"},
 }
 
 
@@ -6208,6 +6276,141 @@ def cmd_policy(state, args):
         return
 
     console.print("[yellow]Usage: /policy show | set <key> <value> | clear <key>[/yellow]")
+
+
+def cmd_whats_new(state):
+    """/whats-new — show what's new in the current version."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    plan_id  = get_plan(state)
+    plan_cfg = PLANS.get(plan_id, PLANS["free"])
+    tier_label = plan_cfg.get("tier", "v8+")
+    body = (
+        f"  [bold]StudioCLI v{VERSION}[/bold]  [{acc}]{tier_label}[/{acc}]\n\n"
+        f"  [{acc}]v8.0[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
+        "  [bold green]✦[/bold green] [bold]4 new themes[/bold]: cobalt, carbon, crimson, slate   [dim](/theme <name>[/dim])\n"
+        "  [bold green]✦[/bold green] [bold]4 new vibe presets[/bold]: cobalt, carbon, crimson, slate  [dim](/vibe <name>[/dim])\n"
+        "  [bold green]✦[/bold green] [bold]/snapshot[/bold]: export current session to JSON\n"
+        "  [bold green]✦[/bold green] [bold]/open-web[/bold]: launch web UI in browser\n"
+        "  [bold green]✦[/bold green] [bold]/tip[/bold]: random power-user tip\n"
+        "  [bold green]✦[/bold green] [bold]/speed[/bold]: toggle low-latency stream mode\n"
+        "  [bold green]✦[/bold green] Plan tiers: v8+ (free) · v9 (pro) · v9+ (max) · v9 Beta (ultra)\n"
+        f"\n  [{acc}]v9.0[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
+        "  [bold cyan]✦[/bold cyan] [bold]/plugin list|add|remove[/bold]: plugin management  [dim](pro)[/dim]\n"
+        "  [bold cyan]✦[/bold cyan] [bold]/agent-mesh[/bold]: multi-agent parallel tasks  [dim](pro)[/dim]\n"
+        "  [bold cyan]✦[/bold cyan] [bold]/vision-pro[/bold]: enhanced image analysis  [dim](pro)[/dim]\n"
+        "  [bold cyan]✦[/bold cyan] [bold]/template[/bold]: save & reuse prompt templates  [dim](pro)[/dim]\n"
+        f"\n  [{acc}]v9 Beta[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
+        "  [bold yellow]✦[/bold yellow] [bold]/voice[/bold]: voice-to-text input  [dim](ultra)[/dim]\n"
+        "  [bold yellow]✦[/bold yellow] [bold]/mesh-broadcast[/bold]: broadcast to all agents  [dim](ultra)[/dim]\n"
+        "  [bold yellow]✦[/bold yellow] [bold]/analytics-pro[/bold]: advanced usage dashboard  [dim](ultra)[/dim]\n"
+        "\n  [dim]/changelog · /plan · /upgrade[/dim]"
+    )
+    console.print(Panel(body, title=f"[bold]What's New — v{VERSION}[/bold]",
+                        border_style=theme.get("border", "cyan"), padding=(0, 2)))
+
+
+def cmd_snapshot(state, args, history):
+    """/snapshot [filename] — export current session (history + context) to JSON."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
+    fname = (args.strip() if args else None) or f"snapshot_{ts}.json"
+    if not fname.endswith(".json"):
+        fname += ".json"
+    snap = {
+        "version":   VERSION,
+        "timestamp": datetime.now().isoformat(),
+        "model":     state.get("model", DEFAULT_MODEL),
+        "persona":   state.get("persona", "default"),
+        "ui_style":  state.get("ui_style", "gemini"),
+        "theme":     state.get("theme", {}).get("name", "default"),
+        "workspace": str(state.get("workspace_root", "")),
+        "messages":  len(history),
+        "history":   history,
+        "memory":    load_memory(),
+    }
+    try:
+        out = Path(fname)
+        out.write_text(json.dumps(snap, indent=2, ensure_ascii=False), encoding="utf-8")
+        console.print(Panel(
+            f"  [{acc}]✓ Snapshot saved[/{acc}]\n\n"
+            f"  [bold]File:[/bold]  {out.resolve()}\n"
+            f"  [bold]Messages:[/bold] {len(history)}\n"
+            f"  [bold]Memory:[/bold]  {len(snap['memory'])} entries",
+            title="[bold]Session Snapshot[/bold]",
+            border_style=theme.get("border", "cyan"), padding=(0, 2)
+        ))
+    except Exception as exc:
+        console.print(f"[red]Snapshot failed: {exc}[/red]")
+    return history
+
+
+def cmd_open_web(state, args):
+    """/open-web [port] — open StudioCLI web UI in default browser."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    port  = args.strip() if args else "3456"
+    try:
+        port_n = int(port)
+    except ValueError:
+        port_n = 3456
+    url = f"http://localhost:{port_n}"
+    try:
+        webbrowser.open(url)
+        console.print(f"  [{acc}]✦ Opening {url} in your browser…[/{acc}]")
+    except Exception as exc:
+        console.print(f"[yellow]Could not open browser: {exc}[/yellow]")
+        console.print(f"  Open manually: [bold cyan]{url}[/bold cyan]")
+
+
+_TIPS = [
+    "/vibe chatgpt      → dark minimal mode matching the web UI",
+    "/arena same        → compare same model at low vs pro effort",
+    "/memory            → see what the AI remembers about you",
+    "/fif               → find-it-fix: paste an error, auto-fix it",
+    "/snapshot          → export entire session to JSON",
+    "/theme cobalt      → new cobalt theme — cool blue terminal",
+    "Ctrl+L             → clear screen and redraw welcome",
+    "/multi m1,m2 <q>   → query two models simultaneously",
+    "/thinking on       → enable extended reasoning for next reply",
+    "/autonomous        → let the AI write files without asking",
+    "/broadcast         → send a message to all active agents",
+    "Shift+Enter        → multi-line input in the REPL",
+    "/export            → export conversation history to markdown",
+    "/compare m1 m2     → side-by-side model comparison",
+    "/vibe foxxia       → 🦊 Foxxia dark mode with amber accent",
+]
+
+def cmd_tip(state, args):
+    """/tip — show a random power-user tip."""
+    import random
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    tip   = random.choice(_TIPS)
+    cmd_part, _, desc_part = tip.partition("→")
+    console.print(
+        Panel(f"  [{acc}]{cmd_part.strip()}[/{acc}]  [dim]→[/dim]  {desc_part.strip()}",
+              title="[bold]💡 Pro Tip[/bold]",
+              border_style=theme.get("border","cyan"), padding=(0,2))
+    )
+
+
+def cmd_speed(state, args):
+    """/speed [on|off] — toggle low-latency mode (stream=on, effort=low)."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    mode  = (args.strip().lower() if args else "")
+    current_stream = state.get("stream_mode", "auto")
+    if mode == "on" or (not mode and current_stream != "on"):
+        state = cmd_stream(state, "on")
+        state["_effort"] = "low"
+        console.print(f"  [{acc}]⚡ Speed mode ON[/{acc}]  [dim]stream=on · effort=low[/dim]")
+    else:
+        state = cmd_stream(state, "auto")
+        state.pop("_effort", None)
+        console.print(f"  [{acc}]✓ Speed mode OFF[/{acc}]  [dim]stream=auto · effort=normal[/dim]")
+    return state
 
 
 def cmd_profile_view(state):
@@ -8659,6 +8862,18 @@ def run_repl(state):
                 elif cmd in ("orgmetrics", "orgstats", "org"): cmd_orgmetrics(state, args)
                 elif cmd == "sso":                       cmd_sso(state, args)
                 elif cmd == "policy":                    cmd_policy(state, args)
+
+                # ── v8.0 ──────────────────────────────────────────────────────
+                elif cmd in ("whats-new", "whatsnew", "new", "changelog-v8"):
+                    cmd_whats_new(state)
+                elif cmd in ("snapshot", "snap"):
+                    history = cmd_snapshot(state, args, history)
+                elif cmd in ("open-web", "openweb", "web-ui", "webui"):
+                    cmd_open_web(state, args)
+                elif cmd in ("tip", "tips", "hint"):
+                    cmd_tip(state, args)
+                elif cmd == "speed":
+                    state = cmd_speed(state, args)
 
                 else:
                     # 10. Auto-Corrector Feature

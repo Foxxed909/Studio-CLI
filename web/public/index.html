@@ -134,6 +134,28 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .bubble a{color:#19c37d;text-decoration:none}
 .bubble a:hover{text-decoration:underline}
 
+/* ── Sidebar search ─────────────────────────────────────────────────────────── */
+.sidebar-search{padding:0 8px 8px}
+.sidebar-search input{width:100%;background:#1e1e1e;border:1px solid rgba(255,255,255,.09);
+  border-radius:8px;padding:7px 11px;color:#ececec;font-size:12.5px;outline:none;
+  transition:border-color .15s}
+.sidebar-search input::placeholder{color:rgba(255,255,255,.25)}
+.sidebar-search input:focus{border-color:rgba(255,255,255,.22)}
+
+/* ── Version badge ───────────────────────────────────────────────────────────── */
+.ver-badge{font-size:10px;font-weight:700;background:rgba(25,195,125,.15);
+  color:#19c37d;border:1px solid rgba(25,195,125,.25);border-radius:10px;
+  padding:2px 7px;letter-spacing:.04em;flex-shrink:0}
+
+/* ── Per-message copy & regenerate ──────────────────────────────────────────── */
+.msg-actions{display:flex;gap:4px;margin-top:6px;opacity:0;transition:opacity .15s}
+.msg-row.assistant:hover .msg-actions{opacity:1}
+.msg-action-btn{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.35);
+  padding:4px 7px;border-radius:6px;font-size:11.5px;
+  display:flex;align-items:center;gap:4px;transition:background .12s,color .12s}
+.msg-action-btn:hover{background:rgba(255,255,255,.08);color:#ececec}
+.msg-action-btn svg{width:13px;height:13px}
+
 /* ── Typing & cursor ─────────────────────────────────────────────────────────── */
 .typing{display:flex;gap:5px;padding:8px 2px;align-items:center}
 .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3);
@@ -260,12 +282,16 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <span class="sidebar-logo">StudioCLI</span>
+      <span class="ver-badge">v8+</span>
       <button class="new-btn" onclick="newConversation()" title="New chat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
         New
       </button>
+    </div>
+    <div class="sidebar-search">
+      <input id="convoSearch" placeholder="Search chats…" oninput="filterConvos(this.value)"/>
     </div>
     <div class="convo-list" id="convoList"></div>
     <div class="sidebar-footer">
@@ -309,6 +335,12 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
       </button>
       <div class="header-title" id="chatTitle">New conversation</div>
       <select class="model-sel" id="msel" title="Model"><option>Loading…</option></select>
+      <button class="ib" onclick="exportConvo()" title="Export conversation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
       <button class="ib" onclick="openSettings()" title="Settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3"/>
@@ -678,12 +710,82 @@ function renderMessage(role,content){
     const av=document.createElement("div");av.className="avatar ai-av";av.textContent="S";
     const bub=document.createElement("div");bub.className="bubble";
     const body=document.createElement("div");body.innerHTML=md(content);
-    bub.appendChild(body);row.appendChild(av);row.appendChild(bub);
+    bub.appendChild(body);
+    const acts=document.createElement("div");acts.className="msg-actions";
+    acts.innerHTML=`<button class="msg-action-btn" onclick="copyMsgText(this)" title="Copy">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy
+    </button><button class="msg-action-btn" onclick="regenFromHere(this)" title="Regenerate">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg> Regen
+    </button>`;
+    bub.appendChild(acts);
+    row.appendChild(av);row.appendChild(bub);
   }
   chat.appendChild(row);
   chat.scrollTop=chat.scrollHeight;
   return row;
 }
+
+function copyMsgText(btn){
+  const body=btn.closest(".bubble").querySelector("div");
+  const text=body?body.innerText:"";
+  navigator.clipboard.writeText(text).then(()=>{
+    const orig=btn.innerHTML;btn.textContent="Copied!";
+    setTimeout(()=>btn.innerHTML=orig,2000);
+  });
+}
+
+function regenFromHere(btn){
+  if(busy||messages.length<2)return;
+  const lastUser=messages.filter(m=>m.role==="user").pop();
+  if(!lastUser)return;
+  if(messages[messages.length-1]?.role==="assistant")messages.pop();
+  btn.closest(".msg-row").remove();
+  cin.value=lastUser.content;
+  doSend();
+}
+
+// ── Sidebar search ────────────────────────────────────────────────────────────
+function filterConvos(query){
+  const q=(query||"").toLowerCase().trim();
+  document.querySelectorAll(".convo-item").forEach(item=>{
+    const title=item.querySelector(".convo-title")?.textContent.toLowerCase()||"";
+    item.style.display=(!q||title.includes(q))?"":"none";
+  });
+  document.querySelectorAll(".convo-section").forEach(sec=>{
+    let sib=sec.nextElementSibling,any=false;
+    while(sib&&!sib.classList.contains("convo-section")){
+      if(sib.style.display!=="none")any=true;
+      sib=sib.nextElementSibling;
+    }
+    sec.style.display=any?"":"none";
+  });
+}
+
+// ── Export conversation ───────────────────────────────────────────────────────
+function exportConvo(){
+  if(!messages.length){alert("Nothing to export yet.");return;}
+  const lines=["# StudioCLI Conversation\n\n",
+    `**Date:** ${new Date().toLocaleString()}  \n`,
+    `**Model:** ${model}\n\n---\n`];
+  messages.forEach(m=>{
+    lines.push(`\n### ${m.role==="user"?"You":"AI"}\n\n${m.content}\n`);
+  });
+  const blob=new Blob([lines.join("")],{type:"text/markdown"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=`studio-${Date.now()}.md`;
+  a.click();URL.revokeObjectURL(a.href);
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener("keydown",e=>{
+  const mod=e.ctrlKey||e.metaKey;
+  if(mod&&e.key==="k"){e.preventDefault();newConversation();}
+  if(e.key==="Escape"){
+    if(document.getElementById("overlay").classList.contains("open"))closeSettings();
+    else if(document.getElementById("sidebar").classList.contains("open"))closeSidebarMobile();
+  }
+});
 
 // ── Stop & busy state ──────────────────────────────────────────────────────────
 function stopStream(){if(activeReader){activeReader.cancel();activeReader=null;}}

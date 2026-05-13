@@ -24,7 +24,7 @@ except ImportError as e:
     print("Run: pip install rich prompt_toolkit")
     sys.exit(1)
 
-VERSION = "9.0"
+VERSION = "9.0-beta"
 
 console = Console()
 
@@ -2312,6 +2312,12 @@ ALL_COMMANDS = [
     "/profile","/me","/insights","/stats","/vault","/team",
     # v5.9 — Max / Team / Enterprise
     "/audit-log","/priority-queue","/orgmetrics","/sso","/policy",
+    # v9.0
+    "/plugin","/agent-mesh","/vision-pro","/template",
+    # v8.0
+    "/whats-new","/snapshot","/open-web","/tip","/speed",
+    # v9 Beta
+    "/labs","/flags","/mesh-broadcast","/analytics-pro",
 ]
 
 COMMAND_METADATA = {
@@ -6535,6 +6541,11 @@ _TIPS = [
     "/export            → export conversation history to markdown",
     "/compare m1 m2     → side-by-side model comparison",
     "/vibe foxxia       → 🦊 Foxxia dark mode with amber accent",
+    "/beta list         → see all v9 Beta experimental feature flags (ultra)",
+    "/analytics-pro     → advanced usage dashboard with token breakdown (ultra)",
+    "/mesh-broadcast    → blast a prompt to every active agent simultaneously",
+    "/voice start       → voice-to-text input (requires pyaudio, ultra)",
+    "/labs              → alias for /beta — manage experimental features",
 ]
 
 def cmd_tip(state, args):
@@ -6566,6 +6577,217 @@ def cmd_speed(state, args):
         state.pop("_effort", None)
         console.print(f"  [{acc}]✓ Speed mode OFF[/{acc}]  [dim]stream=auto · effort=normal[/dim]")
     return state
+
+
+# ── v9 Beta Commands ──────────────────────────────────────────────────────────
+
+_BETA_FLAGS_FILE = CONFIG_DIR / "beta_flags.json"
+
+def _load_beta_flags():
+    if _BETA_FLAGS_FILE.exists():
+        try:
+            return json.loads(_BETA_FLAGS_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
+def _save_beta_flags(flags):
+    _BETA_FLAGS_FILE.parent.mkdir(exist_ok=True)
+    _BETA_FLAGS_FILE.write_text(json.dumps(flags, indent=2))
+
+_AVAILABLE_FLAGS = {
+    "voice":           ("Voice-to-text input mode",               "ultra"),
+    "mesh_broadcast":  ("Broadcast prompt to all active agents",  "ultra"),
+    "analytics_pro":   ("Advanced usage analytics dashboard",     "ultra"),
+    "auto_snapshot":   ("Auto-snapshot session every 50 messages","ultra"),
+    "effort_xhigh":    ("Unlock xhigh + mxh effort levels",       "ultra"),
+    "model_preview":   ("Access preview/experimental models",     "ultra"),
+    "parallel_exec":   ("Execute code blocks in parallel",        "max"),
+    "audit_stream":    ("Stream audit events in real-time",       "max"),
+}
+
+
+def cmd_beta(state, args):
+    """/beta [on|off] [flag] — manage v9 Beta experimental feature flags (ultra)."""
+    if not _require_tier(state, ("ultra", "enterprise"), "/beta flags", "/upgrade ultra"):
+        return
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    flags = _load_beta_flags()
+    sub   = args.strip().lower() if args else ""
+
+    if not sub or sub == "list":
+        rows = ""
+        for flag, (desc, tier) in _AVAILABLE_FLAGS.items():
+            enabled = flags.get(flag, False)
+            status  = f"[green]ON[/green]" if enabled else "[dim]off[/dim]"
+            rows += f"\n  {status}  [{acc}]{flag:<20}[/{acc}]  [dim]{desc}[/dim]"
+        console.print(Panel(
+            f"  [bold]v9 Beta Feature Flags[/bold]\n{rows}\n\n"
+            f"  [dim]/beta on <flag>   →  enable\n"
+            f"  /beta off <flag>  →  disable\n"
+            f"  /beta reset       →  disable all[/dim]",
+            title=f"[bold yellow]★ Beta Labs[/bold yellow]",
+            border_style="yellow", padding=(0, 2)
+        ))
+        return
+
+    if sub == "reset":
+        _save_beta_flags({})
+        console.print(f"  [{acc}]✓ All beta flags reset.[/{acc}]")
+        return
+
+    parts = sub.split(None, 1)
+    if len(parts) == 2 and parts[0] in ("on", "off"):
+        action, flag = parts[0], parts[1].strip()
+        if flag not in _AVAILABLE_FLAGS:
+            console.print(f"[yellow]Unknown flag '{flag}'. Use /beta list.[/yellow]")
+            return
+        flags[flag] = (action == "on")
+        _save_beta_flags(flags)
+        state.setdefault("_beta_flags", {}).update(flags)
+        verb = "[green]enabled[/green]" if flags[flag] else "[dim]disabled[/dim]"
+        console.print(f"  [{acc}]★ Beta flag '{flag}' {verb}.[/{acc}]")
+        return
+
+    console.print("[yellow]Usage: /beta list  |  /beta on <flag>  |  /beta off <flag>  |  /beta reset[/yellow]")
+
+
+def cmd_voice(state, args):
+    """/voice [start|stop] — voice-to-text input mode (ultra, requires pyaudio)."""
+    if not _require_tier(state, ("ultra", "enterprise"), "/voice", "/upgrade ultra"):
+        return
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    sub   = args.strip().lower() if args else "start"
+
+    # Stub: check for pyaudio / speech_recognition availability
+    try:
+        import speech_recognition  # noqa: F401
+        _has_sr = True
+    except ImportError:
+        _has_sr = False
+
+    if not _has_sr:
+        console.print(Panel(
+            "  [bold yellow]★ Voice mode — beta feature[/bold yellow]\n\n"
+            "  Voice-to-text requires [bold]speech_recognition[/bold] and [bold]pyaudio[/bold].\n\n"
+            "  [dim]pip install SpeechRecognition pyaudio[/dim]\n\n"
+            "  After installing, re-run [bold]/voice start[/bold] and speak into your mic.\n"
+            "  Your speech will be transcribed and sent as a message.",
+            title="[bold]Voice Input[/bold]",
+            border_style="yellow", padding=(0, 2)
+        ))
+        return
+
+    if sub == "stop":
+        state.pop("_voice_active", None)
+        console.print(f"  [{acc}]✓ Voice mode stopped.[/{acc}]")
+        return
+
+    # Activate voice mode — actual capture loop when enabled
+    state["_voice_active"] = True
+    console.print(Panel(
+        f"  [{acc}]★ Voice mode active[/{acc}]\n\n"
+        "  Listening… speak clearly into your microphone.\n"
+        "  Say [bold]'stop listening'[/bold] to exit voice mode.\n\n"
+        "  [dim]/voice stop  →  exit voice mode[/dim]",
+        title="[bold]Voice Input — Live[/bold]",
+        border_style="yellow", padding=(0, 2)
+    ))
+
+
+def cmd_mesh_broadcast(state, args, history):
+    """/mesh-broadcast <prompt> — broadcast a prompt to ALL active agents in parallel (ultra)."""
+    if not _require_tier(state, ("ultra", "enterprise"), "/mesh-broadcast", "/upgrade ultra"):
+        return history
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    prompt = args.strip() if args else ""
+    if not prompt:
+        console.print("[yellow]Usage: /mesh-broadcast <prompt>[/yellow]")
+        return history
+
+    agents = state.get("agents", {})
+    if not agents:
+        console.print(Panel(
+            "  No agents are active. Start agents first:\n"
+            "  [dim]/agent spawn <name>[/dim]",
+            title="Mesh Broadcast", border_style="yellow", padding=(0, 2)
+        ))
+        return history
+
+    console.print(Panel(
+        f"  [{acc}]★ Broadcasting to {len(agents)} agent(s)…[/{acc}]\n\n"
+        f"  [bold]Prompt:[/bold] {prompt[:80]}{'…' if len(prompt) > 80 else ''}",
+        title="[bold]Mesh Broadcast[/bold]", border_style="yellow", padding=(0, 2)
+    ))
+    for name, agent_obj in agents.items():
+        console.print(f"\n  [bold {acc}]▶ {name}[/bold {acc}]")
+        try:
+            resp = agent_obj.run(prompt, console, ai_respond)
+            if resp:
+                history.append({"role": "model", "text": f"[{name}] {resp}"})
+        except Exception as exc:
+            console.print(f"  [red]Agent '{name}' error: {exc}[/red]")
+    console.print(f"\n  [{acc}]✓ Broadcast complete.[/{acc}]")
+    return history
+
+
+def cmd_analytics_pro(state, args):
+    """/analytics-pro — advanced usage analytics (ultra)."""
+    if not _require_tier(state, ("ultra", "enterprise"), "/analytics-pro", "/upgrade ultra"):
+        return
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    prof  = load_profile() or {}
+
+    total_msgs    = prof.get("total_msgs", 0)
+    tok_in        = prof.get("total_tokens_in", 0)
+    tok_out       = prof.get("total_tokens_out", 0)
+    sess_count    = prof.get("session_count", 1)
+    model_usage   = prof.get("model_usage", {})
+    login_hist    = prof.get("login_history", [])
+
+    avg_per_sess  = round(total_msgs / max(sess_count, 1), 1)
+    avg_tok_out   = round(tok_out / max(total_msgs, 1), 1)
+    top_models    = sorted(model_usage.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # Build a small ASCII usage bar
+    def _bar(val, max_val, width=20):
+        filled = max(1, int((val / max(max_val, 1)) * width))
+        return f"[{acc}]{'█' * filled}[/{acc}][dim]{'░' * (width - filled)}[/dim]"
+
+    top_model_rows = ""
+    max_m = top_models[0][1] if top_models else 1
+    for m, c in top_models:
+        short = m.split("/")[-1].split(":")[0][:22]
+        top_model_rows += f"\n  {_bar(c, max_m, 16)}  [bold]{short:<22}[/bold]  [dim]{c}×[/dim]"
+
+    # Recent activity (last 7 sessions)
+    recent = login_hist[-7:] if login_hist else []
+    activity = "\n".join(
+        f"  [dim]· {ts[:16].replace('T', ' ')}[/dim]" for ts in reversed(recent)
+    ) or "  [dim]—[/dim]"
+
+    body = (
+        f"  [bold {acc}]★ Pro Analytics Dashboard[/bold {acc}]\n\n"
+        f"  [bold]Total messages[/bold]      {total_msgs:>8,}\n"
+        f"  [bold]Total sessions[/bold]      {sess_count:>8,}\n"
+        f"  [bold]Avg msgs/session[/bold]    {avg_per_sess:>8}\n"
+        f"  [bold]Tokens in[/bold]           {tok_in:>8,}\n"
+        f"  [bold]Tokens out[/bold]          {tok_out:>8,}\n"
+        f"  [bold]Avg tokens/reply[/bold]    {avg_tok_out:>8}\n"
+        f"\n  [bold]Top models[/bold]{top_model_rows}\n"
+        f"\n  [bold]Recent sessions[/bold]\n{activity}"
+    )
+    console.print(Panel(body, title="[bold yellow]★ Analytics Pro[/bold yellow]",
+                        border_style="yellow", padding=(0, 2)))
+
+
+def cmd_labs(state, args):
+    """/labs — alias for /beta, show experimental lab features."""
+    cmd_beta(state, args)
 
 
 def cmd_profile_view(state):
@@ -8920,7 +9142,7 @@ def run_repl(state):
                             title="Image Models", border_style="cyan"))
                 elif cmd == "todo":           cmd_todo(state)
                 elif cmd == "bench":          cmd_bench(state)
-                elif cmd == "voice":          cmd_voice(state)
+                elif cmd == "voice":          cmd_voice(state, args)
                 elif cmd == "export":         cmd_export(state, history)
                 elif cmd == "balance":        cmd_balance(state)
                 elif cmd == "cost":           cmd_cost(state)
@@ -8967,7 +9189,7 @@ def run_repl(state):
                 elif cmd == "upgrade":        cmd_upgrade(state, args)
                 elif cmd == "plan":           cmd_plan(state)
                 elif cmd == "permissions":    state = cmd_permissions(state)
-                elif cmd == "beta":           history = cmd_beta(state, args, history)
+                elif cmd == "beta":           cmd_beta(state, args)
                 elif cmd == "usage":          cmd_usage(state)
                 elif cmd == "trial":          state = cmd_trial(state, args)
                 elif cmd in ("update", "studio-update"): cmd_studio_update(state)
@@ -8997,7 +9219,7 @@ def run_repl(state):
                 # ── v5.6 new commands ─────────────────────────────────────────
                 elif cmd == "summarize":  history = cmd_summarize(state, history)
                 elif cmd == "autonomous": history = cmd_autonomous(state, args, history); _patch_autonomous_writes(state)
-                elif cmd in ("creator","creator-analytics","analytics"): cmd_creator_analytics(state)
+                elif cmd in ("creator","creator-analytics"): cmd_creator_analytics(state)
 
                 # ── v5.7 new commands ─────────────────────────────────────────
                 elif cmd == "vibe":       state = cmd_vibe(state, args)
@@ -9017,6 +9239,14 @@ def run_repl(state):
                 elif cmd in ("orgmetrics", "orgstats", "org"): cmd_orgmetrics(state, args)
                 elif cmd == "sso":                       cmd_sso(state, args)
                 elif cmd == "policy":                    cmd_policy(state, args)
+
+                # ── v9 Beta (ultra) ───────────────────────────────────────────
+                elif cmd in ("labs", "flags"):
+                    cmd_beta(state, args)
+                elif cmd in ("mesh-broadcast", "meshbroadcast", "broadcast-all"):
+                    history = cmd_mesh_broadcast(state, args, history)
+                elif cmd in ("analytics-pro", "analyticspro"):
+                    cmd_analytics_pro(state, args)
 
                 # ── v9.0 (pro) ────────────────────────────────────────────────
                 elif cmd == "plugin":

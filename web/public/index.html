@@ -458,6 +458,19 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
       </div>
     </div>
 
+    <div class="modal-section">
+      <div class="modal-section-title">Beta Channel</div>
+      <div class="field" style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="betaToggle" style="accent-color:#fbbf24"/>
+        <label style="margin:0;cursor:pointer" for="betaToggle">Enable v9 Beta features
+          <span style="font-size:10px;background:rgba(234,179,8,.12);color:#fbbf24;border:1px solid rgba(234,179,8,.3);border-radius:4px;padding:1px 6px;margin-left:4px">Ultra</span>
+        </label>
+      </div>
+      <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:4px">
+        Unlocks experimental features. Requires an API key with sufficient credits.
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="modal-actions">
       <button class="btn-primary" onclick="saveSettings()">Save</button>
@@ -673,12 +686,19 @@ const cfg_headers = ()=>{
     // Banner
     const hasKey=cfg.hasKey||!!s.key;
     if(!hasKey)document.getElementById("banner").classList.add("on");
-    // Upgrade badge to v9 for Pro (keyed) users
-    if(hasKey){
-      const badge=document.querySelector(".ver-badge");
-      if(badge){badge.textContent="v9";badge.title="StudioCLI v9 — Pro";
+    // Upgrade badge: v8+ → v9 (key) → v9 Beta (key + beta flag)
+    const badge=document.querySelector(".ver-badge");
+    if(badge){
+      const isBeta=localStorage.getItem("studioBeta")==="1";
+      if(isBeta&&hasKey){
+        badge.textContent="v9 Beta";badge.title="StudioCLI v9 Beta — Ultra";
+        badge.style.background="rgba(234,179,8,.12)";
+        badge.style.color="#fbbf24";badge.style.borderColor="rgba(234,179,8,.3)";
+      } else if(hasKey){
+        badge.textContent="v9";badge.title="StudioCLI v9 — Pro";
         badge.style.background="rgba(88,101,242,.15)";
-        badge.style.color="#7b8fff";badge.style.borderColor="rgba(88,101,242,.3)";}
+        badge.style.color="#7b8fff";badge.style.borderColor="rgba(88,101,242,.3)";
+      }
     }
   }catch{}
   // Init first conversation
@@ -923,6 +943,7 @@ function openSettings(){
   document.getElementById("tokLabel").textContent=s.maxTokens||4096;
   document.getElementById("streamToggle").checked=s.stream??true;
   document.getElementById("sysPrompt").value=s.sysPrompt||"";
+  document.getElementById("betaToggle").checked=localStorage.getItem("studioBeta")==="1";
   updatePersonaDesc();
   document.getElementById("overlay").classList.add("open");
 }
@@ -967,6 +988,24 @@ async function saveSettings(){
     sysPrompt:document.getElementById("sysPrompt").value.trim(),
   };
   saveSettingsStore(newSettings);
+  // Save beta flag + refresh badge
+  const betaOn=document.getElementById("betaToggle").checked;
+  localStorage.setItem("studioBeta", betaOn?"1":"0");
+  const badge=document.querySelector(".ver-badge");
+  if(badge){
+    if(betaOn&&key){
+      badge.textContent="v9 Beta";badge.title="StudioCLI v9 Beta — Ultra";
+      badge.style.background="rgba(234,179,8,.12)";
+      badge.style.color="#fbbf24";badge.style.borderColor="rgba(234,179,8,.3)";
+    } else if(key){
+      badge.textContent="v9";badge.title="StudioCLI v9 — Pro";
+      badge.style.background="rgba(88,101,242,.15)";
+      badge.style.color="#7b8fff";badge.style.borderColor="rgba(88,101,242,.3)";
+    } else {
+      badge.textContent="v8+";badge.title="StudioCLI v8+";
+      badge.style.background="";badge.style.color="";badge.style.borderColor="";
+    }
+  }
   if(!key)closeSettings();
 }
 

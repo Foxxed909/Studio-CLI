@@ -7678,21 +7678,21 @@ def render_welcome(state):
     if ui == "studio":
         if plan_id in ("max", "ultra", "enterprise", "team"):
             pro_tag = plan_cfg["name"].upper()
-            banner_lines = [
-                "  ╔══════════════════════════════════════════════════════╗",
-                f"  ║    AI  STUDIO  CLI  —  v{VERSION}  Pro  ✦  {pro_tag:<10}  ║",
-                "  ║    ──────────────────────────────────────────────    ║",
-                f"  ║    {username:<20} · All models · Priority Queue  ║",
-                "  ╚══════════════════════════════════════════════════════╝",
-            ]
-            _animate_banner(banner_lines, plan_cfg["color"])
+            bc = plan_cfg["color"].replace("bold ", "")
+            console.print(Panel(
+                f"[{plan_cfg['color']}]AI  STUDIO  CLI — v{VERSION}  Pro  ✦  {pro_tag}[/{plan_cfg['color']}]\n"
+                f"[dim]{'─' * 48}[/dim]\n"
+                f"[dim]{username} · All models · Priority Queue[/dim]",
+                border_style=bc,
+                padding=(0, 2),
+            ))
         elif plan_id in ("pro", "dev", "starter"):
-            banner_lines = [
-                f"  ╔══════════════════════════════════════════╗",
-                f"  ║   AI Studio CLI  v{VERSION}  ·  {plan_cfg['name']:<12}  ║",
-                f"  ╚══════════════════════════════════════════╝",
-            ]
-            _animate_banner(banner_lines, plan_cfg["color"])
+            bc = plan_cfg["color"].replace("bold ", "")
+            console.print(Panel(
+                f"[{plan_cfg['color']}]AI Studio CLI  v{VERSION}  ·  {plan_cfg['name']}[/{plan_cfg['color']}]",
+                border_style=bc,
+                padding=(0, 2),
+            ))
         else:
             console.print(f"\n  [{acc}]◆  AI Studio CLI  v{VERSION}[/{acc}]  {plan_badge}\n")
 

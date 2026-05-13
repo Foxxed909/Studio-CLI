@@ -9,121 +9,176 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/highlight.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  background:#343541;color:#ececec;overflow:hidden}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:#212121;color:#ececec;overflow:hidden}
 
 /* Layout */
 .app{display:flex;flex-direction:column;height:100vh}
 
 /* Header */
-.header{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.1);
-  text-align:center;font-size:15px;font-weight:600;color:#ececec;
-  background:#343541;flex-shrink:0;display:flex;align-items:center;justify-content:space-between}
-.header-title{flex:1;text-align:center}
-.header-actions{display:flex;gap:6px}
-.ib{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.5);
-  padding:6px;border-radius:6px;display:flex;align-items:center;justify-content:center;
-  transition:background .15s,color .15s}
+.header{padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.06);
+  background:#1a1a1a;flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;gap:12px}
+.header-title{font-size:15px;font-weight:600;color:#ececec;white-space:nowrap}
+.header-right{display:flex;align-items:center;gap:8px}
+.ib{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.45);
+  padding:7px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  transition:background .15s,color .15s;flex-shrink:0}
 .ib:hover{background:rgba(255,255,255,.08);color:#ececec}
 .ib svg{width:16px;height:16px}
 
+/* Model selector */
+.model-sel{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  border-radius:8px;padding:5px 10px;color:#ececec;font-size:13px;cursor:pointer;
+  outline:none;transition:border-color .15s;max-width:200px}
+.model-sel:focus{border-color:rgba(255,255,255,.25)}
+.model-sel option,.model-sel optgroup{background:#1e1e1e;color:#ececec}
+
 /* Chat window */
-.chat{flex:1;overflow-y:auto;padding:24px 16px 8px;display:flex;flex-direction:column;gap:20px}
-.chat::-webkit-scrollbar{width:6px}
-.chat::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
+.chat{flex:1;overflow-y:auto;padding:20px 0 8px;display:flex;flex-direction:column;gap:0}
+.chat::-webkit-scrollbar{width:5px}
+.chat::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}
+.chat::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.2)}
 
 /* Messages */
-.msg-row{display:flex}
+.msg-row{display:flex;padding:8px 16px;gap:12px;max-width:860px;
+  width:100%;margin:0 auto;align-items:flex-start}
 .msg-row.user{justify-content:flex-end}
 .msg-row.assistant{justify-content:flex-start}
-.bubble{max-width:min(680px,80%);padding:12px 18px;border-radius:18px;
-  font-size:15px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
-.msg-row.user .bubble{background:#40414f;border-radius:18px 18px 4px 18px}
-.msg-row.assistant .bubble{background:transparent;padding:4px 0;max-width:min(720px,90%)}
-.bubble b{display:block;font-size:12px;font-weight:600;color:rgba(255,255,255,.45);
-  margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+
+.avatar{width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:12px;margin-top:2px}
+.avatar.ai-av{background:#19c37d;color:#fff;font-weight:700}
+.avatar.user-av{background:#5865f2;color:#fff;font-weight:700}
+
+.bubble{font-size:15px;line-height:1.7;word-break:break-word}
+.msg-row.user .bubble{background:#2f2f2f;padding:11px 16px;border-radius:20px 20px 5px 20px;
+  max-width:min(580px,80%)}
+.msg-row.assistant .bubble{background:transparent;padding:4px 0;max-width:min(680px,100%)}
 
 /* Markdown in AI messages */
 .bubble p{margin-bottom:10px}
 .bubble p:last-child{margin-bottom:0}
-.bubble h1{font-size:20px;margin:16px 0 8px}
-.bubble h2{font-size:17px;margin:14px 0 7px}
-.bubble h3{font-size:15px;margin:12px 0 6px}
+.bubble h1{font-size:20px;margin:18px 0 9px;font-weight:700}
+.bubble h2{font-size:17px;margin:16px 0 8px;font-weight:600}
+.bubble h3{font-size:15px;margin:13px 0 6px;font-weight:600}
 .bubble ul,.bubble ol{padding-left:20px;margin-bottom:10px}
-.bubble li{margin-bottom:3px}
-.bubble code{background:rgba(255,255,255,.1);border-radius:4px;padding:2px 5px;
-  font-size:13px;font-family:'Fira Code','Cascadia Code',monospace}
-.bubble pre{background:#0d0d0d;border-radius:8px;overflow:hidden;margin:10px 0;
-  border:1px solid rgba(255,255,255,.1)}
+.bubble li{margin-bottom:4px}
+.bubble code{background:rgba(255,255,255,.1);border-radius:4px;padding:2px 6px;
+  font-size:13px;font-family:'Fira Code','Cascadia Code','JetBrains Mono',monospace}
+.bubble pre{background:#0d0d0d;border-radius:10px;overflow:hidden;margin:12px 0;
+  border:1px solid rgba(255,255,255,.08)}
 .code-hdr{display:flex;align-items:center;justify-content:space-between;
-  padding:7px 14px;background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.1);
-  font-size:12px;color:rgba(255,255,255,.5)}
-.cpbtn{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.5);
-  font-size:12px;padding:2px 8px;border-radius:4px;transition:background .15s,color .15s}
+  padding:7px 14px;background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.08);
+  font-size:12px;color:rgba(255,255,255,.45)}
+.cpbtn{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.45);
+  font-size:12px;padding:3px 9px;border-radius:4px;transition:background .15s,color .15s}
 .cpbtn:hover{background:rgba(255,255,255,.08);color:#ececec}
 .bubble pre code{background:none;padding:14px;display:block;font-size:13px;overflow-x:auto}
 .bubble blockquote{border-left:3px solid #19c37d;padding-left:14px;
-  color:rgba(255,255,255,.6);margin:8px 0}
-.bubble table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px}
-.bubble th,.bubble td{border:1px solid rgba(255,255,255,.1);padding:8px 12px;text-align:left}
+  color:rgba(255,255,255,.55);margin:10px 0}
+.bubble table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
+.bubble th,.bubble td{border:1px solid rgba(255,255,255,.1);padding:9px 12px;text-align:left}
 .bubble th{background:rgba(255,255,255,.04);font-weight:600}
 .bubble a{color:#19c37d;text-decoration:none}
 .bubble a:hover{text-decoration:underline}
 
 /* Typing indicator */
-.typing{display:flex;gap:4px;padding:4px 0;align-items:center}
-.dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.4);
-  animation:bounce 1.2s ease infinite}
+.typing{display:flex;gap:5px;padding:8px 2px;align-items:center}
+.dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35);
+  animation:bounce 1.3s ease infinite}
 .dot:nth-child(2){animation-delay:.2s}
 .dot:nth-child(3){animation-delay:.4s}
-@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 .cursor{display:inline-block;width:2px;height:1em;background:#ececec;
   vertical-align:middle;animation:blink 1s step-end infinite;margin-left:1px}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 
-/* Input area */
-.inp-area{padding:12px 16px 20px;flex-shrink:0;
-  background:linear-gradient(to top,#343541 60%,transparent)}
-.inp-wrap{max-width:720px;margin:0 auto}
-.inp-box{display:flex;align-items:center;background:#40414f;
-  border-radius:14px;padding:10px 12px;gap:10px;
-  border:1px solid rgba(255,255,255,.1);
-  transition:border-color .15s,box-shadow .15s}
-.inp-box:focus-within{border-color:rgba(25,195,125,.35);
-  box-shadow:0 0 0 3px rgba(25,195,125,.08)}
-#cin{flex:1;background:none;border:none;outline:none;color:#ececec;
-  font-size:15px;line-height:1.5;resize:none;min-height:24px;max-height:180px;
-  overflow-y:auto;padding:0;font-family:inherit}
-#cin::placeholder{color:rgba(255,255,255,.35)}
-.send{width:34px;height:34px;border-radius:8px;background:#19c37d;border:none;
-  cursor:pointer;display:flex;align-items:center;justify-content:center;
-  transition:background .15s,transform .1s;flex-shrink:0;color:#fff}
-.send:hover{background:#1a8e5f}
-.send:active{transform:scale(.92)}
-.send:disabled{background:rgba(255,255,255,.1);cursor:not-allowed}
-.send svg{width:16px;height:16px}
-.inp-foot{text-align:center;font-size:11px;color:rgba(255,255,255,.3);
-  margin-top:8px;padding:0 4px}
-
-/* Model selector */
-.model-sel{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
-  border-radius:8px;padding:4px 10px;color:#ececec;font-size:13px;cursor:pointer;
-  outline:none;transition:border-color .15s}
-.model-sel:focus{border-color:rgba(25,195,125,.4)}
-.model-sel option{background:#2f2f2f;color:#ececec}
-
 /* Empty state */
 .empty{flex:1;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;padding:40px 20px;text-align:center;gap:8px}
-.empty-title{font-size:28px;font-weight:600}
-.empty-sub{font-size:14px;color:rgba(255,255,255,.4);margin-bottom:16px}
+  justify-content:center;padding:40px 20px;text-align:center;gap:6px}
+.empty-title{font-size:26px;font-weight:600;letter-spacing:-.3px}
+.empty-sub{font-size:14px;color:rgba(255,255,255,.35);margin-bottom:24px}
+.chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:540px}
+.chip{background:#2a2a2a;border:1px solid rgba(255,255,255,.1);border-radius:20px;
+  padding:9px 18px;font-size:14px;color:rgba(255,255,255,.75);cursor:pointer;
+  transition:background .15s,border-color .15s,color .15s;white-space:nowrap}
+.chip:hover{background:#333;border-color:rgba(255,255,255,.22);color:#ececec}
+
+/* Input area */
+.inp-area{padding:10px 16px 22px;flex-shrink:0;
+  background:linear-gradient(to top,#212121 65%,transparent)}
+.inp-wrap{max-width:720px;margin:0 auto}
 
 /* No-key banner */
-.banner{display:none;align-items:center;gap:8px;margin:0 auto 10px;max-width:720px;
-  background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);
-  border-radius:8px;padding:9px 14px;font-size:13px;color:rgba(255,255,255,.7)}
+.banner{display:none;align-items:center;gap:8px;margin:0 0 10px;
+  background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);
+  border-radius:10px;padding:9px 14px;font-size:13px;color:rgba(255,255,255,.65)}
 .banner.on{display:flex}
 .banner a{color:#ef4444;cursor:pointer;text-decoration:underline}
+
+/* Pill input box */
+.inp-box{display:flex;align-items:flex-end;background:#2f2f2f;
+  border-radius:28px;padding:10px 12px 10px 20px;gap:8px;
+  border:1px solid rgba(255,255,255,.08);
+  transition:border-color .2s,box-shadow .2s}
+.inp-box:focus-within{border-color:rgba(255,255,255,.2);
+  box-shadow:0 0 0 3px rgba(255,255,255,.04)}
+#cin{flex:1;background:none;border:none;outline:none;color:#ececec;
+  font-size:15px;line-height:1.55;resize:none;min-height:24px;max-height:160px;
+  overflow-y:auto;padding:0;font-family:inherit;align-self:flex-end}
+#cin::placeholder{color:rgba(255,255,255,.3)}
+
+/* Circular send / stop button */
+.action-btn{width:36px;height:36px;border-radius:50%;border:none;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .15s,transform .1s,opacity .15s;flex-shrink:0}
+.action-btn svg{width:16px;height:16px}
+#send{background:#19c37d;color:#fff}
+#send:hover{background:#17a86b}
+#send:active{transform:scale(.9)}
+#send:disabled{background:rgba(255,255,255,.1);cursor:not-allowed;opacity:.6}
+#stop{background:#3a3a3a;color:#ececec;display:none}
+#stop:hover{background:#444}
+#stop:active{transform:scale(.9)}
+
+.inp-foot{text-align:center;font-size:11px;color:rgba(255,255,255,.22);
+  margin-top:8px;padding:0 4px}
+
+/* ── Settings Modal ─────────────────────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100;
+  display:none;align-items:flex-end;justify-content:center}
+.overlay.open{display:flex}
+.modal{background:#1e1e1e;border:1px solid rgba(255,255,255,.1);
+  border-radius:20px 20px 0 0;padding:24px 24px 32px;
+  width:100%;max-width:540px;
+  animation:slideUp .2s ease}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-title{font-size:16px;font-weight:600;margin-bottom:20px;display:flex;
+  align-items:center;justify-content:space-between}
+.modal-close{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.45);
+  padding:4px;border-radius:6px;font-size:18px;line-height:1;transition:color .15s}
+.modal-close:hover{color:#ececec}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:600;
+  color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.field input,.field select{width:100%;background:#2a2a2a;border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;padding:10px 14px;color:#ececec;font-size:14px;outline:none;
+  transition:border-color .15s;font-family:inherit}
+.field input:focus,.field select:focus{border-color:rgba(255,255,255,.3)}
+.field input::placeholder{color:rgba(255,255,255,.3)}
+.field select option{background:#1e1e1e;color:#ececec}
+.modal-actions{display:flex;gap:10px;margin-top:4px}
+.btn-primary{flex:1;background:#19c37d;border:none;border-radius:10px;
+  padding:11px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;
+  transition:background .15s}
+.btn-primary:hover{background:#17a86b}
+.btn-secondary{background:#2a2a2a;border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;padding:11px 18px;color:rgba(255,255,255,.6);font-size:14px;
+  cursor:pointer;transition:background .15s}
+.btn-secondary:hover{background:#333;color:#ececec}
+.key-saved{display:none;font-size:12px;color:#19c37d;margin-top:6px}
+.key-saved.show{display:block}
 </style>
 </head>
 <body>
@@ -131,10 +186,15 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sa
 
   <!-- Header -->
   <div class="header">
-    <div style="width:80px"></div>
-    <div class="header-title">StudioCLI</div>
-    <div class="header-actions">
-      <select class="model-sel" id="msel" title="Model"></select>
+    <span class="header-title">StudioCLI</span>
+    <div class="header-right">
+      <select class="model-sel" id="msel" title="Model"><option>Loading…</option></select>
+      <button class="ib" id="settingsBtn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
     </div>
   </div>
 
@@ -143,6 +203,12 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sa
     <div class="empty" id="empty">
       <div class="empty-title">What can I help with?</div>
       <div class="empty-sub">Powered by OpenRouter · free models available</div>
+      <div class="chips">
+        <button class="chip" onclick="fillChip('Write a function to')">Write code</button>
+        <button class="chip" onclick="fillChip('Debug this error: ')">Debug an error</button>
+        <button class="chip" onclick="fillChip('Explain how ')">Explain a concept</button>
+        <button class="chip" onclick="fillChip('Review this code:\n\n')">Review code</button>
+      </div>
     </div>
   </div>
 
@@ -150,11 +216,14 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sa
   <div class="inp-area">
     <div class="inp-wrap">
       <div class="banner" id="banner">
-        No API key — free models only.&nbsp;<a onclick="openKey()">Add key →</a>
+        No API key — free models only.&nbsp;<a onclick="openSettings()">Add key →</a>
       </div>
       <div class="inp-box">
         <textarea id="cin" placeholder="Send a message…" rows="1"></textarea>
-        <button class="send" id="send" disabled>
+        <button class="action-btn" id="stop" title="Stop generating" onclick="stopStream()">
+          <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+        <button class="action-btn" id="send" disabled title="Send (Enter)">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
         </button>
       </div>
@@ -164,58 +233,37 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sa
 
 </div>
 
+<!-- Settings Modal -->
+<div class="overlay" id="overlay" onclick="closeSettings(event)">
+  <div class="modal">
+    <div class="modal-title">
+      Settings
+      <button class="modal-close" onclick="closeSettingsBtn()">×</button>
+    </div>
+    <div class="field">
+      <label>OpenRouter API Key</label>
+      <input type="password" id="keyInput" placeholder="sk-or-…"/>
+      <div class="key-saved" id="keySaved">✓ Key saved</div>
+    </div>
+    <div class="field">
+      <label>Persona</label>
+      <select id="personaSel"><option value="default">Default</option></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" onclick="saveSettings()">Save</button>
+      <button class="btn-secondary" onclick="closeSettingsBtn()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
-const FREE_MODELS=[
-  {id:"nvidia/nemotron-3-super-120b-a12b:free",name:"Nemotron 120B"},
-  {id:"openai/gpt-oss-120b:free",name:"GPT OSS 120B"},
-  {id:"openai/gpt-oss-20b:free",name:"GPT OSS 20B"},
-  {id:"meta-llama/llama-3.3-70b-instruct:free",name:"Llama 3.3 70B"},
-  {id:"google/gemma-3-27b-it:free",name:"Gemma 3 27B"},
-  {id:"qwen/qwen3-coder:free",name:"Qwen3 Coder"},
-];
-const PAID_MODELS=[
-  {id:"openai/gpt-4o",name:"GPT-4o"},
-  {id:"openai/gpt-4o-mini",name:"GPT-4o Mini"},
-  {id:"anthropic/claude-sonnet-4-5",name:"Claude Sonnet"},
-  {id:"anthropic/claude-opus-4-5",name:"Claude Opus"},
-  {id:"google/gemini-2.5-pro",name:"Gemini 2.5 Pro"},
-  {id:"mistralai/mistral-large",name:"Mistral Large"},
-];
+let messages = [];
+let busy = false;
+let model = "";
+let persona = "default";
+let activeReader = null;
 
-let messages=[];
-let busy=false;
-let model=FREE_MODELS[0].id;
-
-// Build model selector
-const msel=document.getElementById("msel");
-const og1=document.createElement("optgroup");og1.label="Free";
-FREE_MODELS.forEach(m=>{const o=new Option(m.name,m.id);og1.appendChild(o);});
-const og2=document.createElement("optgroup");og2.label="Paid (key required)";
-PAID_MODELS.forEach(m=>{const o=new Option(m.name,m.id);og2.appendChild(o);});
-msel.appendChild(og1);msel.appendChild(og2);
-msel.addEventListener("change",()=>{model=msel.value;});
-
-// Check key on load
-(async()=>{
-  try{
-    const c=await fetch("/api/config").then(r=>r.json());
-    if(!c.hasKey)document.getElementById("banner").classList.add("on");
-  }catch{}
-})();
-
-// Input auto-grow
-const cin=document.getElementById("cin");
-const send=document.getElementById("send");
-cin.addEventListener("input",()=>{
-  cin.style.height="auto";
-  cin.style.height=Math.min(cin.scrollHeight,180)+"px";
-  send.disabled=!cin.value.trim()||busy;
-});
-cin.addEventListener("keydown",e=>{
-  if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();if(!send.disabled)doSend();}
-});
-send.addEventListener("click",doSend);
-
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 
 function md(text){
@@ -223,69 +271,145 @@ function md(text){
   marked.setOptions({breaks:true,gfm:true});
   const r=new marked.Renderer();
   r.code=function(code,lang){
-    const l=lang||"plaintext",id="cb"+Math.random().toString(36).slice(2);
+    const l=lang||"plaintext",id="cb"+Math.random().toString(36).slice(2,9);
     let hi;
     try{hi=hljs.getLanguage(l)?hljs.highlight(code,{language:l}).value:hljs.highlightAuto(code).value;}
     catch{hi=esc(code);}
-    return`<div><div class="code-hdr"><span>${l}</span><button class="cpbtn" onclick="cp('${id}')">Copy</button></div><pre><code id="${id}" class="hljs">${hi}</code></pre></div>`;
+    return`<div><div class="code-hdr"><span>${esc(l)}</span><button class="cpbtn" onclick="cp('${id}')">Copy</button></div><pre><code id="${id}" class="hljs">${hi}</code></pre></div>`;
   };
   return marked.parse(text,{renderer:r});
 }
+
 function cp(id){
-  const e=document.getElementById(id);if(!e)return;
-  navigator.clipboard.writeText(e.textContent).then(()=>{
-    const b=e.closest("div").querySelector(".cpbtn");
+  const el=document.getElementById(id);if(!el)return;
+  navigator.clipboard.writeText(el.textContent).then(()=>{
+    const b=el.closest("div").querySelector(".cpbtn");
     if(b){b.textContent="Copied!";setTimeout(()=>b.textContent="Copy",2000);}
   });
 }
 
+function fillChip(text){
+  const cin=document.getElementById("cin");
+  cin.value=text;cin.focus();
+  cin.style.height="auto";cin.style.height=Math.min(cin.scrollHeight,160)+"px";
+  document.getElementById("send").disabled=false;
+}
+
+// ── Model & persona loading from /api/config ─────────────────────────────────
+(async()=>{
+  try{
+    const cfg=await fetch("/api/config").then(r=>r.json());
+    // Populate model selector
+    const msel=document.getElementById("msel");
+    msel.innerHTML="";
+    const og1=document.createElement("optgroup");og1.label="Free";
+    (cfg.models?.free||[]).forEach(m=>{const o=new Option(m.name,m.id);og1.appendChild(o);});
+    const og2=document.createElement("optgroup");og2.label="Paid (key required)";
+    (cfg.models?.paid||[]).forEach(m=>{const o=new Option(m.name,m.id);og2.appendChild(o);});
+    msel.appendChild(og1);msel.appendChild(og2);
+    model=cfg.defaultModel||(cfg.models?.free?.[0]?.id)||"";
+    msel.value=model;
+    msel.addEventListener("change",()=>{model=msel.value;});
+
+    // Populate persona selector
+    const psel=document.getElementById("personaSel");
+    psel.innerHTML="";
+    const personas=cfg.personas||{};
+    Object.entries(personas).forEach(([key,p])=>{
+      const o=new Option(`${p.icon||""} ${p.name} — ${p.desc}`.trim(),key);
+      psel.appendChild(o);
+    });
+    psel.value=persona;
+    psel.addEventListener("change",()=>{persona=psel.value;});
+
+    // Show no-key banner
+    if(!cfg.hasKey)document.getElementById("banner").classList.add("on");
+  }catch(e){
+    // Fallback: keep empty model selector, show warning
+    document.getElementById("msel").innerHTML="<option value=''>No connection</option>";
+  }
+})();
+
+// ── Input auto-grow ──────────────────────────────────────────────────────────
+const cin=document.getElementById("cin");
+const sendBtn=document.getElementById("send");
+cin.addEventListener("input",()=>{
+  cin.style.height="auto";
+  cin.style.height=Math.min(cin.scrollHeight,160)+"px";
+  sendBtn.disabled=!cin.value.trim()||busy;
+});
+cin.addEventListener("keydown",e=>{
+  if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();if(!sendBtn.disabled)doSend();}
+});
+sendBtn.addEventListener("click",doSend);
+
+// ── Message rendering ─────────────────────────────────────────────────────────
 function addMsg(role,content){
   document.getElementById("empty").style.display="none";
   const chat=document.getElementById("chat");
   const row=document.createElement("div");
   row.className="msg-row "+role;
-  const bub=document.createElement("div");
-  bub.className="bubble";
-  const label=document.createElement("b");
-  label.textContent=role==="user"?"You":"AI";
-  bub.appendChild(label);
+
   if(role==="user"){
-    const t=document.createElement("span");
-    t.textContent=content;
+    const av=document.createElement("div");
+    av.className="avatar user-av";av.textContent="U";
+    const bub=document.createElement("div");bub.className="bubble";
+    const t=document.createElement("span");t.textContent=content;
     bub.appendChild(t);
+    row.appendChild(bub);row.appendChild(av);
   }else{
+    const av=document.createElement("div");
+    av.className="avatar ai-av";av.textContent="S";
+    const bub=document.createElement("div");bub.className="bubble";
     const body=document.createElement("div");
     body.innerHTML=md(content);
     bub.appendChild(body);
+    row.appendChild(av);row.appendChild(bub);
   }
-  row.appendChild(bub);
   chat.appendChild(row);
   chat.scrollTop=chat.scrollHeight;
-  return bub;
+  return row;
 }
 
+// ── Stop streaming ────────────────────────────────────────────────────────────
+function stopStream(){
+  if(activeReader){
+    activeReader.cancel();
+    activeReader=null;
+  }
+}
+
+function setBusy(val){
+  busy=val;
+  sendBtn.style.display=val?"none":"flex";
+  document.getElementById("stop").style.display=val?"flex":"none";
+  if(!val)sendBtn.disabled=!cin.value.trim();
+}
+
+// ── Send message ──────────────────────────────────────────────────────────────
 async function doSend(){
   const text=cin.value.trim();
   if(!text||busy)return;
-  busy=true;
-  cin.value="";cin.style.height="auto";send.disabled=true;
+  setBusy(true);
+  cin.value="";cin.style.height="auto";
+
   messages.push({role:"user",content:text});
   addMsg("user",text);
 
-  // Thinking indicator
-  document.getElementById("empty").style.display="none";
   const chat=document.getElementById("chat");
   const thinkRow=document.createElement("div");
   thinkRow.className="msg-row assistant";
-  thinkRow.innerHTML=`<div class="bubble"><div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div></div>`;
-  chat.appendChild(thinkRow);
-  chat.scrollTop=chat.scrollHeight;
+  const thinkAv=document.createElement("div");thinkAv.className="avatar ai-av";thinkAv.textContent="S";
+  const thinkBub=document.createElement("div");thinkBub.className="bubble";
+  thinkBub.innerHTML=`<div class="typing"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>`;
+  thinkRow.appendChild(thinkAv);thinkRow.appendChild(thinkBub);
+  chat.appendChild(thinkRow);chat.scrollTop=chat.scrollHeight;
 
   try{
     const resp=await fetch("/api/chat",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({messages,model,stream:true}),
+      body:JSON.stringify({messages,model,persona,stream:true}),
     });
 
     thinkRow.remove();
@@ -294,57 +418,102 @@ async function doSend(){
       const e=await resp.json().catch(()=>({message:resp.statusText}));
       if(e.error==="no_key")document.getElementById("banner").classList.add("on");
       const row=document.createElement("div");row.className="msg-row assistant";
-      row.innerHTML=`<div class="bubble" style="color:#ef4444">Error: ${esc(e.message||resp.statusText)}</div>`;
+      const av=document.createElement("div");av.className="avatar ai-av";av.textContent="S";
+      const bub=document.createElement("div");bub.className="bubble";
+      bub.style.color="#ef4444";bub.textContent="Error: "+(e.message||resp.statusText);
+      row.appendChild(av);row.appendChild(bub);
       chat.appendChild(row);chat.scrollTop=chat.scrollHeight;
       return;
     }
 
-    // Streaming
+    // Streaming response row
     const aRow=document.createElement("div");aRow.className="msg-row assistant";
+    const aAv=document.createElement("div");aAv.className="avatar ai-av";aAv.textContent="S";
     const aBub=document.createElement("div");aBub.className="bubble";
-    const aLabel=document.createElement("b");aLabel.textContent="AI";
     const aBody=document.createElement("div");
     aBody.innerHTML=`<span class="cursor"></span>`;
-    aBub.appendChild(aLabel);aBub.appendChild(aBody);
-    aRow.appendChild(aBub);chat.appendChild(aRow);
+    aBub.appendChild(aBody);aRow.appendChild(aAv);aRow.appendChild(aBub);
+    chat.appendChild(aRow);
 
-    const reader=resp.body.getReader(),dec=new TextDecoder();
-    let buf="",full="";
-    while(true){
-      const{done,value}=await reader.read();if(done)break;
+    const reader=resp.body.getReader();
+    activeReader=reader;
+    const dec=new TextDecoder();
+    let buf="",full="",streamDone=false;
+
+    while(!streamDone){
+      const{done,value}=await reader.read();
+      if(done)break;
       buf+=dec.decode(value,{stream:true});
       const lines=buf.split("\n");buf=lines.pop();
       for(const line of lines){
         const t=line.trim();if(!t.startsWith("data: "))continue;
-        const data=t.slice(6);if(data==="[DONE]")break;
+        const data=t.slice(6);
+        if(data==="[DONE]"){streamDone=true;break;}
         try{
           const p=JSON.parse(data);
           if(p.content){full+=p.content;aBody.innerHTML=md(full)+`<span class="cursor"></span>`;}
-          if(p.error){aBody.innerHTML=`<span style="color:#ef4444">Error: ${esc(p.error)}</span>`;break;}
+          if(p.error){aBody.innerHTML=`<span style="color:#ef4444">Error: ${esc(p.error)}</span>`;streamDone=true;break;}
         }catch{}
       }
       chat.scrollTop=chat.scrollHeight;
     }
-    aBody.innerHTML=md(full)||`<em style="color:rgba(255,255,255,.4)">No response</em>`;
-    messages.push({role:"assistant",content:full});
+
+    activeReader=null;
+    aBody.innerHTML=md(full)||`<em style="color:rgba(255,255,255,.35)">No response</em>`;
+    if(full)messages.push({role:"assistant",content:full});
 
   }catch(e){
     thinkRow.remove();
-    const row=document.createElement("div");row.className="msg-row assistant";
-    row.innerHTML=`<div class="bubble" style="color:#ef4444">Network error: ${esc(e.message)}</div>`;
-    chat.appendChild(row);
+    if(e.name!=="AbortError"&&e.message!=="Cancelled"){
+      const row=document.createElement("div");row.className="msg-row assistant";
+      const av=document.createElement("div");av.className="avatar ai-av";av.textContent="S";
+      const bub=document.createElement("div");bub.className="bubble";
+      bub.style.color="#ef4444";bub.textContent="Network error: "+e.message;
+      row.appendChild(av);row.appendChild(bub);
+      chat.appendChild(row);
+    }
   }finally{
-    busy=false;
-    send.disabled=!cin.value.trim();
+    setBusy(false);
+    activeReader=null;
     chat.scrollTop=chat.scrollHeight;
   }
 }
 
-function openKey(){
-  const k=prompt("Enter your OpenRouter key (sk-or-…):");
-  if(!k||!k.startsWith("sk-or-"))return;
-  fetch("/api/key",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:k})})
-    .then(r=>{if(r.ok)document.getElementById("banner").classList.remove("on");});
+// ── Settings modal ────────────────────────────────────────────────────────────
+function openSettings(){
+  document.getElementById("overlay").classList.add("open");
+  document.getElementById("keyInput").focus();
+}
+function closeSettingsBtn(){
+  document.getElementById("overlay").classList.remove("open");
+  document.getElementById("keySaved").classList.remove("show");
+}
+function closeSettings(e){
+  if(e.target===document.getElementById("overlay"))closeSettingsBtn();
+}
+
+document.getElementById("settingsBtn").addEventListener("click",openSettings);
+
+async function saveSettings(){
+  const key=document.getElementById("keyInput").value.trim();
+  const saved=document.getElementById("keySaved");
+  if(key){
+    if(!key.startsWith("sk-or-")){
+      alert("OpenRouter keys start with sk-or-");return;
+    }
+    const r=await fetch("/api/key",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({key}),
+    });
+    if(r.ok){
+      document.getElementById("banner").classList.remove("on");
+      saved.classList.add("show");
+      setTimeout(()=>saved.classList.remove("show"),3000);
+    }
+  }
+  persona=document.getElementById("personaSel").value;
+  if(!key)closeSettingsBtn();
 }
 </script>
 </body>

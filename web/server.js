@@ -31,6 +31,10 @@ function resolveKey() {
   const homeKey = path.join(os.homedir(), ".aistudio", "openrouter_key");
   if (fs.existsSync(homeKey)) {
     const raw = fs.readFileSync(homeKey, "utf8").trim();
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.key) return parsed.key;
+    } catch {}
     if (raw.startsWith("sk-or-")) return raw;
   }
   // 3. Environment variable

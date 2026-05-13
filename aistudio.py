@@ -24,7 +24,7 @@ except ImportError as e:
     print("Run: pip install rich prompt_toolkit")
     sys.exit(1)
 
-VERSION = "6.2"
+VERSION = "6.3"
 
 console = Console()
 
@@ -2427,7 +2427,11 @@ def cmd_imagine(state, args):
     if "--model" in args:
         parts = args.split("--model")
         prompt = parts[0].strip()
-        img_model_key = parts[1].strip().split()[0]
+        model_tokens = parts[1].strip().split()
+        if not model_tokens:
+            console.print("[yellow]Usage: /imagine <prompt> --model <flux-schnell|flux-dev|sdxl|sd15>[/yellow]")
+            return
+        img_model_key = model_tokens[0]
 
     hf_model = IMAGE_MODELS.get(img_model_key, IMAGE_MODELS[DEFAULT_IMG_MODEL])
 
@@ -5483,6 +5487,7 @@ VIBE_PRESETS = {
     "synthwave": {"ui": "studio",  "theme": "synthwave"},
     "aurora":    {"ui": "gemini",  "theme": "aurora"},
     "dracula":   {"ui": "gemini",  "theme": "dracula"},
+    "chatgpt":   {"ui": "ghost",   "theme": "midnight"},
 }
 
 

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Dashboard — StudioCLI</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:#0f0f0f;color:#ececec}
+a{text-decoration:none;color:inherit}
+
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+header{background:#141414;border-bottom:1px solid rgba(255,255,255,.07);
+  padding:0 24px;height:54px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:10}
+.h-logo{font-size:14px;font-weight:700}
+.h-logo span{color:#19c37d}
+.h-nav{display:flex;gap:6px}
+.h-link{color:rgba(255,255,255,.45);font-size:13px;padding:6px 12px;
+  border-radius:7px;transition:background .15s,color .15s}
+.h-link:hover{background:rgba(255,255,255,.06);color:#ececec}
+.h-link.active{background:rgba(255,255,255,.07);color:#ececec}
+main{max-width:960px;margin:0 auto;padding:32px 24px 60px}
+.page-title{font-size:22px;font-weight:700;margin-bottom:4px;letter-spacing:-.02em}
+.page-sub{font-size:13px;color:rgba(255,255,255,.35);margin-bottom:32px}
+
+/* ── Stats grid ──────────────────────────────────────────────────────────── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  gap:14px;margin-bottom:36px}
+.stat-card{background:#181818;border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:20px;transition:border-color .15s}
+.stat-card:hover{border-color:rgba(255,255,255,.14)}
+.stat-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:rgba(255,255,255,.3);margin-bottom:10px}
+.stat-value{font-size:30px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.stat-sub{font-size:12px;color:rgba(255,255,255,.3);margin-top:5px}
+.stat-card.accent{border-color:rgba(25,195,125,.2);background:rgba(25,195,125,.04)}
+.stat-card.accent .stat-value{color:#19c37d}
+
+/* ── Section title ───────────────────────────────────────────────────────── */
+.sec-title{font-size:14px;font-weight:700;color:rgba(255,255,255,.7);
+  margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.sec-title::after{content:"";flex:1;height:1px;background:rgba(255,255,255,.06)}
+
+/* ── Model usage bars ────────────────────────────────────────────────────── */
+.model-list{display:flex;flex-direction:column;gap:8px;margin-bottom:36px}
+.model-row{display:flex;align-items:center;gap:12px}
+.model-name{font-size:12.5px;color:rgba(255,255,255,.6);width:180px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;
+  font-family:'Fira Code','Cascadia Code',monospace}
+.model-bar-wrap{flex:1;background:#222;border-radius:4px;height:8px;overflow:hidden}
+.model-bar{height:100%;background:#19c37d;border-radius:4px;
+  transition:width .6s ease;min-width:2px}
+.model-count{font-size:12px;color:rgba(255,255,255,.35);width:30px;text-align:right;flex-shrink:0}
+
+/* ── Persona usage ────────────────────────────────────────────────────────── */
+.persona-grid{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:36px}
+.persona-tag{background:#1a1a1a;border:1px solid rgba(255,255,255,.08);
+  border-radius:20px;padding:6px 14px;font-size:12.5px;color:rgba(255,255,255,.55);
+  display:flex;align-items:center;gap:6px}
+.persona-tag.top{border-color:rgba(25,195,125,.3);color:#19c37d;background:rgba(25,195,125,.05)}
+.persona-cnt{font-size:11px;background:rgba(255,255,255,.08);
+  border-radius:10px;padding:1px 7px;color:rgba(255,255,255,.4)}
+
+/* ── Recent conversations ─────────────────────────────────────────────────── */
+.convo-table{display:flex;flex-direction:column;gap:6px}
+.convo-row{background:#181818;border:1px solid rgba(255,255,255,.07);
+  border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;
+  cursor:pointer;transition:background .15s,border-color .15s;text-decoration:none}
+.convo-row:hover{background:#1e1e1e;border-color:rgba(255,255,255,.13)}
+.convo-row-title{flex:1;font-size:13.5px;color:rgba(255,255,255,.75);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.convo-row-meta{font-size:12px;color:rgba(255,255,255,.3);white-space:nowrap;flex-shrink:0}
+.convo-row-msgs{font-size:12px;color:rgba(255,255,255,.3);flex-shrink:0}
+
+/* ── Empty states ────────────────────────────────────────────────────────── */
+.empty-note{padding:40px 20px;text-align:center;font-size:13px;
+  color:rgba(255,255,255,.25);background:#161616;border:1px solid rgba(255,255,255,.06);
+  border-radius:12px}
+.empty-note a{color:#19c37d}
+
+/* ── Clear button ────────────────────────────────────────────────────────── */
+.danger-zone{margin-top:48px;padding-top:24px;border-top:1px solid rgba(255,255,255,.06)}
+.danger-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  color:rgba(255,100,100,.5);margin-bottom:14px}
+.btn-danger{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);
+  border-radius:10px;padding:10px 18px;color:#ef4444;font-size:13px;cursor:pointer;
+  transition:background .15s}
+.btn-danger:hover{background:rgba(239,68,68,.2)}
+
+@media(max-width:600px){
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .model-name{width:110px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="h-logo">Studio<span>CLI</span></a>
+  <div class="h-nav">
+    <a href="/" class="h-link">Chat</a>
+    <a href="/dashboard.html" class="h-link active">Dashboard</a>
+    <a href="/landing.html" class="h-link">About</a>
+  </div>
+</header>
+
+<main>
+  <div class="page-title">Dashboard</div>
+  <div class="page-sub">Your local usage stats — all data is stored in this browser only</div>
+
+  <!-- Stats cards -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card" id="cardConvos">
+      <div class="stat-label">Conversations</div>
+      <div class="stat-value" id="valConvos">—</div>
+      <div class="stat-sub" id="subConvos">Total saved</div>
+    </div>
+    <div class="stat-card" id="cardMsgs">
+      <div class="stat-label">Total Messages</div>
+      <div class="stat-value" id="valMsgs">—</div>
+      <div class="stat-sub" id="subMsgs">Across all chats</div>
+    </div>
+    <div class="stat-card" id="cardAvg">
+      <div class="stat-label">Avg Messages</div>
+      <div class="stat-value" id="valAvg">—</div>
+      <div class="stat-sub">Per conversation</div>
+    </div>
+    <div class="stat-card accent" id="cardModel">
+      <div class="stat-label">Most Used Model</div>
+      <div class="stat-value" style="font-size:16px;margin-top:4px" id="valModel">—</div>
+      <div class="stat-sub" id="subModel">Top pick</div>
+    </div>
+  </div>
+
+  <!-- Model usage -->
+  <div class="sec-title">Model Usage</div>
+  <div class="model-list" id="modelList">
+    <div class="empty-note">No chat history yet. <a href="/">Start a conversation →</a></div>
+  </div>
+
+  <!-- Persona usage -->
+  <div class="sec-title">Personas Used</div>
+  <div class="persona-grid" id="personaGrid">
+    <div class="empty-note" style="width:100%">No persona data yet.</div>
+  </div>
+
+  <!-- Recent conversations -->
+  <div class="sec-title">Recent Conversations</div>
+  <div class="convo-table" id="convoTable">
+    <div class="empty-note">No conversations yet. <a href="/">Start chatting →</a></div>
+  </div>
+
+  <!-- Danger zone -->
+  <div class="danger-zone">
+    <div class="danger-title">Danger Zone</div>
+    <button class="btn-danger" onclick="clearAll()">Clear all conversation history</button>
+  </div>
+</main>
+
+<script>
+const STORE_CONVOS   = "studioConvos";
+const STORE_SETTINGS = "studioSettings";
+
+function loadConvos(){
+  try{ return JSON.parse(localStorage.getItem(STORE_CONVOS)||"[]"); }catch{ return []; }
+}
+function loadSettings(){
+  try{ return JSON.parse(localStorage.getItem(STORE_SETTINGS)||"{}"); }catch{ return {}; }
+}
+
+function fmtDate(ts){
+  const d=new Date(ts);
+  const now=new Date();
+  const diff=now-d;
+  if(diff<864e5&&d.toDateString()===now.toDateString())
+    return"Today "+d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+  if(diff<172800000)return"Yesterday";
+  return d.toLocaleDateString([],{month:"short",day:"numeric",year:d.getFullYear()!==now.getFullYear()?"numeric":undefined});
+}
+
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+function render(){
+  const convos=loadConvos();
+  const settings=loadSettings();
+
+  // ── Stats ──
+  const totalConvos=convos.length;
+  const totalMsgs=convos.reduce((a,c)=>a+(c.messages?.length||0),0);
+  const avgMsgs=totalConvos?Math.round(totalMsgs/totalConvos):0;
+
+  document.getElementById("valConvos").textContent=totalConvos||"0";
+  document.getElementById("valMsgs").textContent=totalMsgs||"0";
+  document.getElementById("valAvg").textContent=avgMsgs||"0";
+
+  // ── Model usage (extract from messages) ──
+  const modelCounts={};
+  convos.forEach(c=>{
+    // We don't store model per message, so we'll show from settings history
+    // Track conversation count per title pattern (best we can without per-msg model)
+  });
+  // Pull from settings if any model stored
+  const topModel=settings.modelHistory;
+  if(topModel&&Object.keys(topModel).length){
+    const top=Object.entries(topModel).sort((a,b)=>b[1]-a[1])[0];
+    document.getElementById("valModel").textContent=top[0].split("/").pop().split(":")[0]||"—";
+    document.getElementById("subModel").textContent=`${top[1]} message${top[1]!==1?"s":""}`;
+    // Render bars
+    const ml=document.getElementById("modelList");
+    ml.innerHTML="";
+    const maxCount=Math.max(...Object.values(topModel));
+    Object.entries(topModel).sort((a,b)=>b[1]-a[1]).slice(0,8).forEach(([m,cnt])=>{
+      const shortName=m.split("/").pop().split(":")[0];
+      const pct=Math.round((cnt/maxCount)*100);
+      ml.innerHTML+=`<div class="model-row">
+        <div class="model-name" title="${esc(m)}">${esc(shortName)}</div>
+        <div class="model-bar-wrap"><div class="model-bar" style="width:${pct}%"></div></div>
+        <div class="model-count">${cnt}</div>
+      </div>`;
+    });
+  } else if(totalConvos>0){
+    document.getElementById("valModel").textContent=settings.model?settings.model.split("/").pop().split(":")[0]:"—";
+    document.getElementById("subModel").textContent="Current selection";
+    document.getElementById("modelList").innerHTML=`<div class="empty-note">Model tracking activates after your next conversation.</div>`;
+  }
+
+  // ── Persona usage ──
+  const pg=document.getElementById("personaGrid");
+  const personaHist=settings.personaHistory;
+  if(personaHist&&Object.keys(personaHist).length){
+    const sorted=Object.entries(personaHist).sort((a,b)=>b[1]-a[1]);
+    pg.innerHTML=sorted.map(([p,cnt],i)=>`
+      <div class="persona-tag ${i===0?"top":""}">
+        ${esc(p)} <span class="persona-cnt">${cnt}</span>
+      </div>`).join("");
+  } else {
+    pg.innerHTML=`<div class="empty-note" style="width:100%">Persona stats activate after your next conversation.</div>`;
+  }
+
+  // ── Recent conversations ──
+  const ct=document.getElementById("convoTable");
+  if(!convos.length){
+    ct.innerHTML=`<div class="empty-note">No conversations yet. <a href="/">Start chatting →</a></div>`;
+    return;
+  }
+  ct.innerHTML=convos.slice(0,20).map(c=>`
+    <a href="/" class="convo-row" onclick="loadConvoFromDash('${c.id}')">
+      <div class="convo-row-title">${esc(c.title||"Untitled")}</div>
+      <div class="convo-row-msgs">${(c.messages?.length||0)} msg${(c.messages?.length||0)!==1?"s":""}</div>
+      <div class="convo-row-meta">${fmtDate(c.ts)}</div>
+    </a>`).join("");
+}
+
+function loadConvoFromDash(id){
+  localStorage.setItem("studioLoadId",id);
+}
+
+function clearAll(){
+  if(!confirm("Delete all conversation history? This cannot be undone."))return;
+  localStorage.removeItem(STORE_CONVOS);
+  render();
+}
+
+// Also expose a way for index.html to track model + persona usage
+// index.html should call: trackUsage(model, persona) after each response
+// For now, render from existing data
+render();
+</script>
+
+</body>
+</html>

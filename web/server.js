@@ -14,7 +14,11 @@ app.use(express.static(path.join(__dirname, "public")));
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions";
 
 // ── Key resolution ──────────────────────────────────────────────────────────
-function resolveKey() {
+function resolveKey(req) {
+  // 0. X-OR-Key header (client localStorage, works on Vercel where FS is ephemeral)
+  const headerKey = req && req.get("X-OR-Key");
+  if (headerKey && headerKey.startsWith("sk-or-")) return headerKey;
+
   // 1. Check profiles/default/openrouter_key (relative to CLI root)
   const cliRoot = path.join(__dirname, "..");
   const profileKey = path.join(cliRoot, "profiles", "default", "openrouter_key");
@@ -83,7 +87,7 @@ const PERSONAS = {
 
 // ── API Routes ──────────────────────────────────────────────────────────────
 app.get("/api/config", (req, res) => {
-  const key = resolveKey();
+  const key = resolveKey(req);
   res.json({
     models: { free: FREE_MODELS, paid: PAID_MODELS },
     personas: PERSONAS,
@@ -104,17 +108,19 @@ app.post("/api/key", (req, res) => {
 });
 
 app.post("/api/chat", (req, res) => {
-  const { messages, model, persona, stream = true } = req.body;
+  const { messages, model, persona, stream = true,
+          temperature, max_tokens, system_override } = req.body;
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: "messages array required" });
   }
 
-  const apiKey = resolveKey();
+  const apiKey = resolveKey(req);
   if (!apiKey) {
     return res.status(401).json({ error: "no_key", message: "No OpenRouter API key found. Set one in the Settings panel." });
   }
 
-  const systemPrompt = (persona && PERSONAS[persona]) ? PERSONAS[persona].system : PERSONAS.default.system;
+  const baseSystem = (persona && PERSONAS[persona]) ? PERSONAS[persona].system : PERSONAS.default.system;
+  const systemPrompt = system_override ? system_override : baseSystem;
   const payload = JSON.stringify({
     model: model || FREE_MODELS[0].id,
     messages: [
@@ -122,7 +128,8 @@ app.post("/api/chat", (req, res) => {
       ...messages,
     ],
     stream,
-    max_tokens: 4096,
+    max_tokens: max_tokens || 4096,
+    temperature: temperature ?? 1.0,
   });
 
   const url = new URL(OPENROUTER_BASE);

@@ -8892,7 +8892,17 @@ def main():
         ai_respond(state, args.prompt, [])
         return
 
-    run_repl(state)
+    try:
+        run_repl(state)
+    except Exception as _e:
+        _ename = type(_e).__name__
+        if "NoConsoleScreenBufferError" in _ename or "NoConsoleScreenBuffer" in str(_e):
+            sys.stderr.write(
+                "AI Studio CLI requires an interactive Windows console.\n"
+                "Run it from cmd.exe, PowerShell, or Windows Terminal.\n"
+            )
+            sys.exit(1)
+        raise
 
 
 # ═══════════════════════════════════════════════════════════

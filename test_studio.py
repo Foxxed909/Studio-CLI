@@ -107,9 +107,9 @@ run("CHANGELOG_TEXT is str (Bug B)",
     lambda: None if isinstance(CHANGELOG_TEXT, str) else (_ for _ in ()).throw(AssertionError("not str")))
 run("CHANGELOG.keys() works (Bug B — no AttributeError)",
     lambda: list(CHANGELOG.keys()))
-run("HELP_TEXT banner = v5.9 not v5.5 (Bug D)",
-    lambda: None if "v5.9" in HELP_TEXT and "v5.5" not in HELP_TEXT
-            else (_ for _ in ()).throw(AssertionError(f"bad: {[l for l in HELP_TEXT.splitlines() if 'v5.' in l]}")))
+run("HELP_TEXT banner matches current VERSION (Bug D)",
+    lambda: None if f"v{VERSION}" in HELP_TEXT
+            else (_ for _ in ()).throw(AssertionError(f"HELP_TEXT missing v{VERSION}")))
 run("cmd_voice has ASCII hyphen -AssemblyName (Bug C)",
     lambda: None if "-AssemblyName" in inspect.getsource(cmd_voice) and "–AssemblyName" not in inspect.getsource(cmd_voice)
             else (_ for _ in ()).throw(AssertionError("en-dash still present")))

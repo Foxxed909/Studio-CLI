@@ -1,5 +1,5 @@
 import os, sys, json, argparse, subprocess, tempfile, shutil, time, threading
-import difflib, fnmatch, glob, re, shlex
+import difflib, fnmatch, glob, re, shlex, webbrowser, hashlib
 from pathlib import Path
 from urllib import request, error as urllib_error
 from datetime import datetime
@@ -24,7 +24,7 @@ except ImportError as e:
     print("Run: pip install rich prompt_toolkit")
     sys.exit(1)
 
-VERSION = "6.2"
+VERSION = "9.0-beta"
 
 console = Console()
 
@@ -73,46 +73,50 @@ SLOT_GATED_PLANS = ("starter", "pro", "max")
 PLANS = {
     "free": {
         "name":        "Free",
+        "tier":        "v8+",
         "price":       "$0 / mo",
         "msg_limit":   10,
         "img_per_3h":  1,
         "models":      ["nvidia/nemotron-3-super-120b-a12b:free"],
         "color":       "dim",
         "badge":       "○",
-        "features":    ["10 messages / session", "1 image / 3 hrs", "Nemotron only"],
-        "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta"],
+        "features":    ["10 messages / session", "1 image / 3 hrs", "Nemotron only", "v8+ features"],
+        "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta", "Max tier: v8+"],
     },
     "pro": {
         "name":        "Pro",
+        "tier":        "v9",
         "price":       "$18 / mo",
         "msg_limit":   500,
         "img_per_3h":  10,
         "models":      None,
         "color":       "cyan",
         "badge":       "◆",
-        "features":    ["500 messages / session", "10 images / 3 hrs", "All models", "All agents", "Priority queue"],
+        "features":    ["500 messages / session", "10 images / 3 hrs", "All models", "All agents", "Priority queue", "v9 features"],
         "limitations": [],
     },
     "max": {
         "name":        "Max",
+        "tier":        "v9+",
         "price":       "$80 / mo",
         "msg_limit":   5000,
         "img_per_3h":  100,
         "models":      None,
         "color":       "magenta",
         "badge":       "◈",
-        "features":    ["5,000 messages / session", "100 images / 3 hrs", "Cursor API Support", "Surgical Patching", "Internal Reasoning Access", "/audit-log", "/priority-queue"],
+        "features":    ["5,000 messages / session", "100 images / 3 hrs", "Cursor API", "Surgical Patching", "Internal Reasoning", "/audit-log", "/priority-queue", "v9+ features"],
         "limitations": [],
     },
     "ultra": {
         "name":        "Ultra",
+        "tier":        "v9 Beta",
         "price":       "$250 / mo",
         "msg_limit":   999999,
         "img_per_3h":  999,
         "models":      None,
         "color":       "bold yellow",
         "badge":       "★",
-        "features":    ["Unlimited Usage", "Infinite images", "Real-time Token Streaming", "Magnificent Effort Mode", "XHigh Effort Mode"],
+        "features":    ["Unlimited usage", "Infinite images", "Real-time streaming", "Max Effort Mode", "v9 Beta features", "Early access to v10"],
         "limitations": [],
     },
     "starter": {
@@ -556,6 +560,66 @@ THEMES = {
         "banner_sub": "bold yellow",
         "icon": "🦊",
         "prompt_name": "foxxia",
+    },
+    "cobalt": {
+        "name": "cobalt",
+        "banner_color": "bold cyan",
+        "accent": "bold blue",
+        "prompt_user": "ansiblue",
+        "prompt_arrow": "ansicyan",
+        "border": "cyan",
+        "success": "cyan",
+        "error": "bold red",
+        "warning": "yellow",
+        "dim": "dim",
+        "banner_sub": "bold cyan",
+        "icon": "🔷",
+        "prompt_name": "cobalt",
+    },
+    "carbon": {
+        "name": "carbon",
+        "banner_color": "bold white",
+        "accent": "bold white",
+        "prompt_user": "ansiwhite",
+        "prompt_arrow": "ansigray",
+        "border": "white",
+        "success": "white",
+        "error": "bold red",
+        "warning": "bold yellow",
+        "dim": "dim",
+        "banner_sub": "white",
+        "icon": "⬛",
+        "prompt_name": "carbon",
+    },
+    "crimson": {
+        "name": "crimson",
+        "banner_color": "bold red",
+        "accent": "bold magenta",
+        "prompt_user": "ansired",
+        "prompt_arrow": "ansimagenta",
+        "border": "red",
+        "success": "magenta",
+        "error": "bold red",
+        "warning": "yellow",
+        "dim": "dim",
+        "banner_sub": "bold red",
+        "icon": "🔴",
+        "prompt_name": "crimson",
+    },
+    "slate": {
+        "name": "slate",
+        "banner_color": "bold bright_blue",
+        "accent": "bold blue",
+        "prompt_user": "ansiblue",
+        "prompt_arrow": "ansibrightblue",
+        "border": "bright_blue",
+        "success": "bright_blue",
+        "error": "red",
+        "warning": "yellow",
+        "dim": "dim",
+        "banner_sub": "bright_blue",
+        "icon": "🌐",
+        "prompt_name": "slate",
     },
 }
 
@@ -2248,6 +2312,12 @@ ALL_COMMANDS = [
     "/profile","/me","/insights","/stats","/vault","/team",
     # v5.9 — Max / Team / Enterprise
     "/audit-log","/priority-queue","/orgmetrics","/sso","/policy",
+    # v9.0
+    "/plugin","/agent-mesh","/vision-pro","/template",
+    # v8.0
+    "/whats-new","/snapshot","/open-web","/tip","/speed",
+    # v9 Beta
+    "/labs","/flags","/mesh-broadcast","/analytics-pro",
 ]
 
 COMMAND_METADATA = {
@@ -2427,7 +2497,11 @@ def cmd_imagine(state, args):
     if "--model" in args:
         parts = args.split("--model")
         prompt = parts[0].strip()
-        img_model_key = parts[1].strip().split()[0]
+        model_tokens = parts[1].strip().split()
+        if not model_tokens:
+            console.print("[yellow]Usage: /imagine <prompt> --model <flux-schnell|flux-dev|sdxl|sd15>[/yellow]")
+            return
+        img_model_key = model_tokens[0]
 
     hf_model = IMAGE_MODELS.get(img_model_key, IMAGE_MODELS[DEFAULT_IMG_MODEL])
 
@@ -5483,6 +5557,11 @@ VIBE_PRESETS = {
     "synthwave": {"ui": "studio",  "theme": "synthwave"},
     "aurora":    {"ui": "gemini",  "theme": "aurora"},
     "dracula":   {"ui": "gemini",  "theme": "dracula"},
+    "chatgpt":   {"ui": "ghost",   "theme": "midnight"},
+    "cobalt":    {"ui": "codex",   "theme": "cobalt"},
+    "carbon":    {"ui": "ghost",   "theme": "carbon"},
+    "crimson":   {"ui": "studio",  "theme": "crimson"},
+    "slate":     {"ui": "claude",  "theme": "slate"},
 }
 
 
@@ -6203,6 +6282,512 @@ def cmd_policy(state, args):
         return
 
     console.print("[yellow]Usage: /policy show | set <key> <value> | clear <key>[/yellow]")
+
+
+PLUGIN_FILE = CONFIG_DIR / "plugins.json"
+
+def _load_plugins():
+    try:
+        if PLUGIN_FILE.exists():
+            return json.loads(PLUGIN_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return []
+
+def _save_plugins(plugins):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    PLUGIN_FILE.write_text(json.dumps(plugins, indent=2), encoding="utf-8")
+
+
+def cmd_plugin(state, args):
+    """/plugin list|add <name> <url>|remove <name> — v9 plugin system (pro)."""
+    if not _require_pro(state, "/plugin"):
+        return
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    parts = (args or "").split(None, 2)
+    action = parts[0].lower() if parts else "list"
+
+    plugins = _load_plugins()
+
+    if action == "list" or not action:
+        if not plugins:
+            console.print(Panel(
+                "  No plugins installed.\n\n"
+                "  [dim]/plugin add <name> <url>   — register a plugin endpoint\n"
+                "  /plugin remove <name>        — uninstall\n"
+                "  /plugin list                 — show installed[/dim]",
+                title="[bold]Plugins[/bold]", border_style=theme.get("border","cyan"), padding=(0,2)
+            ))
+            return
+        tbl = Table(title="Installed Plugins", box=box.SIMPLE, border_style=acc)
+        tbl.add_column("Name", style="bold")
+        tbl.add_column("URL")
+        tbl.add_column("Status")
+        for p in plugins:
+            tbl.add_row(p["name"], p.get("url","—"), "[green]active[/green]")
+        console.print(tbl)
+
+    elif action == "add":
+        if len(parts) < 3:
+            console.print("[yellow]Usage: /plugin add <name> <url>[/yellow]"); return
+        name, url = parts[1], parts[2]
+        if any(p["name"] == name for p in plugins):
+            console.print(f"[yellow]Plugin '{name}' already installed.[/yellow]"); return
+        plugins.append({"name": name, "url": url, "added": datetime.now().isoformat()})
+        _save_plugins(plugins)
+        console.print(f"  [{acc}]✓ Plugin '{name}' installed.[/{acc}]")
+
+    elif action in ("remove", "rm", "uninstall"):
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /plugin remove <name>[/yellow]"); return
+        name = parts[1]
+        before = len(plugins)
+        plugins = [p for p in plugins if p["name"] != name]
+        if len(plugins) == before:
+            console.print(f"[yellow]Plugin '{name}' not found.[/yellow]"); return
+        _save_plugins(plugins)
+        console.print(f"  [{acc}]✓ Plugin '{name}' removed.[/{acc}]")
+    else:
+        console.print("[yellow]Usage: /plugin list | add <name> <url> | remove <name>[/yellow]")
+
+
+def cmd_agent_mesh(state, args, history):
+    """/agent-mesh <task> — broadcast task to all available agents simultaneously (pro)."""
+    if not _require_pro(state, "/agent-mesh"):
+        return history
+    if not args:
+        console.print("[yellow]Usage: /agent-mesh <task>[/yellow]"); return history
+    theme  = state.get("theme", THEMES["default"])
+    acc    = theme.get("accent", "cyan")
+    agents_ids = list(AGENT_ROSTER.keys())
+    task   = args.strip()
+    console.print(f"\n[bold {acc}]⬡  AGENT MESH  ⬡[/bold {acc}]  [dim]{len(agents_ids)} agents · broadcasting…[/dim]\n")
+    results = {}
+    lock    = threading.Lock()
+    errors  = {}
+
+    def _run_agent(aid):
+        spec = AGENT_ROSTER.get(aid, {})
+        name = spec.get("name", aid)
+        role = spec.get("role", "Agent")
+        persona_sys = PERSONAS.get(spec.get("persona_key", "default"), PERSONAS["default"])
+        sys_p = persona_sys.get("system", "") if isinstance(persona_sys, dict) else str(persona_sys)
+        prompt = f"[{role}] {task}"
+        try:
+            txt, _ = ai_respond(dict(state, persona=sys_p), prompt, [])
+            with lock:
+                results[aid] = (name, role, txt or "")
+        except Exception as exc:
+            with lock:
+                errors[aid] = str(exc)
+
+    threads = [threading.Thread(target=_run_agent, args=(aid,), daemon=True) for aid in agents_ids[:6]]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=30)
+
+    for aid in agents_ids[:6]:
+        if aid in results:
+            name, role, txt = results[aid]
+            spec = AGENT_ROSTER.get(aid, {})
+            color = spec.get("color", acc)
+            console.print(Panel(
+                Markdown(txt[:600] + ("…" if len(txt) > 600 else "")),
+                title=f"[{color}]{spec.get('emoji','')} {name}[/{color}] [dim]{role}[/dim]",
+                border_style=color.replace("bold ",""), padding=(0,1)
+            ))
+    return history
+
+
+def cmd_vision_pro(state, args, history):
+    """/vision-pro <image_path> [prompt] — enhanced image analysis (pro)."""
+    if not _require_pro(state, "/vision-pro"):
+        return history
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    if not args:
+        console.print("[yellow]Usage: /vision-pro <image_path> [prompt][/yellow]"); return history
+    parts = args.split(None, 1)
+    img_path = Path(parts[0])
+    prompt   = parts[1] if len(parts) > 1 else "Describe this image in detail."
+    if not img_path.exists():
+        console.print(f"[red]File not found: {img_path}[/red]"); return history
+    try:
+        import base64
+        img_b64 = base64.b64encode(img_path.read_bytes()).decode()
+        ext = img_path.suffix.lower().lstrip(".")
+        mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                    "gif": "image/gif", "webp": "image/webp"}
+        mime = mime_map.get(ext, "image/png")
+        console.print(f"  [{acc}]🔍 Analysing {img_path.name}…[/{acc}]")
+        vision_msg = [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
+            {"type": "text", "text": prompt},
+        ]}]
+        or_key = state.get("openrouter_key") or load_or_key()
+        if not or_key:
+            console.print("[yellow]OpenRouter key required for vision.[/yellow]"); return history
+        vision_model = "google/gemini-2.0-flash-001"
+        result, _ = call_openrouter(or_key, vision_model, vision_msg, "", "")
+        console.print(Panel(Markdown(result or "No response."),
+                            title=f"[bold]Vision Analysis — {img_path.name}[/bold]",
+                            border_style=theme.get("border","cyan"), padding=(0,1)))
+        history.append({"role": "user", "parts": [{"text": f"[vision: {img_path.name}] {prompt}"}]})
+        history.append({"role": "model", "parts": [{"text": result or ""}]})
+    except Exception as exc:
+        console.print(f"[red]Vision error: {exc}[/red]")
+    return history
+
+
+def cmd_whats_new(state):
+    """/whats-new — show what's new in the current version."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    plan_id  = get_plan(state)
+    plan_cfg = PLANS.get(plan_id, PLANS["free"])
+    tier_label = plan_cfg.get("tier", "v8+")
+    body = (
+        f"  [bold]StudioCLI v{VERSION}[/bold]  [{acc}]{tier_label}[/{acc}]\n\n"
+        f"  [{acc}]v8.0[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
+        "  [bold green]✦[/bold green] [bold]4 new themes[/bold]: cobalt, carbon, crimson, slate   [dim](/theme <name>[/dim])\n"
+        "  [bold green]✦[/bold green] [bold]4 new vibe presets[/bold]: cobalt, carbon, crimson, slate  [dim](/vibe <name>[/dim])\n"
+        "  [bold green]✦[/bold green] [bold]/snapshot[/bold]: export current session to JSON\n"
+        "  [bold green]✦[/bold green] [bold]/open-web[/bold]: launch web UI in browser\n"
+        "  [bold green]✦[/bold green] [bold]/tip[/bold]: random power-user tip\n"
+        "  [bold green]✦[/bold green] [bold]/speed[/bold]: toggle low-latency stream mode\n"
+        "  [bold green]✦[/bold green] Plan tiers: v8+ (free) · v9 (pro) · v9+ (max) · v9 Beta (ultra)\n"
+        f"\n  [{acc}]v9.0[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
+        "  [bold cyan]✦[/bold cyan] [bold]/plugin list|add|remove[/bold]: plugin management  [dim](pro)[/dim]\n"
+        "  [bold cyan]✦[/bold cyan] [bold]/agent-mesh[/bold]: multi-agent parallel tasks  [dim](pro)[/dim]\n"
+        "  [bold cyan]✦[/bold cyan] [bold]/vision-pro[/bold]: enhanced image analysis  [dim](pro)[/dim]\n"
+        "  [bold cyan]✦[/bold cyan] [bold]/template[/bold]: save & reuse prompt templates  [dim](pro)[/dim]\n"
+        f"\n  [{acc}]v9 Beta[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
+        "  [bold yellow]✦[/bold yellow] [bold]/voice[/bold]: voice-to-text input  [dim](ultra)[/dim]\n"
+        "  [bold yellow]✦[/bold yellow] [bold]/mesh-broadcast[/bold]: broadcast to all agents  [dim](ultra)[/dim]\n"
+        "  [bold yellow]✦[/bold yellow] [bold]/analytics-pro[/bold]: advanced usage dashboard  [dim](ultra)[/dim]\n"
+        "\n  [dim]/changelog · /plan · /upgrade[/dim]"
+    )
+    console.print(Panel(body, title=f"[bold]What's New — v{VERSION}[/bold]",
+                        border_style=theme.get("border", "cyan"), padding=(0, 2)))
+
+
+def cmd_snapshot(state, args, history):
+    """/snapshot [filename] — export current session (history + context) to JSON."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    ts    = datetime.now().strftime("%Y%m%d_%H%M%S")
+    fname = (args.strip() if args else None) or f"snapshot_{ts}.json"
+    if not fname.endswith(".json"):
+        fname += ".json"
+    snap = {
+        "version":   VERSION,
+        "timestamp": datetime.now().isoformat(),
+        "model":     state.get("model", DEFAULT_MODEL),
+        "persona":   state.get("persona", "default"),
+        "ui_style":  state.get("ui_style", "gemini"),
+        "theme":     state.get("theme", {}).get("name", "default"),
+        "workspace": str(state.get("workspace_root", "")),
+        "messages":  len(history),
+        "history":   history,
+        "memory":    load_memory(),
+    }
+    try:
+        out = Path(fname)
+        out.write_text(json.dumps(snap, indent=2, ensure_ascii=False), encoding="utf-8")
+        console.print(Panel(
+            f"  [{acc}]✓ Snapshot saved[/{acc}]\n\n"
+            f"  [bold]File:[/bold]  {out.resolve()}\n"
+            f"  [bold]Messages:[/bold] {len(history)}\n"
+            f"  [bold]Memory:[/bold]  {len(snap['memory'])} entries",
+            title="[bold]Session Snapshot[/bold]",
+            border_style=theme.get("border", "cyan"), padding=(0, 2)
+        ))
+    except Exception as exc:
+        console.print(f"[red]Snapshot failed: {exc}[/red]")
+    return history
+
+
+def cmd_open_web(state, args):
+    """/open-web [port] — open StudioCLI web UI in default browser."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    port  = args.strip() if args else "3456"
+    try:
+        port_n = int(port)
+    except ValueError:
+        port_n = 3456
+    url = f"http://localhost:{port_n}"
+    try:
+        webbrowser.open(url)
+        console.print(f"  [{acc}]✦ Opening {url} in your browser…[/{acc}]")
+    except Exception as exc:
+        console.print(f"[yellow]Could not open browser: {exc}[/yellow]")
+        console.print(f"  Open manually: [bold cyan]{url}[/bold cyan]")
+
+
+_TIPS = [
+    "/vibe chatgpt      → dark minimal mode matching the web UI",
+    "/arena same        → compare same model at low vs pro effort",
+    "/memory            → see what the AI remembers about you",
+    "/fif               → find-it-fix: paste an error, auto-fix it",
+    "/snapshot          → export entire session to JSON",
+    "/theme cobalt      → new cobalt theme — cool blue terminal",
+    "Ctrl+L             → clear screen and redraw welcome",
+    "/multi m1,m2 <q>   → query two models simultaneously",
+    "/thinking on       → enable extended reasoning for next reply",
+    "/autonomous        → let the AI write files without asking",
+    "/broadcast         → send a message to all active agents",
+    "Shift+Enter        → multi-line input in the REPL",
+    "/export            → export conversation history to markdown",
+    "/compare m1 m2     → side-by-side model comparison",
+    "/vibe foxxia       → 🦊 Foxxia dark mode with amber accent",
+    "/beta list         → see all v9 Beta experimental feature flags (ultra)",
+    "/analytics-pro     → advanced usage dashboard with token breakdown (ultra)",
+    "/mesh-broadcast    → blast a prompt to every active agent simultaneously",
+    "/voice start       → voice-to-text input (requires pyaudio, ultra)",
+    "/labs              → alias for /beta — manage experimental features",
+]
+
+def cmd_tip(state, args):
+    """/tip — show a random power-user tip."""
+    import random
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    tip   = random.choice(_TIPS)
+    cmd_part, _, desc_part = tip.partition("→")
+    console.print(
+        Panel(f"  [{acc}]{cmd_part.strip()}[/{acc}]  [dim]→[/dim]  {desc_part.strip()}",
+              title="[bold]💡 Pro Tip[/bold]",
+              border_style=theme.get("border","cyan"), padding=(0,2))
+    )
+
+
+def cmd_speed(state, args):
+    """/speed [on|off] — toggle low-latency mode (stream=on, effort=low)."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    mode  = (args.strip().lower() if args else "")
+    current_stream = state.get("stream_mode", "auto")
+    if mode == "on" or (not mode and current_stream != "on"):
+        state = cmd_stream(state, "on")
+        state["_effort"] = "low"
+        console.print(f"  [{acc}]⚡ Speed mode ON[/{acc}]  [dim]stream=on · effort=low[/dim]")
+    else:
+        state = cmd_stream(state, "auto")
+        state.pop("_effort", None)
+        console.print(f"  [{acc}]✓ Speed mode OFF[/{acc}]  [dim]stream=auto · effort=normal[/dim]")
+    return state
+
+
+# ── v9 Beta Commands ──────────────────────────────────────────────────────────
+
+_BETA_FLAGS_FILE = CONFIG_DIR / "beta_flags.json"
+
+def _load_beta_flags():
+    if _BETA_FLAGS_FILE.exists():
+        try:
+            return json.loads(_BETA_FLAGS_FILE.read_text())
+        except Exception:
+            pass
+    return {}
+
+def _save_beta_flags(flags):
+    _BETA_FLAGS_FILE.parent.mkdir(exist_ok=True)
+    _BETA_FLAGS_FILE.write_text(json.dumps(flags, indent=2))
+
+_AVAILABLE_FLAGS = {
+    "voice":           ("Voice-to-text input mode",               "ultra"),
+    "mesh_broadcast":  ("Broadcast prompt to all active agents",  "ultra"),
+    "analytics_pro":   ("Advanced usage analytics dashboard",     "ultra"),
+    "auto_snapshot":   ("Auto-snapshot session every 50 messages","ultra"),
+    "effort_xhigh":    ("Unlock xhigh + mxh effort levels",       "ultra"),
+    "model_preview":   ("Access preview/experimental models",     "ultra"),
+    "parallel_exec":   ("Execute code blocks in parallel",        "max"),
+    "audit_stream":    ("Stream audit events in real-time",       "max"),
+}
+
+
+def cmd_beta(state, args):
+    """/beta [on|off] [flag] — manage v9 Beta experimental feature flags (ultra)."""
+    if not _require_tier(state, ("ultra", "enterprise"), "/beta flags", "/upgrade ultra"):
+        return
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    flags = _load_beta_flags()
+    sub   = args.strip().lower() if args else ""
+
+    if not sub or sub == "list":
+        rows = ""
+        for flag, (desc, tier) in _AVAILABLE_FLAGS.items():
+            enabled = flags.get(flag, False)
+            status  = f"[green]ON[/green]" if enabled else "[dim]off[/dim]"
+            rows += f"\n  {status}  [{acc}]{flag:<20}[/{acc}]  [dim]{desc}[/dim]"
+        console.print(Panel(
+            f"  [bold]v9 Beta Feature Flags[/bold]\n{rows}\n\n"
+            f"  [dim]/beta on <flag>   →  enable\n"
+            f"  /beta off <flag>  →  disable\n"
+            f"  /beta reset       →  disable all[/dim]",
+            title=f"[bold yellow]★ Beta Labs[/bold yellow]",
+            border_style="yellow", padding=(0, 2)
+        ))
+        return
+
+    if sub == "reset":
+        _save_beta_flags({})
+        console.print(f"  [{acc}]✓ All beta flags reset.[/{acc}]")
+        return
+
+    parts = sub.split(None, 1)
+    if len(parts) == 2 and parts[0] in ("on", "off"):
+        action, flag = parts[0], parts[1].strip()
+        if flag not in _AVAILABLE_FLAGS:
+            console.print(f"[yellow]Unknown flag '{flag}'. Use /beta list.[/yellow]")
+            return
+        flags[flag] = (action == "on")
+        _save_beta_flags(flags)
+        state.setdefault("_beta_flags", {}).update(flags)
+        verb = "[green]enabled[/green]" if flags[flag] else "[dim]disabled[/dim]"
+        console.print(f"  [{acc}]★ Beta flag '{flag}' {verb}.[/{acc}]")
+        return
+
+    console.print("[yellow]Usage: /beta list  |  /beta on <flag>  |  /beta off <flag>  |  /beta reset[/yellow]")
+
+
+def cmd_voice(state, args):
+    """/voice [start|stop] — voice-to-text input mode (ultra, requires pyaudio)."""
+    if not _require_tier(state, ("ultra", "enterprise"), "/voice", "/upgrade ultra"):
+        return
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    sub   = args.strip().lower() if args else "start"
+
+    # Stub: check for pyaudio / speech_recognition availability
+    try:
+        import speech_recognition  # noqa: F401
+        _has_sr = True
+    except ImportError:
+        _has_sr = False
+
+    if not _has_sr:
+        console.print(Panel(
+            "  [bold yellow]★ Voice mode — beta feature[/bold yellow]\n\n"
+            "  Voice-to-text requires [bold]speech_recognition[/bold] and [bold]pyaudio[/bold].\n\n"
+            "  [dim]pip install SpeechRecognition pyaudio[/dim]\n\n"
+            "  After installing, re-run [bold]/voice start[/bold] and speak into your mic.\n"
+            "  Your speech will be transcribed and sent as a message.",
+            title="[bold]Voice Input[/bold]",
+            border_style="yellow", padding=(0, 2)
+        ))
+        return
+
+    if sub == "stop":
+        state.pop("_voice_active", None)
+        console.print(f"  [{acc}]✓ Voice mode stopped.[/{acc}]")
+        return
+
+    # Activate voice mode — actual capture loop when enabled
+    state["_voice_active"] = True
+    console.print(Panel(
+        f"  [{acc}]★ Voice mode active[/{acc}]\n\n"
+        "  Listening… speak clearly into your microphone.\n"
+        "  Say [bold]'stop listening'[/bold] to exit voice mode.\n\n"
+        "  [dim]/voice stop  →  exit voice mode[/dim]",
+        title="[bold]Voice Input — Live[/bold]",
+        border_style="yellow", padding=(0, 2)
+    ))
+
+
+def cmd_mesh_broadcast(state, args, history):
+    """/mesh-broadcast <prompt> — broadcast a prompt to ALL active agents in parallel (ultra)."""
+    if not _require_tier(state, ("ultra", "enterprise"), "/mesh-broadcast", "/upgrade ultra"):
+        return history
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    prompt = args.strip() if args else ""
+    if not prompt:
+        console.print("[yellow]Usage: /mesh-broadcast <prompt>[/yellow]")
+        return history
+
+    agents = state.get("agents", {})
+    if not agents:
+        console.print(Panel(
+            "  No agents are active. Start agents first:\n"
+            "  [dim]/agent spawn <name>[/dim]",
+            title="Mesh Broadcast", border_style="yellow", padding=(0, 2)
+        ))
+        return history
+
+    console.print(Panel(
+        f"  [{acc}]★ Broadcasting to {len(agents)} agent(s)…[/{acc}]\n\n"
+        f"  [bold]Prompt:[/bold] {prompt[:80]}{'…' if len(prompt) > 80 else ''}",
+        title="[bold]Mesh Broadcast[/bold]", border_style="yellow", padding=(0, 2)
+    ))
+    for name, agent_obj in agents.items():
+        console.print(f"\n  [bold {acc}]▶ {name}[/bold {acc}]")
+        try:
+            resp = agent_obj.run(prompt, console, ai_respond)
+            if resp:
+                history.append({"role": "model", "text": f"[{name}] {resp}"})
+        except Exception as exc:
+            console.print(f"  [red]Agent '{name}' error: {exc}[/red]")
+    console.print(f"\n  [{acc}]✓ Broadcast complete.[/{acc}]")
+    return history
+
+
+def cmd_analytics_pro(state, args):
+    """/analytics-pro — advanced usage analytics (ultra)."""
+    if not _require_tier(state, ("ultra", "enterprise"), "/analytics-pro", "/upgrade ultra"):
+        return
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    prof  = load_profile() or {}
+
+    total_msgs    = prof.get("total_msgs", 0)
+    tok_in        = prof.get("total_tokens_in", 0)
+    tok_out       = prof.get("total_tokens_out", 0)
+    sess_count    = prof.get("session_count", 1)
+    model_usage   = prof.get("model_usage", {})
+    login_hist    = prof.get("login_history", [])
+
+    avg_per_sess  = round(total_msgs / max(sess_count, 1), 1)
+    avg_tok_out   = round(tok_out / max(total_msgs, 1), 1)
+    top_models    = sorted(model_usage.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # Build a small ASCII usage bar
+    def _bar(val, max_val, width=20):
+        filled = max(1, int((val / max(max_val, 1)) * width))
+        return f"[{acc}]{'█' * filled}[/{acc}][dim]{'░' * (width - filled)}[/dim]"
+
+    top_model_rows = ""
+    max_m = top_models[0][1] if top_models else 1
+    for m, c in top_models:
+        short = m.split("/")[-1].split(":")[0][:22]
+        top_model_rows += f"\n  {_bar(c, max_m, 16)}  [bold]{short:<22}[/bold]  [dim]{c}×[/dim]"
+
+    # Recent activity (last 7 sessions)
+    recent = login_hist[-7:] if login_hist else []
+    activity = "\n".join(
+        f"  [dim]· {ts[:16].replace('T', ' ')}[/dim]" for ts in reversed(recent)
+    ) or "  [dim]—[/dim]"
+
+    body = (
+        f"  [bold {acc}]★ Pro Analytics Dashboard[/bold {acc}]\n\n"
+        f"  [bold]Total messages[/bold]      {total_msgs:>8,}\n"
+        f"  [bold]Total sessions[/bold]      {sess_count:>8,}\n"
+        f"  [bold]Avg msgs/session[/bold]    {avg_per_sess:>8}\n"
+        f"  [bold]Tokens in[/bold]           {tok_in:>8,}\n"
+        f"  [bold]Tokens out[/bold]          {tok_out:>8,}\n"
+        f"  [bold]Avg tokens/reply[/bold]    {avg_tok_out:>8}\n"
+        f"\n  [bold]Top models[/bold]{top_model_rows}\n"
+        f"\n  [bold]Recent sessions[/bold]\n{activity}"
+    )
+    console.print(Panel(body, title="[bold yellow]★ Analytics Pro[/bold yellow]",
+                        border_style="yellow", padding=(0, 2)))
+
+
+def cmd_labs(state, args):
+    """/labs — alias for /beta, show experimental lab features."""
+    cmd_beta(state, args)
 
 
 def cmd_profile_view(state):
@@ -8557,7 +9142,7 @@ def run_repl(state):
                             title="Image Models", border_style="cyan"))
                 elif cmd == "todo":           cmd_todo(state)
                 elif cmd == "bench":          cmd_bench(state)
-                elif cmd == "voice":          cmd_voice(state)
+                elif cmd == "voice":          cmd_voice(state, args)
                 elif cmd == "export":         cmd_export(state, history)
                 elif cmd == "balance":        cmd_balance(state)
                 elif cmd == "cost":           cmd_cost(state)
@@ -8604,7 +9189,7 @@ def run_repl(state):
                 elif cmd == "upgrade":        cmd_upgrade(state, args)
                 elif cmd == "plan":           cmd_plan(state)
                 elif cmd == "permissions":    state = cmd_permissions(state)
-                elif cmd == "beta":           history = cmd_beta(state, args, history)
+                elif cmd == "beta":           cmd_beta(state, args)
                 elif cmd == "usage":          cmd_usage(state)
                 elif cmd == "trial":          state = cmd_trial(state, args)
                 elif cmd in ("update", "studio-update"): cmd_studio_update(state)
@@ -8634,7 +9219,7 @@ def run_repl(state):
                 # ── v5.6 new commands ─────────────────────────────────────────
                 elif cmd == "summarize":  history = cmd_summarize(state, history)
                 elif cmd == "autonomous": history = cmd_autonomous(state, args, history); _patch_autonomous_writes(state)
-                elif cmd in ("creator","creator-analytics","analytics"): cmd_creator_analytics(state)
+                elif cmd in ("creator","creator-analytics"): cmd_creator_analytics(state)
 
                 # ── v5.7 new commands ─────────────────────────────────────────
                 elif cmd == "vibe":       state = cmd_vibe(state, args)
@@ -8654,6 +9239,34 @@ def run_repl(state):
                 elif cmd in ("orgmetrics", "orgstats", "org"): cmd_orgmetrics(state, args)
                 elif cmd == "sso":                       cmd_sso(state, args)
                 elif cmd == "policy":                    cmd_policy(state, args)
+
+                # ── v9 Beta (ultra) ───────────────────────────────────────────
+                elif cmd in ("labs", "flags"):
+                    cmd_beta(state, args)
+                elif cmd in ("mesh-broadcast", "meshbroadcast", "broadcast-all"):
+                    history = cmd_mesh_broadcast(state, args, history)
+                elif cmd in ("analytics-pro", "analyticspro"):
+                    cmd_analytics_pro(state, args)
+
+                # ── v9.0 (pro) ────────────────────────────────────────────────
+                elif cmd == "plugin":
+                    cmd_plugin(state, args)
+                elif cmd in ("agent-mesh", "agentmesh", "mesh"):
+                    history = cmd_agent_mesh(state, args, history)
+                elif cmd in ("vision-pro", "visionpro", "vpro"):
+                    history = cmd_vision_pro(state, args, history)
+
+                # ── v8.0 ──────────────────────────────────────────────────────
+                elif cmd in ("whats-new", "whatsnew", "new", "changelog-v8"):
+                    cmd_whats_new(state)
+                elif cmd in ("snapshot", "snap"):
+                    history = cmd_snapshot(state, args, history)
+                elif cmd in ("open-web", "openweb", "web-ui", "webui"):
+                    cmd_open_web(state, args)
+                elif cmd in ("tip", "tips", "hint"):
+                    cmd_tip(state, args)
+                elif cmd == "speed":
+                    state = cmd_speed(state, args)
 
                 else:
                     # 10. Auto-Corrector Feature

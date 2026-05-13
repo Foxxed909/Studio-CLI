@@ -109,7 +109,7 @@ app.post("/api/key", (req, res) => {
 
 app.post("/api/chat", (req, res) => {
   const { messages, model, persona, stream = true,
-          temperature, max_tokens, system_override } = req.body;
+          temperature, max_tokens, system_override, image } = req.body;
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: "messages array required" });
   }
@@ -121,11 +121,27 @@ app.post("/api/chat", (req, res) => {
 
   const baseSystem = (persona && PERSONAS[persona]) ? PERSONAS[persona].system : PERSONAS.default.system;
   const systemPrompt = system_override ? system_override : baseSystem;
+
+  // Build final messages — inject image into last user message if provided
+  let finalMessages = [...messages];
+  if (image && image.data && finalMessages.length > 0) {
+    const last = finalMessages[finalMessages.length - 1];
+    if (last.role === "user") {
+      finalMessages[finalMessages.length - 1] = {
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: image.data } },
+          { type: "text", text: typeof last.content === "string" ? last.content : "" },
+        ],
+      };
+    }
+  }
+
   const payload = JSON.stringify({
     model: model || FREE_MODELS[0].id,
     messages: [
       { role: "system", content: systemPrompt },
-      ...messages,
+      ...finalMessages,
     ],
     stream,
     max_tokens: max_tokens || 4096,

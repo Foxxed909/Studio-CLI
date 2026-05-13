@@ -24,7 +24,7 @@ except ImportError as e:
     print("Run: pip install rich prompt_toolkit")
     sys.exit(1)
 
-VERSION = "8.1"
+VERSION = "9.0"
 
 console = Console()
 
@@ -6278,6 +6278,161 @@ def cmd_policy(state, args):
     console.print("[yellow]Usage: /policy show | set <key> <value> | clear <key>[/yellow]")
 
 
+PLUGIN_FILE = CONFIG_DIR / "plugins.json"
+
+def _load_plugins():
+    try:
+        if PLUGIN_FILE.exists():
+            return json.loads(PLUGIN_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return []
+
+def _save_plugins(plugins):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    PLUGIN_FILE.write_text(json.dumps(plugins, indent=2), encoding="utf-8")
+
+
+def cmd_plugin(state, args):
+    """/plugin list|add <name> <url>|remove <name> — v9 plugin system (pro)."""
+    if not _require_pro(state, "/plugin"):
+        return
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    parts = (args or "").split(None, 2)
+    action = parts[0].lower() if parts else "list"
+
+    plugins = _load_plugins()
+
+    if action == "list" or not action:
+        if not plugins:
+            console.print(Panel(
+                "  No plugins installed.\n\n"
+                "  [dim]/plugin add <name> <url>   — register a plugin endpoint\n"
+                "  /plugin remove <name>        — uninstall\n"
+                "  /plugin list                 — show installed[/dim]",
+                title="[bold]Plugins[/bold]", border_style=theme.get("border","cyan"), padding=(0,2)
+            ))
+            return
+        tbl = Table(title="Installed Plugins", box=box.SIMPLE, border_style=acc)
+        tbl.add_column("Name", style="bold")
+        tbl.add_column("URL")
+        tbl.add_column("Status")
+        for p in plugins:
+            tbl.add_row(p["name"], p.get("url","—"), "[green]active[/green]")
+        console.print(tbl)
+
+    elif action == "add":
+        if len(parts) < 3:
+            console.print("[yellow]Usage: /plugin add <name> <url>[/yellow]"); return
+        name, url = parts[1], parts[2]
+        if any(p["name"] == name for p in plugins):
+            console.print(f"[yellow]Plugin '{name}' already installed.[/yellow]"); return
+        plugins.append({"name": name, "url": url, "added": datetime.now().isoformat()})
+        _save_plugins(plugins)
+        console.print(f"  [{acc}]✓ Plugin '{name}' installed.[/{acc}]")
+
+    elif action in ("remove", "rm", "uninstall"):
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /plugin remove <name>[/yellow]"); return
+        name = parts[1]
+        before = len(plugins)
+        plugins = [p for p in plugins if p["name"] != name]
+        if len(plugins) == before:
+            console.print(f"[yellow]Plugin '{name}' not found.[/yellow]"); return
+        _save_plugins(plugins)
+        console.print(f"  [{acc}]✓ Plugin '{name}' removed.[/{acc}]")
+    else:
+        console.print("[yellow]Usage: /plugin list | add <name> <url> | remove <name>[/yellow]")
+
+
+def cmd_agent_mesh(state, args, history):
+    """/agent-mesh <task> — broadcast task to all available agents simultaneously (pro)."""
+    if not _require_pro(state, "/agent-mesh"):
+        return history
+    if not args:
+        console.print("[yellow]Usage: /agent-mesh <task>[/yellow]"); return history
+    theme  = state.get("theme", THEMES["default"])
+    acc    = theme.get("accent", "cyan")
+    agents_ids = list(AGENT_ROSTER.keys())
+    task   = args.strip()
+    console.print(f"\n[bold {acc}]⬡  AGENT MESH  ⬡[/bold {acc}]  [dim]{len(agents_ids)} agents · broadcasting…[/dim]\n")
+    results = {}
+    lock    = threading.Lock()
+    errors  = {}
+
+    def _run_agent(aid):
+        spec = AGENT_ROSTER.get(aid, {})
+        name = spec.get("name", aid)
+        role = spec.get("role", "Agent")
+        persona_sys = PERSONAS.get(spec.get("persona_key", "default"), PERSONAS["default"])
+        sys_p = persona_sys.get("system", "") if isinstance(persona_sys, dict) else str(persona_sys)
+        prompt = f"[{role}] {task}"
+        try:
+            txt, _ = ai_respond(dict(state, persona=sys_p), prompt, [])
+            with lock:
+                results[aid] = (name, role, txt or "")
+        except Exception as exc:
+            with lock:
+                errors[aid] = str(exc)
+
+    threads = [threading.Thread(target=_run_agent, args=(aid,), daemon=True) for aid in agents_ids[:6]]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=30)
+
+    for aid in agents_ids[:6]:
+        if aid in results:
+            name, role, txt = results[aid]
+            spec = AGENT_ROSTER.get(aid, {})
+            color = spec.get("color", acc)
+            console.print(Panel(
+                Markdown(txt[:600] + ("…" if len(txt) > 600 else "")),
+                title=f"[{color}]{spec.get('emoji','')} {name}[/{color}] [dim]{role}[/dim]",
+                border_style=color.replace("bold ",""), padding=(0,1)
+            ))
+    return history
+
+
+def cmd_vision_pro(state, args, history):
+    """/vision-pro <image_path> [prompt] — enhanced image analysis (pro)."""
+    if not _require_pro(state, "/vision-pro"):
+        return history
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    if not args:
+        console.print("[yellow]Usage: /vision-pro <image_path> [prompt][/yellow]"); return history
+    parts = args.split(None, 1)
+    img_path = Path(parts[0])
+    prompt   = parts[1] if len(parts) > 1 else "Describe this image in detail."
+    if not img_path.exists():
+        console.print(f"[red]File not found: {img_path}[/red]"); return history
+    try:
+        import base64
+        img_b64 = base64.b64encode(img_path.read_bytes()).decode()
+        ext = img_path.suffix.lower().lstrip(".")
+        mime_map = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                    "gif": "image/gif", "webp": "image/webp"}
+        mime = mime_map.get(ext, "image/png")
+        console.print(f"  [{acc}]🔍 Analysing {img_path.name}…[/{acc}]")
+        vision_msg = [{"role": "user", "content": [
+            {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
+            {"type": "text", "text": prompt},
+        ]}]
+        or_key = state.get("openrouter_key") or load_or_key()
+        if not or_key:
+            console.print("[yellow]OpenRouter key required for vision.[/yellow]"); return history
+        vision_model = "google/gemini-2.0-flash-001"
+        result, _ = call_openrouter(or_key, vision_model, vision_msg, "", "")
+        console.print(Panel(Markdown(result or "No response."),
+                            title=f"[bold]Vision Analysis — {img_path.name}[/bold]",
+                            border_style=theme.get("border","cyan"), padding=(0,1)))
+        history.append({"role": "user", "parts": [{"text": f"[vision: {img_path.name}] {prompt}"}]})
+        history.append({"role": "model", "parts": [{"text": result or ""}]})
+    except Exception as exc:
+        console.print(f"[red]Vision error: {exc}[/red]")
+    return history
+
+
 def cmd_whats_new(state):
     """/whats-new — show what's new in the current version."""
     theme = state.get("theme", THEMES["default"])
@@ -8862,6 +9017,14 @@ def run_repl(state):
                 elif cmd in ("orgmetrics", "orgstats", "org"): cmd_orgmetrics(state, args)
                 elif cmd == "sso":                       cmd_sso(state, args)
                 elif cmd == "policy":                    cmd_policy(state, args)
+
+                # ── v9.0 (pro) ────────────────────────────────────────────────
+                elif cmd == "plugin":
+                    cmd_plugin(state, args)
+                elif cmd in ("agent-mesh", "agentmesh", "mesh"):
+                    history = cmd_agent_mesh(state, args, history)
+                elif cmd in ("vision-pro", "visionpro", "vpro"):
+                    history = cmd_vision_pro(state, args, history)
 
                 # ── v8.0 ──────────────────────────────────────────────────────
                 elif cmd in ("whats-new", "whatsnew", "new", "changelog-v8"):

@@ -836,13 +836,13 @@ def cmd_arena(state, args, history):
             border_style="dim", padding=(0, 2)
         ))
         try:
-            pick = console.input("[bold magenta]Winner #: [/bold magenta]").strip()
+            pick = _safe_input("[bold magenta]Winner #: [/bold magenta]").strip()
             if pick.isdigit():
                 pick_idx = int(pick) - 1
                 if 0 <= pick_idx < len(results):
                     winner_id, winner_res, _, _, _ = results[pick_idx]
                     console.print(f"  [bold green]✓ Winner: {winner_id}[/bold green]")
-                    copy_q = console.input("[bold]Copy winner's response to clipboard? (y/n): [/bold]").strip().lower()
+                    copy_q = _safe_input("[bold]Copy winner's response to clipboard? (y/n): [/bold]").strip().lower()
                     if copy_q == "y":
                         try:
                             import subprocess as _sp

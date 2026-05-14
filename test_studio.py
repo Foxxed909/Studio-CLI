@@ -239,7 +239,7 @@ run("/find *.py",             lambda: cmd_find(state, "*.py", "."))
 run("/grep VERSION .",        lambda: cmd_grep(state, "VERSION", "."))
 run("/cat aistudio.py",       lambda: cmd_cat(state, "aistudio.py"))
 run("/wordcount aistudio.py", lambda: cmd_wordcount(state, "aistudio.py"))
-run("/count aistudio.py",     lambda: cmd_count(state, "aistudio.py"))
+run("/count VERSION aistudio.py", lambda: cmd_count(state, "VERSION aistudio.py"))
 
 # ══════════════════════════════════════════════════════════════
 # 13. Persona

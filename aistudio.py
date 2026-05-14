@@ -1141,7 +1141,7 @@ def check_write_allowed(state, path="a file", verb="write"):
     if mode in ("auto", "yolo", "bypass"):
         return True
     # default / ask: prompt
-    ans = console.input(f"[bold yellow]Allow {verb} → [cyan]{path}[/cyan]? (y/n): [/bold yellow]").strip().lower()
+    ans = _safe_input(f"[bold yellow]Allow {verb} → [cyan]{path}[/cyan]? (y/n): [/bold yellow]").strip().lower()
     return ans == "y"
 
 def cmd_permissions(state):
@@ -2690,7 +2690,16 @@ def call_gemini(api_key, model, history, prompt, system_prompt=None, _retry=0):
     try:
         with request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode())
-        return data["candidates"][0]["content"]["parts"][0]["text"], None
+        candidates = data.get("candidates") or []
+        if not candidates:
+            reason = (data.get("promptFeedback") or {}).get("blockReason", "unknown")
+            return None, f"Gemini blocked the response (reason: {reason}). Try rephrasing."
+        cand = candidates[0]
+        parts = (cand.get("content") or {}).get("parts") or []
+        if not parts:
+            finish = cand.get("finishReason", "unknown")
+            return None, f"Gemini returned an empty response (finishReason: {finish})."
+        return parts[0].get("text", ""), None
     except urllib_error.HTTPError as e:
         body2 = e.read().decode()
         if e.code in (429, 503) and _retry < 3:
@@ -3375,15 +3384,10 @@ def parse_and_execute_tools(state, text):
                 "Return ONLY the complete updated file content — no commentary, no markdown fences."
             )
             _start_think_anim(f"Patching {Path(path).name}")
-            from_key = state.get("openrouter_key") or load_or_key()
-            new_content, err = call_openrouter(
-                from_key,
-                state.get("model") or DEFAULT_MODEL,
-                [], prompt, build_system_prompt(state)
-            )
+            new_content, _ = ai_respond(state, prompt, [], silent=True)
             _stop_think_anim()
             if not new_content:
-                console.print(f"[red]Tool PATCH failed for '{path}': {err}[/red]")
+                console.print(f"[red]Tool PATCH failed for '{path}': no response from AI[/red]")
                 continue
             # Strip accidental markdown fences
             new_content = re.sub(r"^```[^\n]*\n", "", new_content.strip())

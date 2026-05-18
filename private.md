@@ -20,6 +20,43 @@ Plans are purely local / honor-system. No server-side enforcement. The "secret l
 
 ---
 
+## v9.5 — Fixes (2026-05-16)
+
+### Enterprise/plan feature-gate bug — root cause and fix
+**Root cause**: `aistudio.py` had a local `PLANS = { ... }` redefinition at the module level (around line 113–206) that shadowed the `PLANS` imported from `studio.data`. This old copy was missing the feature-flag fields (`computer_use`, `web_search`, `deep_research`, `turbo`, `live_code`, `credits`) added to `studio/data.py` in v9.3. Any `PLANS.get(plan, {}).get("computer_use", False)` call would hit the local copy and return `False` for every plan, including Enterprise.
+
+**Fix**: Deleted the duplicate local `PLANS` block from `aistudio.py`. The import `from studio.data import PLANS` now takes effect.
+
+**What to watch**: Any future constant that needs feature flags **must** be added to `studio/data.py`, not duplicated in `aistudio.py`. The pattern of re-declaring things in `aistudio.py` for "standalone" use is the root cause of this class of bug.
+
+### Response rendering fixed
+`_clean_terminal_text()` was stripping markdown (converting `## Heading` → `HEADING`, `**bold**` → `bold`) before passing text to Rich's `Markdown()` renderer. The result was plain uppercase text with no formatting. Fixed by removing the clean step from the main `ai_respond` display path and the one-shot path. `_clean_terminal_text` is still defined but no longer used on the primary response path.
+
+### server.js `activeModel` undefined
+`estimateCost(activeModel, ...)` at two call sites used `activeModel` (undefined in scope) instead of `resolvedModel`. Cost was always $0. Fixed by replacing with `resolvedModel`.
+
+---
+
+## v9.5 patch — Bug Fixes (2026-05-18)
+
+### Re-declaration cleanup (second pass)
+After the v9.5 fix that deleted the local `PLANS` block, a second audit found further local re-declarations that shadow studio/ imports:
+
+- **`load_persona` / `save_persona` / `load_memory` / `save_memory`** (lines ~2664-2678): Local `load_persona` returned `PERSONAS["default"]` as fallback when no persona file exists; `studio/session.load_persona` returns `""`. The local version silently injected a system prompt for new users even when no persona had been configured. All four re-declarations removed; imports take effect.
+
+- **`SKIP_DIRS`, `CODE_EXTS`, `MAX_FILE_CHARS`, `MAX_TOTAL_CHARS`** (lines ~11687-11693): Re-declared in the agent/project-scanner section. Identical to `studio/data.py` values but shielded them from upstream changes. Removed.
+
+- **`AGENT_ROSTER`** (lines ~11695-11700): Re-declared with a slightly extended `wizzard` persona. The extra text ("Every answer is a spell that works. Experimental, creative, always shipping.") was moved into `studio/data.py` as the canonical definition. Local re-declaration removed.
+
+- **`OLLAMA_BASE`** (line ~11842): Redundant re-declaration of the same value from `studio/data.py`. Removed.
+
+**Pattern note**: Any module-level `FOO = ...` in `aistudio.py` that duplicates a name already in `studio/` is a silent hazard — the local assignment runs after the `from studio import *` at the top and wins, making `studio/` changes invisible at runtime. Always add new constants to `studio/data.py` only.
+
+### Rate-limit display fix
+`cmd_usage` hardcoded `"(free cap: 5/hr)"` in its display string. `check_rate_limit()` has always used limit=10/hr for free. Fixed to `"(free cap: 10/hr)"`.
+
+---
+
 ## Known Issues / Technical Debt
 
 - `typewrite()` is broken for strings containing Rich markup when `style=""` — each character is printed in a separate `console.print()` call so markup tags are never interpreted as a whole. Fixed in v5.7 for all known callsites but new `typewrite` calls must not embed Rich markup without a `style=` argument.
@@ -28,6 +65,18 @@ Plans are purely local / honor-system. No server-side enforcement. The "secret l
 - Gemini CLI detection (`detect_gemini_cli()`) runs `shutil.which` on every call — no caching.
 
 ---
+
+## v9.1 — Fixes & Internal Notes (2026-05-16)
+
+- **`cmd_beta` double-def bug**: The second `def cmd_beta(state, args, history)` at ~line 7584 shadowed the first (v9 flags manager). Fixed by renaming the second to `cmd_beta_features`. Dispatch now routes `docx/xlsx/screenshot/video/feedback` to `cmd_beta_features`, all others to the flags manager (`cmd_beta`).
+- **`cmd_voice` double-def bug**: TTS function (Windows `SpeechSynthesizer`) renamed to `cmd_tts`, exposed at `/tts`. The ultra-gated voice-to-text stub keeps the `/voice` route.
+- **`cmd_vision_pro` history keys**: History entries were appended with `"parts"` key (Gemini REST format) instead of `"text"` key (internal format). Downstream `build_system_prompt` and `call_*` functions all expect `"text"`. Fixed.
+- **`cmd_autonomous` None crash**: `args.lower()` called without checking if args is None. Fixed with `args = (args or "").strip()` guard.
+- **`ensure_onboarded` bare `input()`**: Used `input()` instead of `_safe_input()`. Crashes in non-interactive contexts. Fixed.
+- **Complaints invisible in analytics**: `/complain` wrote to `logs/complaints.json` but `/creator` reads `~/.aistudio/feedback_log.json`. Fixed by dual-writing complaints to both paths.
+- **Auto-save**: Every AI exchange now calls `_autosave_session(history)` which writes to `~/.aistudio/autosave.json`. `/resume` reloads it.
+- **`/alias` expansion at unknown-command fallback**: Unknown `/cmd` now checks `~/.aistudio/aliases.json` before showing "Unknown command" — allows aliases to work as top-level commands.
+- **New config files added**: `aliases.json` (user-defined shortcuts), `notes.json` (quick notes), `autosave.json` (last session).
 
 ## v5.8 — Secret Changes & Internal Patches
 

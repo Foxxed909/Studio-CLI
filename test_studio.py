@@ -23,7 +23,7 @@ from aistudio import (
     CHANGELOG, CHANGELOG_TEXT, HELP_TEXT,
     show_status,
     cmd_millieman, cmd_cavecat,
-    cmd_workspace, cmd_perm, cmd_permissions,
+    cmd_workspace, cmd_perm, cmd_permissions, cmd_tts,
     cmd_debug, cmd_label, cmd_cap, cmd_tokens,
     cmd_ui, cmd_stream, cmd_cache, cmd_theme,
     cmd_changelog, cmd_update_log, cmd_free_tips,
@@ -110,8 +110,8 @@ run("CHANGELOG.keys() works (Bug B — no AttributeError)",
 run("HELP_TEXT banner matches current VERSION (Bug D)",
     lambda: None if f"v{VERSION}" in HELP_TEXT
             else (_ for _ in ()).throw(AssertionError(f"HELP_TEXT missing v{VERSION}")))
-run("cmd_voice has ASCII hyphen -AssemblyName (Bug C)",
-    lambda: None if "-AssemblyName" in inspect.getsource(cmd_voice) and "–AssemblyName" not in inspect.getsource(cmd_voice)
+run("cmd_tts has ASCII hyphen -AssemblyName (Bug C)",
+    lambda: None if "-AssemblyName" in inspect.getsource(cmd_tts) and "–AssemblyName" not in inspect.getsource(cmd_tts)
             else (_ for _ in ()).throw(AssertionError("en-dash still present")))
 run("cmd_free_tips has no orphaned for-loops (Bug A)",
     lambda: None if "read_p.finditer" not in inspect.getsource(cmd_free_tips)

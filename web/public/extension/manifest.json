@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "StudioCLI Companion",
+  "version": "1.0",
+  "description": "Chrome extension for StudioCLI Max+ plans. Enables computer use and screen sharing.",
+  "permissions": ["activeTab", "scripting", "desktopCapture", "tabs"],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

@@ -1,10 +1,10 @@
 @echo off
-title AI Studio CLI v6.2 - Installer/Updater
+title AI Studio CLI - Installer/Updater
 setlocal
 
-set "VERSION=6.2"
 set "INSTALL_DIR=%USERPROFILE%\AppData\Local\aistudio"
 set "SRC=%~dp0aistudio.py"
+set "STUDIO_PKG=%~dp0studio"
 
 :: Quick update: install_windows.bat -u / update / --update
 if /i "%1"=="update"   goto :UPDATE
@@ -15,7 +15,7 @@ if /i "%1"=="--update" goto :UPDATE
 echo.
 echo   +==================================================+
 echo   ^|                                                  ^|
-echo   ^|   AI Studio CLI  v%VERSION%  -  Windows Installer   ^|
+echo   ^|   AI Studio CLI  -  Windows Installer            ^|
 echo   ^|   Multi-model  *  Agents  *  Full Filesystem    ^|
 echo   ^|   Ghost Studio / Catara  *  Plan System         ^|
 echo   ^|                                                  ^|
@@ -63,9 +63,18 @@ if not exist "%SRC%" (
     pause & exit /b 1
 )
 
-:: Deploy
+:: Deploy aistudio.py
 copy /Y "%SRC%" "%INSTALL_DIR%\aistudio.py" >nul
 echo   [OK] Deployed aistudio.py to %INSTALL_DIR%
+
+:: Deploy studio package
+if not exist "%STUDIO_PKG%" (
+    echo   [WARN] studio\ package folder not found next to installer - skipping
+) else (
+    if exist "%INSTALL_DIR%\studio" rd /s /q "%INSTALL_DIR%\studio"
+    xcopy /E /I /Q "%STUDIO_PKG%" "%INSTALL_DIR%\studio" >nul
+    echo   [OK] Deployed studio\ package to %INSTALL_DIR%
+)
 
 :: Write launchers
 echo @python "%INSTALL_DIR%\aistudio.py" %%* > "%INSTALL_DIR%\studio.bat"
@@ -115,7 +124,7 @@ exit /b 0
 
 :UPDATE_DONE
 echo.
-echo   [OK] AI Studio CLI v%VERSION% updated successfully.
+echo   [OK] AI Studio CLI updated successfully.
 echo   [OK] Run: studio
 echo.
 exit /b 0

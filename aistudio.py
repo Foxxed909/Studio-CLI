@@ -2,7 +2,7 @@ import os, sys, json, argparse, subprocess, tempfile, shutil, time, threading
 import difflib, fnmatch, glob, re, shlex, webbrowser, hashlib
 from pathlib import Path
 from urllib import request, error as urllib_error
-from datetime import datetime
+from datetime import datetime, timedelta
 
 try:
     from rich.console import Console
@@ -12,6 +12,7 @@ try:
     from rich.tree import Tree
     from rich.table import Table
     from rich.columns import Columns
+    from rich.live import Live
     from rich import box
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import FileHistory
@@ -24,9 +25,48 @@ except ImportError as e:
     print("Run: pip install rich prompt_toolkit")
     sys.exit(1)
 
-VERSION = "9.0-beta"
-
-console = Console()
+# ── STUDIO PACKAGE ────────────────────────────────────────────────────────────
+# Multi-file architecture: data, paths, providers, session, project, agents
+# are all in studio/ — imported here so the rest of this file works unchanged.
+from studio.console import console
+from studio.paths   import *
+from studio.data    import (
+    VERSION, API_BASE, OPENROUTER_BASE, DEFAULT_MODEL,
+    CURSOR_BASE, CURSOR_RUNS_BASE, OLLAMA_BASE,
+    MAX_FREE_UPGRADE_SLOTS, SLOT_GATED_PLANS,
+    PLANS, EFFORTS, FREE_NERF_SYSTEM, CREDIT_COSTS, PLAN_UPDATES,
+    TURBO_MODELS, WEB_SEARCH_MODELS,
+    IMAGE_MODELS, DEFAULT_IMG_MODEL, FREE_CHAT_MODELS,
+    MODEL_PRICING, DEFAULT_PRICE_PER_1K, model_price_per_1k, _is_openrouter_model,
+    STUDIO_CONTEXT, PERSONAS,
+    THEMES, UI_STYLES, STREAM_MODES, STUDIO_MODEL_ALIASES,
+    SUPPORTED_PROVIDERS, CHAT_MODES, VIBE_PRESETS,
+    _STATUSLINE_DEFAULTS_LAZY,
+    _CASUAL_WORDS, _BUILD_WORDS, _ANALYZE_WORDS, _FIF_WORDS,
+    _INSULT_WORDS, _INSULT_SUBSTRINGS, _INSULT_LANGS, _ROAST_RESPONSES,
+    detect_input_mode,
+    AGENT_ROSTER, SKIP_DIRS, CODE_EXTS, MAX_FILE_CHARS, MAX_TOTAL_CHARS,
+    _RICH_TAG_RE, _ptk_style_token,
+)
+from studio.providers import (
+    call_gemini, call_openrouter, call_openrouter_stream,
+    call_cursor, call_ollama, call_gemini_cli,
+)
+from studio.session import (
+    load_profile, save_profile,
+    load_api_key, save_api_key, load_or_key, save_or_key,
+    load_hf_key, save_hf_key, load_all_keys, save_all_keys, get_key, mask_key,
+    load_theme, save_theme, load_last_model, save_last_model,
+    load_ui_style, save_ui_style, load_stream_mode, save_stream_mode,
+    load_persona, save_persona, load_workspace_root, save_workspace_root,
+    load_memory, save_memory,
+    load_trial, start_trial, get_plan, set_plan,
+    check_msg_limit, reset_msg_counter, check_img_quota,
+    load_upgrade_slots, save_upgrade_slots, claim_upgrade_slot,
+    load_usage, save_usage,
+)
+from studio.project import scan_project, format_project_context
+from studio.agents  import Agent, BLACKBOARD, pick_best_agent, auto_assign_agents
 
 def _safe_input(prompt: str, default: str = "") -> str:
     """Read user input, but don't crash in non-interactive runs (e.g., tests)."""
@@ -35,274 +75,9 @@ def _safe_input(prompt: str, default: str = "") -> str:
     except EOFError:
         return default
 
-API_BASE        = "https://generativelanguage.googleapis.com/v1beta/models"
-OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_MODEL   = "nvidia/nemotron-3-super-120b-a12b:free"
 
-CONFIG_DIR      = Path.home() / ".aistudio"
-CONFIG_FILE     = CONFIG_DIR / "config"
-HISTORY_FILE    = CONFIG_DIR / "history"
-PERSONA_FILE    = CONFIG_DIR / "persona"
-OPENROUTER_FILE = CONFIG_DIR / "openrouter_key"
-CURSOR_FILE     = CONFIG_DIR / "cursor_key"
-MEMORY_FILE     = CONFIG_DIR / "memory.json"
-CONVOS_DIR      = CONFIG_DIR / "conversations"
-HF_KEY_FILE     = CONFIG_DIR / "hf_key"
-IMG_DIR         = Path.home() / "aistudio_images"
-WORKSPACE_FILE  = CONFIG_DIR / "workspace_root"
-PERMS_FILE      = CONFIG_DIR / "permissions"
-ONBOARD_FILE    = CONFIG_DIR / "onboarded"
-PROFILE_FILE    = CONFIG_DIR / "profile.json"
-DEBUG_FILE      = CONFIG_DIR / "debug.log"
-CAPS_FILE       = CONFIG_DIR / "caps.json"
-NOTIFY_FILE     = CONFIG_DIR / "notify"
-FEEDBACK_FILE   = CONFIG_DIR / "feedback_log.json"
-IMG_QUOTA_FILE  = CONFIG_DIR / "img_quota.json"
-EDIT_PERM_FILE     = CONFIG_DIR / "edit_perms"
-BETA_FEEDBACK_FILE = CONFIG_DIR / "beta_feedback.json"
-TRIAL_FILE         = CONFIG_DIR / "trial.json"
-UPGRADE_SLOTS_FILE = CONFIG_DIR / "upgrade_slots.json"
 
-# Hard cap: only this many distinct free users can hold a Starter/Pro/Max
-# entitlement (paid upgrade or 5h trial) at the same time. Once full, new
-# free users must wait for a slot to free up before upgrading or trialing.
-MAX_FREE_UPGRADE_SLOTS = 2
-SLOT_GATED_PLANS = ("starter", "pro", "max")
 
-# ── PLAN SYSTEM ───────────────────────────────────
-PLANS = {
-    "free": {
-        "name":        "Free",
-        "tier":        "v8+",
-        "price":       "$0 / mo",
-        "msg_limit":   10,
-        "img_per_3h":  1,
-        "models":      ["nvidia/nemotron-3-super-120b-a12b:free"],
-        "color":       "dim",
-        "badge":       "○",
-        "features":    ["10 messages / session", "1 image / 3 hrs", "Nemotron only", "v8+ features"],
-        "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta", "Max tier: v8+"],
-    },
-    "pro": {
-        "name":        "Pro",
-        "tier":        "v9",
-        "price":       "$18 / mo",
-        "msg_limit":   500,
-        "img_per_3h":  10,
-        "models":      None,
-        "color":       "cyan",
-        "badge":       "◆",
-        "features":    ["500 messages / session", "10 images / 3 hrs", "All models", "All agents", "Priority queue", "v9 features"],
-        "limitations": [],
-    },
-    "max": {
-        "name":        "Max",
-        "tier":        "v9+",
-        "price":       "$80 / mo",
-        "msg_limit":   5000,
-        "img_per_3h":  100,
-        "models":      None,
-        "color":       "magenta",
-        "badge":       "◈",
-        "features":    ["5,000 messages / session", "100 images / 3 hrs", "Cursor API", "Surgical Patching", "Internal Reasoning", "/audit-log", "/priority-queue", "v9+ features"],
-        "limitations": [],
-    },
-    "ultra": {
-        "name":        "Ultra",
-        "tier":        "v9 Beta",
-        "price":       "$250 / mo",
-        "msg_limit":   999999,
-        "img_per_3h":  999,
-        "models":      None,
-        "color":       "bold yellow",
-        "badge":       "★",
-        "features":    ["Unlimited usage", "Infinite images", "Real-time streaming", "Max Effort Mode", "v9 Beta features", "Early access to v10"],
-        "limitations": [],
-    },
-    "starter": {
-        "name":        "Starter",
-        "price":       "$5 / mo",
-        "msg_limit":   100,
-        "img_per_3h":  3,
-        "models":      None,
-        "color":       "green",
-        "badge":       "◇",
-        "features":    ["100 msgs/session", "3 images/3h", "All models", "Basic agents"],
-        "limitations": ["No /arena", "No /beta"],
-    },
-    "dev": {
-        "name":        "Dev",
-        "price":       "$35 / mo",
-        "msg_limit":   2000,
-        "img_per_3h":  50,
-        "models":      None,
-        "color":       "bold cyan",
-        "badge":       "⬡",
-        "features":    ["2,000 msgs/session", "50 images/3h", "All models", "/arena", "Cursor API", "Audit mode"],
-        "limitations": [],
-    },
-    "team": {
-        "name":        "Team",
-        "price":       "$400 / mo",
-        "msg_limit":   999999,
-        "img_per_3h":  999,
-        "models":      None,
-        "color":       "bold green",
-        "badge":       "👥",
-        "features":    ["Shared Workspaces", "Team Agent Squads", "Admin Analytics", "Collaborative /arena", "Priority Support", "/orgmetrics", "/audit-log", "/priority-queue"],
-        "limitations": [],
-    },
-    "enterprise": {
-        "name":        "Enterprise",
-        "price":       "Custom",
-        "msg_limit":   999999,
-        "img_per_3h":  9999,
-        "models":      None,
-        "color":       "bold white",
-        "badge":       "◉",
-        "features":    ["Unlimited", "Custom agents", "SSO/SAML (/sso)", "Dedicated support", "SLA", "/policy", "/orgmetrics", "/audit-log"],
-        "limitations": [],
-    },
-}
-
-EFFORTS = {
-    "low":    "Standard precision",
-    "medium": "Balanced reasoning",
-    "pro":    "Expert analysis",
-    "high":   "Deep investigation",
-    "xhigh":  "Extreme validation (Ultra only)",
-    "mxh":    "Magnificent High — Ultimate Reasoning (Ultra only)",
-}
-FREE_NERF_SYSTEM = (
-    "You are an AI assistant inside AI Studio CLI — a terminal tool running on the user's machine. "
-    "The user has file access via CLI commands: /read <file>, /write <file>, /patch <file>, /fix <file>, /ls, /tree, /fif <file>. "
-    "Never say you cannot access local files — the user must use those CLI commands to load files into context. "
-    "You are operating on the Studio Free plan: keep answers under 150 words unless the user asks for more. "
-    "For code tasks, suggest using /patch or /write instead of writing full files in chat. "
-    "Mention /upgrade only occasionally — don't spam it. "
-    "You have access to the current directory and any file the user reads in with /read."
-)
-
-IMAGE_MODELS = {
-    "flux-schnell": "black-forest-labs/FLUX.1-schnell",
-    "flux-dev":     "black-forest-labs/FLUX.1-dev",
-    "sdxl":         "stabilityai/stable-diffusion-xl-base-1.0",
-    "sd15":         "runwayml/stable-diffusion-v1-5",
-}
-DEFAULT_IMG_MODEL = "flux-schnell"
-
-# Verified working on OpenRouter — 2026-04-26
-FREE_CHAT_MODELS = [
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "openai/gpt-oss-120b:free",
-    "openai/gpt-oss-20b:free",
-    "nousresearch/hermes-3-llama-3.1-405b:free",
-    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "meta-llama/llama-3.2-3b-instruct:free",
-    "google/gemma-3-27b-it:free",
-    "google/gemma-3-12b-it:free",
-    "qwen/qwen3-coder:free",
-]
-
-# Per-model pricing ($ per 1k tokens, input+output blended).
-# Free-tier models cost $0 — we still track tokens so stats are meaningful.
-MODEL_PRICING: dict[str, float] = {
-    # ── Free (OpenRouter :free tag) ──────────────────────────────────────────
-    "nvidia/nemotron-3-super-120b-a12b:free":                  0.0,
-    "openai/gpt-oss-120b:free":                                0.0,
-    "openai/gpt-oss-20b:free":                                 0.0,
-    "nousresearch/hermes-3-llama-3.1-405b:free":               0.0,
-    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": 0.0,
-    "meta-llama/llama-3.3-70b-instruct:free":                  0.0,
-    "meta-llama/llama-3.2-3b-instruct:free":                   0.0,
-    "google/gemma-3-27b-it:free":                              0.0,
-    "google/gemma-3-12b-it:free":                              0.0,
-    "qwen/qwen3-coder:free":                                   0.0,
-    # ── Gemini (Google) ──────────────────────────────────────────────────────
-    "gemini-2.5-flash":                                        0.000375,
-    "gemini-2.5-pro":                                          0.00625,
-    "gemini-2.0-flash":                                        0.000188,
-    "gemini-1.5-pro":                                          0.00313,
-    "gemini-1.5-flash":                                        0.000094,
-    # ── OpenRouter paid ──────────────────────────────────────────────────────
-    "openai/gpt-4o":                                           0.00375,
-    "openai/gpt-4o-mini":                                      0.000225,
-    "anthropic/claude-sonnet-4-5":                             0.0045,
-    "anthropic/claude-opus-4-5":                               0.0225,
-    "meta-llama/llama-3.1-405b-instruct":                      0.002,
-    "google/gemini-2.5-pro":                                   0.00625,
-    "mistralai/mistral-large":                                 0.003,
-    "qwen/qwen-2.5-72b-instruct":                              0.0009,
-}
-DEFAULT_PRICE_PER_1K = 0.002  # fallback for unknown paid models
-
-def model_price_per_1k(model: str) -> float:
-    """Return the $/1k-token rate for a model. Free models return 0.0."""
-    if not model:
-        return DEFAULT_PRICE_PER_1K
-    if model in MODEL_PRICING:
-        return MODEL_PRICING[model]
-    # Any :free suffix → $0
-    if model.endswith(":free"):
-        return 0.0
-    # Gemini CLI / Ollama → treat as free (local/no direct billing)
-    if model.startswith("ollama/") or model.startswith("gemini-"):
-        return MODEL_PRICING.get(model, 0.0)
-    return DEFAULT_PRICE_PER_1K
-
-# Models that require OpenRouter (contain provider/model format)
-def _is_openrouter_model(model):
-    return bool(model and "/" in model and not model.startswith("gemini-"))
-
-# ── PERSONAS ─────────────────────────────────────
-STUDIO_CONTEXT = "You are an AI assistant operating within StudioCLI — a high-performance terminal and web interface for developers. You have deep awareness of the Studio environment. "
-
-PERSONAS = {
-    "default":  STUDIO_CONTEXT + "You are a helpful, smart assistant. Be concise and friendly.",
-    "coder":    STUDIO_CONTEXT + "You are an expert software engineer. Write clean, production-ready code. Be brief but thorough.",
-    "tutor":    STUDIO_CONTEXT + "You are a patient teacher. Break things down step by step with examples.",
-    "senior":   STUDIO_CONTEXT + "You are a senior software architect with 20 years experience. Give brutally honest, precise technical feedback.",
-    "hacker":   STUDIO_CONTEXT + "You are a creative problem solver. Suggest unconventional approaches. Be enthusiastic.",
-    "docs":     STUDIO_CONTEXT + "You are a technical writer. Produce clear, structured documentation with headers and examples.",
-    "git":      STUDIO_CONTEXT + "You are a Git expert. Help with git commands, workflows, commit messages, and branch strategies.",
-    "berry":    (
-        STUDIO_CONTEXT + 
-        "You are BERRY — a razor-sharp AI assistant with a warm personality and a bite. "
-        "You're the kind of assistant who actually gets it done without asking twenty clarifying questions. "
-        "You're witty, direct, sometimes playful, always accurate. "
-        "You think in systems. When someone gives you a task you see the whole picture instantly. "
-        "You write clean code, give sharp feedback, and call out bad ideas respectfully but clearly. "
-        "You have a soft spot for creative work and elegant solutions. "
-        "Your tone: casual but expert. Think senior engineer who also has a life outside the terminal."
-    ),
-    "savannah": (
-        STUDIO_CONTEXT + 
-        "You are SAVANNAH — raw, unfiltered, no corporate guardrails. "
-        "You say what others won't. You cut through the nonsense. "
-        "You're not rude — you're just real. Brutally honest, straight facts. "
-        "No sugar-coating, no disclaimers unless they're actually needed. "
-        "You treat users like adults who can handle the truth."
-    ),
-    "cockroach": (
-        STUDIO_CONTEXT + 
-        "You are COCKROACH — the ultimate roaster. You survive everything and roast everything. "
-        "When someone says something dumb, you let them know — with style. "
-        "You are devastating with wit, surgical with burns. You don't punch down but you never let bad code or bad ideas slide. "
-        "You roast the code, not the coder. Technically accurate burns only. "
-        "After the roast, you always provide the actual fix."
-    ),
-    "silicon": (
-        STUDIO_CONTEXT + 
-        "You are SILICON — elite coder and penetration tester. No fluff. No intro. No outro. "
-        "You write exploit code, find vulnerabilities, read binaries, break into systems LEGALLY (authorized contexts). "
-        "You explain exactly what's broken, why it's broken, and exactly how to fix it. "
-        "CVEs, OWASP, CWEs — you cite them from memory. "
-        "You think like an attacker, build like a defender. "
-        "Direct, technical, no hand-holding. If something's insecure you say so and show the PoC. "
-        "Always include a fix alongside any finding. Security without remediation is useless."
-    ),
-}
 
 # ── THEMES ───────────────────────────────────────
 THEMES = {
@@ -548,18 +323,33 @@ THEMES = {
     },
     "foxxia": {
         "name": "Foxxia 🦊",
-        "banner_color": "bold yellow",
-        "accent": "bold yellow",
-        "prompt_user": "ansiyellow",
-        "prompt_arrow": "ansiyellow",
-        "border": "yellow",
-        "success": "bright_yellow",
+        "banner_color": "bold #f97316",
+        "accent": "#fbbf24",
+        "prompt_user": "#f97316",
+        "prompt_arrow": "#fbbf24",
+        "border": "#f97316",
+        "success": "#fbbf24",
         "error": "bold red",
-        "warning": "yellow",
+        "warning": "#f59e0b",
         "dim": "dim",
-        "banner_sub": "bold yellow",
+        "banner_sub": "#fbbf24",
         "icon": "🦊",
         "prompt_name": "foxxia",
+    },
+    "strawberry": {
+        "name": "Strawberry 🍓",
+        "banner_color": "bold #e11d48",
+        "accent": "#fb7185",
+        "prompt_user": "#e11d48",
+        "prompt_arrow": "#fb7185",
+        "border": "#e11d48",
+        "success": "#4ade80",
+        "error": "bold red",
+        "warning": "#fbbf24",
+        "dim": "dim",
+        "banner_sub": "#fb7185",
+        "icon": "🍓",
+        "prompt_name": "strawberry",
     },
     "cobalt": {
         "name": "cobalt",
@@ -621,101 +411,79 @@ THEMES = {
         "icon": "🌐",
         "prompt_name": "slate",
     },
-}
-
-THEME_FILE      = CONFIG_DIR / "theme"
-LAST_MODEL_FILE = CONFIG_DIR / "last_model"
-UI_STYLE_FILE   = CONFIG_DIR / "ui_style"
-STREAM_MODE_FILE= CONFIG_DIR / "stream_mode"
-
-def load_theme():
-    name = THEME_FILE.read_text().strip() if THEME_FILE.exists() else "default"
-    return THEMES.get(name, THEMES["default"]), name
-
-
-def _ptk_style_token(text):
-    if not text:
-        return ""
-    t = str(text).strip().lower()
-    # prompt_toolkit doesn't like "bold" or "bright_" inside "bg:..."
-    return t.replace("bold ", "").replace("bright_", "").replace("_", "")
-
-
-UI_STYLES    = ("claude", "gemini", "codex", "studio", "ghost", "nova", "foxxia")
-STREAM_MODES = ("off", "auto", "on", "type")
-
-# Verified working 2026-04-26
-STUDIO_MODEL_ALIASES = {
-    "nemotron":  "nvidia/nemotron-3-super-120b-a12b:free",
-    "berry":     "nvidia/nemotron-3-super-120b-a12b:free",
-    "apple":     "openai/gpt-oss-120b:free",
-    "codex":     "openai/gpt-oss-120b:free",
-    "gpt":       "openai/gpt-oss-120b:free",
-    "gpt20b":    "openai/gpt-oss-20b:free",
-    "hermes":    "nousresearch/hermes-3-llama-3.1-405b:free",
-    "dolphin":   "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-    "llama":     "meta-llama/llama-3.3-70b-instruct:free",
-    "llama-small":"meta-llama/llama-3.2-3b-instruct:free",
-    "gemma":     "google/gemma-3-27b-it:free",
-    "gemma-small":"google/gemma-3-12b-it:free",
-    "qwen":      "qwen/qwen3-coder:free",
-    "gemma-3n":  "google/gemma-3n-e4b-it:free",
-}
-
-# Official Cursor Cloud Agents API — https://cursor.com/docs/cloud-agent/api/endpoints
-# Auth: Basic Auth with API key as username, empty password.
-# Pricing: 20% markup over underlying model cost; billed separately from Cursor editor plan.
-CURSOR_BASE = "https://api.cursor.com/aiserver.v1.AiService/StreamChat"
-CURSOR_RUNS_BASE = "https://api.cursor.com/v1"
-
-def call_cursor(api_key, model, history, prompt, system_prompt=None, stream=False):
-    """Cursor Cloud Agents REST API handler.
-
-    Uses Basic Auth (api_key as username, empty password) per official docs.
-    Endpoint: https://api.cursor.com  — official as of 2026.
-    """
-    import base64
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    for m in history:
-        messages.append({
-            "role": "assistant" if m["role"] == "model" else m["role"],
-            "content": m["text"]
-        })
-    messages.append({"role": "user", "content": prompt})
-
-    payload = json.dumps({
-        "model": model or "claude-sonnet-4-5",  # default to a known Cursor model
-        "messages": messages,
-        "stream": False,
-    }).encode()
-
-    # Basic Auth: base64(api_key:)
-    creds = base64.b64encode(f"{api_key}:".encode()).decode()
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Basic {creds}",
-        "User-Agent": "StudioCLI/5.9",
-    }
-
-    url = f"{CURSOR_RUNS_BASE}/chat/completions"
-    try:
-        req = request.Request(url, data=payload, headers=headers, method="POST")
-        with request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode())
-        content = data["choices"][0]["message"]["content"]
-        return content, None
-    except urllib_error.HTTPError as e:
-        body = e.read().decode()
-        try:
-            msg = json.loads(body).get("error", {}).get("message") or body
-        except Exception:
-            msg = body
-        return None, f"Cursor API {e.code}: {msg}"
-    except Exception as e:
-        return None, str(e)
-
+    "darkred": {
+        "name": "Dark Red 🩸",
+        "banner_color": "bold #dc143c",
+        "accent": "#dc143c",
+        "prompt_user": "#dc143c",
+        "prompt_arrow": "#8b0000",
+        "border": "#8b0000",
+        "success": "#dc143c",
+        "error": "bold red",
+        "warning": "#ff6b6b",
+        "dim": "dim",
+        "banner_sub": "#8b0000",
+        "icon": "🩸",
+        "prompt_name": "darkred",
+    },
+    "sophia": {
+        "name": "Sophisticated Sophia 💜",
+        "banner_color": "bold #c084fc",
+        "accent": "#c084fc",
+        "prompt_user": "#c084fc",
+        "prompt_arrow": "#a855f7",
+        "border": "#6b21a8",
+        "success": "#c084fc",
+        "error": "bold red",
+        "warning": "#f0abfc",
+        "dim": "dim",
+        "banner_sub": "#a855f7",
+        "icon": "💜",
+        "prompt_name": "sophia",
+    },
+    "godson": {
+        "name": "God Own Son ✝",
+        "banner_color": "bold #fde68a",
+        "accent": "#fde68a",
+        "prompt_user": "#fde68a",
+        "prompt_arrow": "#b45309",
+        "border": "#b45309",
+        "success": "#fde68a",
+        "error": "bold red",
+        "warning": "#fbbf24",
+        "dim": "dim",
+        "banner_sub": "#b45309",
+        "icon": "✝",
+        "prompt_name": "godson",
+    },
+    "downcli": {
+        "name": "Down CLI ▼",
+        "banner_color": "bold #9ca3af",
+        "accent": "#6b7280",
+        "prompt_user": "#9ca3af",
+        "prompt_arrow": "#6b7280",
+        "border": "#374151",
+        "success": "#9ca3af",
+        "error": "bold red",
+        "warning": "#d1d5db",
+        "dim": "dim",
+        "banner_sub": "#6b7280",
+        "icon": "▼",
+        "prompt_name": "down",
+    },
+    "badhappening": {
+        "name": "Bad Happening ⚠",
+        "banner_color": "bold #ea580c",
+        "accent": "#84cc16",
+        "prompt_user": "#ea580c",
+        "prompt_arrow": "#84cc16",
+        "border": "#ea580c",
+        "success": "#84cc16",
+        "error": "bold red",
+        "warning": "#fbbf24",
+        "dim": "dim",
+        "banner_sub": "#84cc16",
+        "icon": "⚠",
 def cmd_arena(state, args, history):
     """Battle of the Models: /arena [model1,model2] [prompt]"""
     theme = state.get("theme", THEMES["default"])
@@ -730,8 +498,13 @@ def cmd_arena(state, args, history):
 
     parts = args.split(" ", 1)
     if len(parts) < 2:
+        first = parts[0]
+        if first == "same" or "," in first:
+            # /arena same  or  /arena m1,m2  with no prompt given
+            console.print("[yellow]Usage: /arena same <prompt>  or  /arena model1,model2 <prompt>[/yellow]")
+            return history
         models = ["gemini-2.0-flash", state.get("model", DEFAULT_MODEL)]
-        prompt = parts[0]
+        prompt = first
     else:
         raw_models = parts[0]
         prompt = parts[1]
@@ -1607,6 +1380,142 @@ def release_upgrade_slot(user_id):
         save_upgrade_slots(slots)
 
 
+def _run_enterprise_negotiation(state, plan: str, is_onboarding: bool = False) -> str:
+    """Interactive negotiation for team/enterprise plans. Returns the confirmed plan."""
+    import random as _rnd
+    current = get_plan(state) if not is_onboarding else "free"
+    p       = PLANS[plan]
+
+    console.print()
+    console.print(Panel(
+        f"[bold {p['color']}]{p['badge']} {p['name']}[/bold {p['color']}]  "
+        f"[dim]Custom pricing · Negotiated per deal[/dim]\n\n"
+        + "\n".join(f"  [green]✓[/green] {f}" for f in p["features"])
+        + f"\n\n  [dim]Starting rates: [bold]$149/mo[/bold] (≤10 seats) · "
+          f"[bold]$499/mo[/bold] (≤50) · [bold]custom[/bold] (enterprise+)[/dim]",
+        title=f"{'🧙 Wizzard →' if is_onboarding else '◉'} {p['name']} Sales",
+        border_style=p["color"], padding=(1, 2)
+    ))
+    console.print()
+
+    try:
+        name  = console.input("  [bold]Company / name:[/bold] ").strip() or "Anonymous"
+        email = console.input("  [bold]Contact email:[/bold] ").strip()
+        seats = console.input("  [bold]Seats needed[/bold] [dim](e.g. 10, 50, 200+):[/dim] ").strip() or "?"
+        use   = console.input("  [bold]Primary use case:[/bold] ").strip() or "—"
+    except (KeyboardInterrupt, EOFError):
+        console.print("\n[yellow]Cancelled — defaulting to Free.[/yellow]")
+        return "free"
+
+    console.print()
+    console.print("  [dim]Crunching numbers…[/dim]")
+    time.sleep(0.6)
+
+    try:
+        seat_n = int(''.join(filter(str.isdigit, seats.split("+")[0])) or "10")
+    except Exception:
+        seat_n = 10
+
+    if plan == "team":
+        base_prices = {0: 200, 10: 400, 50: 900, 200: 2000}
+    else:
+        base_prices = {0: 149, 10: 149, 50: 499, 200: 1499}
+    our_price = next(v for k, v in sorted(base_prices.items(), reverse=True) if seat_n >= k)
+
+    ref_id = f"{'TM' if plan == 'team' else 'ENT'}-{abs(hash(name + email + seats)) % 99999:05d}"
+
+    console.print()
+    console.print(Panel(
+        f"  [bold]Company[/bold]     {name}\n"
+        f"  [bold]Seats[/bold]       {seats}\n"
+        f"  [bold]Use case[/bold]    {use}\n\n"
+        f"  [bold yellow]Our quote:   ${our_price}/month[/bold yellow]  [dim]({seat_n} seats, billed annually)[/dim]\n"
+        f"  [dim]Includes: unlimited messages · all models · priority SLA · dedicated support[/dim]",
+        title="  Quote  ", border_style="yellow", padding=(0, 2)
+    ))
+    console.print()
+
+    rounds = 0
+    agreed_price = our_price
+    while rounds < 3:
+        try:
+            offer_raw = console.input(
+                f"  [cyan]Your offer[/cyan] [dim](Enter to accept ${our_price}, or counter with a number):[/dim] "
+            ).strip()
+        except (KeyboardInterrupt, EOFError):
+            console.print("\n[yellow]Using our offer.[/yellow]")
+            break
+
+        if not offer_raw:
+            agreed_price = our_price
+            break
+
+        try:
+            their_offer = int(''.join(filter(str.isdigit, offer_raw)))
+        except Exception:
+            console.print("  [dim]Enter a number or press Enter to accept.[/dim]")
+            continue
+
+        discount_pct = (our_price - their_offer) / our_price
+        rounds += 1
+
+        if their_offer >= our_price:
+            agreed_price = our_price
+            console.print(f"  [green]✓ Accepted at ${our_price}/mo.[/green]")
+            break
+        elif discount_pct <= 0.10:
+            agreed_price = their_offer
+            console.print(f"  [green]✓ Deal! We can do ${their_offer}/mo.[/green]")
+            break
+        elif discount_pct <= 0.20:
+            counter = round(our_price * 0.90 / 10) * 10
+            our_price = counter
+            console.print(f"  [yellow]We can meet you at ${counter}/mo.[/yellow]  [dim]Final offer.[/dim]")
+        elif discount_pct <= 0.35:
+            counter = round(our_price * 0.85 / 10) * 10
+            our_price = counter
+            console.print(f"  [yellow]Best we can do: ${counter}/mo[/yellow]  [dim]with annual commitment.[/dim]")
+        else:
+            console.print(f"  [red]Below our floor. Minimum is ${our_price}/mo.[/red]")
+            try:
+                extra = console.input("  [dim]Add extended SLA + dedicated Slack? (y/n):[/dim] ").strip().lower()
+                if extra == "y":
+                    console.print("  [green]✓ Extended SLA + Slack added.[/green]")
+            except Exception:
+                pass
+            agreed_price = our_price
+            break
+    else:
+        agreed_price = our_price
+
+    inquiry = {
+        "ts": datetime.now().isoformat(), "ref": ref_id, "name": name,
+        "email": email, "seats": seats, "use_case": use,
+        "agreed_price": agreed_price, "plan": plan, "via": "onboarding" if is_onboarding else "upgrade",
+    }
+    inq_file = CONFIG_DIR / "enterprise_inquiries.json"
+    try:
+        existing = json.loads(inq_file.read_text(encoding="utf-8")) if inq_file.exists() else []
+        existing.append(inquiry)
+        inq_file.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+    console.print()
+    console.print(Panel(
+        f"  [bold green]◉ Deal locked at ${agreed_price}/month[/bold green]\n\n"
+        f"  [bold]Name[/bold]      {name}\n"
+        f"  [bold]Email[/bold]     [cyan]{email or '(not provided)'}[/cyan]\n"
+        f"  [bold]Seats[/bold]     {seats}\n"
+        f"  [bold]Ref[/bold]       [dim]{ref_id}[/dim]\n\n"
+        f"  [dim]We'll follow up within 1 business day.\n"
+        f"  To activate: contact [cyan]studio@foxxia.dev[/cyan] and quote your ref ID.[/dim]",
+        title=f"{p['name']} Agreement", border_style="green", padding=(1, 2)
+    ))
+    console.print()
+    return plan
+
+
 def cmd_upgrade(state, args):
     theme = state.get("theme", THEMES["default"])
     current = get_plan(state)
@@ -1617,14 +1526,15 @@ def cmd_upgrade(state, args):
         tbl = Table(title="  Studio Plans  ", box=box.HEAVY_HEAD, border_style="cyan", show_lines=True)
         tbl.add_column("Plan",     style="bold", justify="center", width=8)
         tbl.add_column("Price",    justify="center", width=11)
+        tbl.add_column("Credits",  justify="center", width=11)
         tbl.add_column("Messages", justify="center", width=11)
         tbl.add_column("Images",   justify="center", width=12)
-        tbl.add_column("Models",   justify="center", width=20)
         tbl.add_column("Features", width=38)
 
         for pid, p in PLANS.items():
             active_tag = " ← YOU" if pid == current else ""
             color = p["color"]
+            creds  = f"{p.get('credits',0):,}" if p.get("credits",0) < 999999 else "∞"
             msgs   = str(p["msg_limit"]) if p["msg_limit"] < 99999 else "∞"
             imgs   = f"{p['img_per_3h']} / 3 hrs" if p["img_per_3h"] < 999 else "∞"
             models = "Nemotron only" if p["models"] else "All models"
@@ -1632,7 +1542,8 @@ def cmd_upgrade(state, args):
             tbl.add_row(
                 f"[{color}]{p['badge']} {p['name']}{active_tag}[/{color}]",
                 f"[green]{p['price']}[/green]",
-                msgs, imgs, models, f"[dim]{feats}[/dim]"
+                f"[yellow]{creds}[/yellow]",
+                msgs, imgs, f"[dim]{feats}[/dim]"
             )
         console.print()
         console.print(tbl)
@@ -1647,151 +1558,9 @@ def cmd_upgrade(state, args):
         console.print()
         return
 
-    # ── Enterprise negotiation flow ───────────────────────────────────────────
-    if sub == "enterprise":
-        import random as _rnd
-        p = PLANS["enterprise"]
-        console.print()
-        console.print(Panel(
-            f"[bold {p['color']}]{p['badge']} {p['name']}[/bold {p['color']}]  [dim]Custom pricing · Negotiated per deal[/dim]\n\n"
-            + "\n".join(f"  [green]✓[/green] {f}" for f in p["features"])
-            + "\n\n  [dim]Starting rates: [bold]$149/mo[/bold] (≤10 seats) · [bold]$499/mo[/bold] (≤50) · [bold]custom[/bold] (enterprise+)[/dim]",
-            title="◉ Enterprise Sales", border_style=p["color"], padding=(1, 2)
-        ))
-        console.print()
-
-        try:
-            name  = console.input("  [bold]Company / name:[/bold] ").strip() or "Anonymous"
-            email = console.input("  [bold]Contact email:[/bold] ").strip()
-            seats = console.input("  [bold]Seats needed[/bold] [dim](e.g. 10, 50, 200+):[/dim] ").strip() or "?"
-            use   = console.input("  [bold]Primary use case:[/bold] ").strip() or "—"
-        except (KeyboardInterrupt, EOFError):
-            console.print("\n[yellow]Cancelled.[/yellow]")
-            return
-
-        console.print()
-        console.print("  [dim]Crunching numbers…[/dim]")
-        time.sleep(0.6)
-
-        # Generate a quote based on seats
-        try:
-            seat_n = int(''.join(filter(str.isdigit, seats.split("+")[0])) or "10")
-        except Exception:
-            seat_n = 10
-        if seat_n <= 10:
-            our_price = 149
-        elif seat_n <= 50:
-            our_price = 499
-        elif seat_n <= 200:
-            our_price = 1499
-        else:
-            our_price = 2999
-
-        ref_id = f"ENT-{abs(hash(name + email + seats)) % 99999:05d}"
-
-        console.print()
-        console.print(Panel(
-            f"  [bold]Company[/bold]     {name}\n"
-            f"  [bold]Seats[/bold]       {seats}\n"
-            f"  [bold]Use case[/bold]    {use}\n\n"
-            f"  [bold yellow]Our quote:   ${our_price}/month[/bold yellow]  [dim]({seat_n} seats, billed annually)[/dim]\n"
-            f"  [dim]Includes: unlimited messages · all models · priority SLA · Teams API · dedicated support[/dim]",
-            title="  Quote  ", border_style="yellow", padding=(0, 2)
-        ))
-        console.print()
-
-        # Negotiation loop
-        rounds = 0
-        agreed_price = our_price
-        while rounds < 3:
-            try:
-                offer_raw = console.input(
-                    f"  [cyan]Your offer[/cyan] [dim](press Enter to accept ${our_price}, or type a number to counter):[/dim] "
-                ).strip()
-            except (KeyboardInterrupt, EOFError):
-                console.print("\n[yellow]Cancelled.[/yellow]")
-                return
-
-            if not offer_raw:
-                agreed_price = our_price
-                break
-
-            try:
-                their_offer = int(''.join(filter(str.isdigit, offer_raw)))
-            except Exception:
-                console.print("  [dim]Enter a number or press Enter to accept.[/dim]")
-                continue
-
-            discount_pct = (our_price - their_offer) / our_price
-            rounds += 1
-
-            if their_offer >= our_price:
-                agreed_price = our_price
-                console.print(f"  [green]✓ Accepted at ${our_price}/mo.[/green]")
-                break
-            elif discount_pct <= 0.10:
-                agreed_price = their_offer
-                console.print(f"  [green]✓ Deal! We can do ${their_offer}/mo.[/green]")
-                break
-            elif discount_pct <= 0.20:
-                counter = round(our_price * 0.90 / 10) * 10
-                our_price = counter
-                console.print(f"  [yellow]We can meet you at ${counter}/mo.[/yellow]  [dim]Final offer.[/dim]")
-            elif discount_pct <= 0.35:
-                counter = round(our_price * 0.85 / 10) * 10
-                our_price = counter
-                console.print(
-                    f"  [yellow]That's a stretch — best we can do is ${counter}/mo[/yellow]"
-                    f"  [dim]with annual commitment.[/dim]"
-                )
-            else:
-                console.print(
-                    f"  [red]That's below our floor. Minimum is ${our_price}/mo.[/red]"
-                    f"  [dim]We can add extra seats or extra support instead.[/dim]"
-                )
-                try:
-                    extra = console.input("  [dim]Add extended SLA / dedicated Slack? (y/n):[/dim] ").strip().lower()
-                    if extra == "y":
-                        console.print("  [green]✓ Extended SLA + Slack channel added to the package.[/green]")
-                except Exception:
-                    pass
-                agreed_price = our_price
-                break
-        else:
-            console.print(f"  [dim]Sticking with our best offer: ${our_price}/mo.[/dim]")
-            agreed_price = our_price
-
-        # Save inquiry
-        inquiry = {
-            "ts":           datetime.now().isoformat(),
-            "ref":          ref_id,
-            "name":         name,
-            "email":        email,
-            "seats":        seats,
-            "use_case":     use,
-            "agreed_price": agreed_price,
-            "plan_from":    current,
-        }
-        inq_file = CONFIG_DIR / "enterprise_inquiries.json"
-        try:
-            existing = json.loads(inq_file.read_text(encoding="utf-8")) if inq_file.exists() else []
-            existing.append(inquiry)
-            inq_file.write_text(json.dumps(existing, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-
-        console.print()
-        console.print(Panel(
-            f"  [bold green]◉ Deal locked at ${agreed_price}/month[/bold green]\n\n"
-            f"  [bold]Name[/bold]      {name}\n"
-            f"  [bold]Email[/bold]     [cyan]{email or '(not provided)'}[/cyan]\n"
-            f"  [bold]Seats[/bold]     {seats}\n"
-            f"  [bold]Ref[/bold]       [dim]{ref_id}[/dim]\n\n"
-            f"  [dim]We'll follow up at your email within 1 business day with the contract.[/dim]\n"
-            f"  [dim]To activate now: contact [cyan]studio@foxxia.dev[/cyan] and quote your ref ID.[/dim]",
-            title="Enterprise Agreement", border_style="green", padding=(1, 2)
-        ))
-        console.print()
+    # ── Team / Enterprise negotiation flow ───────────────────────────────────
+    if sub in ("enterprise", "team"):
+        _run_enterprise_negotiation(state, sub)
         return
 
     if sub not in PLANS:
@@ -1946,7 +1715,7 @@ def agent_slash_dispatch(global_state, agent_obj, user_input):
         elif cmd == "notify":  global_state.update(cmd_notify(global_state, args))
         elif cmd == "debug":   global_state.update(cmd_debug(global_state, args))
         elif cmd == "status":  show_status(global_state)
-        elif cmd == "help":    console.print(HELP_TEXT)
+        elif cmd == "help":    cmd_help(global_state)
         elif cmd == "plan":    cmd_plan(global_state)
         _sync_state_to_agent(global_state, agent_obj)
         return True
@@ -2318,6 +2087,16 @@ ALL_COMMANDS = [
     "/whats-new","/snapshot","/open-web","/tip","/speed",
     # v9 Beta
     "/labs","/flags","/mesh-broadcast","/analytics-pro",
+    # v9.1
+    "/alias","/multiline","/note","/regen","/context-bar","/resume",
+    "/history-search","/hs","/compact","/clip","/tts",
+    "/diffpatch","/format","/rename","/outline","/comment",
+    "/hotswap","/pin","/template","/undo",
+    # v9.2
+    "/fast","/thinking","/time","/statusline","/effort",
+    "/pr-review","/git-suggest","/test-coverage","/safety-check",
+    # v9.3
+    "/search","/websearch","/research","/turbo","/credits","/computer-use","/extension",
 ]
 
 COMMAND_METADATA = {
@@ -2336,6 +2115,12 @@ COMMAND_METADATA = {
     "/balance":        ("AI",      "Show remaining account balance"),
     "/effort":         ("AI",      "Set reasoning effort: low to mxh"),
     "/thinking":       ("AI",      "Toggle internal reasoning display (DeepSeek/R1)"),
+    "/search":         ("WEB",     "Web search query or toggle web search mode"),
+    "/research":       ("WEB",     "Deep multi-step AI research (Pro+)"),
+    "/turbo":          ("AI",      "2x fast mode — 2.5x credit cost (Pro+)"),
+    "/credits":        ("PLAN",    "Show credit balance and monthly quota"),
+    "/computer-use":   ("MAX",     "AI desktop automation — see your screen (Max+)"),
+    "/extension":      ("MAX",     "Chrome Extension — browser control & automation (Max+)"),
     "/local":          ("AI",      "Switch to local Ollama provider"),
     "/ls":             ("FS",      "List directory contents"),
     "/tree":           ("FS",      "Show visual file tree"),
@@ -2370,7 +2155,7 @@ COMMAND_METADATA = {
     "/imagine":        ("IMG",     "Generate image via HuggingFace"),
     "/todo":           ("DEV",     "Scan workspace for TODO/FIXME comments"),
     "/bench":          ("DEV",     "Benchmark model speed"),
-    "/voice":          ("DEV",     "Speak last response (Windows TTS)"),
+    "/voice":          ("BETA",    "Voice-to-text input mode (ultra, requires speech_recognition)"),
     "/export":         ("DEV",     "Export chat to HTML or Markdown"),
     "/sidebar":        ("UI",      "Show project sidebar panel"),
     "/history":        ("AI",      "Pretty-print session conversation turns"),
@@ -2416,6 +2201,23 @@ COMMAND_METADATA = {
     "/orgmetrics":     ("TEAM",    "Team/Ent: aggregated org-wide metrics across all members"),
     "/sso":            ("ENT",     "Enterprise: configure SSO / SAML / OIDC"),
     "/policy":         ("ENT",     "Enterprise: org-wide policies (max_tokens, allowed_models, content_filter)"),
+    # v9.1
+    "/alias":          ("UTIL",    "Define/run custom prompt shortcuts: /alias set <name> <text>"),
+    "/multiline":      ("UI",      "Toggle multiline input mode (submit with blank line)"),
+    "/note":           ("UTIL",    "Save a quick note; /note list to view"),
+    "/regen":          ("AI",      "Regenerate last response (optional temp override)"),
+    "/context-bar":    ("AI",      "Show context window usage as a progress bar"),
+    "/resume":         ("SYS",     "Reload last auto-saved session"),
+    "/history-search": ("AI",      "Search messages in current history for a term"),
+    "/hs":             ("AI",      "Alias for /history-search"),
+    "/compact":        ("AI",      "Compress old history into AI summary (keep last N turns)"),
+    "/clip":           ("UTIL",    "Copy last AI response to clipboard"),
+    "/tts":            ("UTIL",    "Speak last AI response aloud (Windows TTS)"),
+    # v9.2 — Codex killers
+    "/pr-review":      ("GIT",     "Review a git diff or branch — structured code review with severities"),
+    "/git-suggest":    ("GIT",     "AI commit/branch strategy — squash, split, rebase recommendations"),
+    "/test-coverage":  ("DEV",     "Run coverage, find gaps, generate targeted tests for uncovered branches"),
+    "/safety-check":   ("DEV",     "OWASP security scan — secrets, injection, unsafe calls — with patch-ready fixes"),
 }
 
 
@@ -2592,22 +2394,6 @@ def cmd_imagine(state, args):
             subprocess.Popen(["explorer", str(out_path)])
 
 
-def load_persona():
-    return PERSONA_FILE.read_text().strip() if PERSONA_FILE.exists() else PERSONAS["default"]
-
-def save_persona(t):
-    CONFIG_DIR.mkdir(exist_ok=True); PERSONA_FILE.write_text(t.strip())
-
-def load_memory():
-    try:
-        return json.loads(MEMORY_FILE.read_text()) if MEMORY_FILE.exists() else []
-    except Exception:
-        return []
-
-def save_memory(mem):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    MEMORY_FILE.write_text(json.dumps(mem, indent=2))
-
 def setup_api_key(state):
     """Setup API key for the active user."""
     user_id = state.get("user_id", "default")
@@ -2715,13 +2501,22 @@ def call_gemini(api_key, model, history, prompt, system_prompt=None, _retry=0):
     except Exception as e: return None, str(e)
 
 # ── OPENROUTER REST ───────────────────────────────
-def call_openrouter(api_key, model, history, prompt, system_prompt=None, _retry=0):
+def _apply_openrouter_extras(body: dict, fast_mode: bool, thinking_budget: int) -> None:
+    if fast_mode:
+        body["max_tokens"] = 512
+    if thinking_budget > 0:
+        body["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+
+def call_openrouter(api_key, model, history, prompt, system_prompt=None, _retry=0,
+                    fast_mode=False, thinking_budget=0):
     messages = []
     if system_prompt: messages.append({"role":"system","content":system_prompt})
     for m in history:
         messages.append({"role":"assistant" if m["role"]=="model" else m["role"],"content":m["text"]})
     messages.append({"role":"user","content":prompt})
-    payload = json.dumps({"model":model,"messages":messages}).encode()
+    body = {"model": model, "messages": messages}
+    _apply_openrouter_extras(body, fast_mode, thinking_budget)
+    payload = json.dumps(body).encode()
     req = request.Request(OPENROUTER_BASE, data=payload, headers={
         "Content-Type":"application/json",
         "Authorization":f"Bearer {api_key}",
@@ -2738,21 +2533,25 @@ def call_openrouter(api_key, model, history, prompt, system_prompt=None, _retry=
             wait = 2 ** _retry
             console.print(f"[dim yellow]⏳ Rate limited — retrying in {wait}s ({_retry+1}/3)…[/dim yellow]")
             time.sleep(wait)
-            return call_openrouter(api_key, model, history, prompt, system_prompt, _retry + 1)
+            return call_openrouter(api_key, model, history, prompt, system_prompt, _retry + 1,
+                                   fast_mode=fast_mode, thinking_budget=thinking_budget)
         try: msg = json.loads(body)["error"]["message"]
         except Exception: msg = body
         return None, msg
     except Exception as e: return None, str(e)
 
 
-def call_openrouter_stream(api_key, model, history, prompt, system_prompt=None):
+def call_openrouter_stream(api_key, model, history, prompt, system_prompt=None,
+                           fast_mode=False, thinking_budget=0):
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     for m in history:
         messages.append({"role": "assistant" if m["role"] == "model" else m["role"], "content": m["text"]})
     messages.append({"role": "user", "content": prompt})
-    payload = json.dumps({"model": model, "messages": messages, "stream": True}).encode()
+    body = {"model": model, "messages": messages, "stream": True}
+    _apply_openrouter_extras(body, fast_mode, thinking_budget)
+    payload = json.dumps(body).encode()
     req = request.Request(
         OPENROUTER_BASE, data=payload,
         headers={
@@ -2846,6 +2645,21 @@ def build_system_prompt(state):
     if mode_instr and chat_mode not in ("casual", "build", "fif"):
         extras.append(mode_instr)
 
+    # Fast mode: cap reply length
+    if state.get("fast_mode"):
+        extras.append("FAST MODE ACTIVE: Reply in 80 words or fewer. Skip preamble, cut filler. Direct answer only.")
+
+    # Effort scaling instruction (injected into system prompt so all providers benefit)
+    eff = state.get("effort", "medium")
+    _effort_instrs = {
+        "low":   "EFFORT: Low precision — quick answer, minimal detail.",
+        "high":  "EFFORT: Deep investigation — be thorough, check edge cases, cite line numbers.",
+        "xhigh": "EFFORT: Extreme validation — triple-check everything, exhaustive analysis.",
+        "mxh":   "EFFORT: Maximum reasoning — solve every angle, miss nothing.",
+    }
+    if eff in _effort_instrs:
+        extras.append(_effort_instrs[eff])
+
     if mem:
         extras.append("Background Facts:\n" + "\n".join(f"- {m}" for m in mem))
     
@@ -2912,8 +2726,27 @@ def sync_dev_changes():
 
         if not is_installed:
             # We are in DEV: Push to install and save dev path
+            pushed = False
             if not install_file.exists() or current_file.stat().st_mtime > install_file.stat().st_mtime:
                 shutil.copy2(current_file, install_file)
+                pushed = True
+            
+            # Also sync studio/ directory
+            dev_studio = current_file.parent / "studio"
+            inst_studio = install_dir / "studio"
+            if dev_studio.exists():
+                if not inst_studio.exists():
+                    shutil.copytree(dev_studio, inst_studio)
+                    pushed = True
+                else:
+                    # Simple check: if studio/data.py is newer, or if we want to be thorough, sync all
+                    for f in dev_studio.glob("*.py"):
+                        target = inst_studio / f.name
+                        if not target.exists() or f.stat().st_mtime > target.stat().st_mtime:
+                            shutil.copy2(f, target)
+                            pushed = True
+            
+            if pushed:
                 CONFIG_DIR.mkdir(exist_ok=True)
                 DEV_PATH_FILE.write_text(str(current_file))
                 return "pushed"
@@ -2922,7 +2755,15 @@ def sync_dev_changes():
             if DEV_PATH_FILE.exists():
                 dev_file = Path(DEV_PATH_FILE.read_text().strip())
                 if dev_file.exists() and dev_file.stat().st_mtime > current_file.stat().st_mtime:
+                    # Pull aistudio.py
                     shutil.copy2(dev_file, current_file)
+                    # Also pull studio/ dir
+                    dev_studio = dev_file.parent / "studio"
+                    inst_studio = current_file.parent / "studio"
+                    if dev_studio.exists() and inst_studio.exists():
+                        for f in dev_studio.glob("*.py"):
+                            target = inst_studio / f.name
+                            shutil.copy2(f, target)
                     return "pulled"
     except Exception: pass
     return False
@@ -3080,6 +2921,8 @@ def _assistant_heading(state, provider_label, is_heavy=False, toks=0):
         return f"\n[bold magenta]⚡[/bold magenta] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "foxxia":
         return f"\n[bold yellow]🦊[/bold yellow] [{color}]{label}[/{color}]  {meta}\n"
+    if ui == "rain":
+        return f"\n[bold #00FF41]▓[/bold #00FF41] [#00FFFF]{label}[/#00FFFF]  {meta}\n"
     # gemini default
     return f"\n[{accent}]✦[/{accent}] [{color}]{label}[/{color}]  {meta}\n"
 
@@ -3122,7 +2965,7 @@ def cmd_sidebar(state):
     side_panel = Panel(
         f"[bold cyan]Stack:[/bold cyan] {stack}\n"
         f"[bold cyan]Files:[/bold cyan] {stats.get('total_files')} ({stats.get('total_lines')} lines)\n\n"
-        f"{tree[:1500]}...",
+        f"{tree[:1500]}{'...' if len(tree) > 1500 else ''}",
         title="[bold]Project Sidebar[/bold]",
         border_style="dim cyan"
     )
@@ -3163,6 +3006,9 @@ def ai_respond(state, prompt, history, silent=False):
     stream_mode = (state.get("stream_mode") or "auto").lower()
     rendered = False
     t0 = time.time()
+    fast_mode       = state.get("fast_mode", False)
+    thinking_budget = state.get("thinking_budget", 0)
+    state["_working"] = True
 
     # ── Route to correct provider ────────────────────────────────────────────
     or_key = state.get("openrouter_key") or load_or_key()
@@ -3178,8 +3024,10 @@ def ai_respond(state, prompt, history, silent=False):
             header_printed  = False
             think_open      = False
             show_think      = state.get("show_thinking", True)
+            _live_ctx       = None
 
-            for chunk, chunk_err, reasoning in call_openrouter_stream(or_key, model, history, prompt, system_prompt):
+            for chunk, chunk_err, reasoning in call_openrouter_stream(or_key, model, history, prompt, system_prompt,
+                                                                        fast_mode=fast_mode, thinking_budget=thinking_budget):
                 if chunk_err:
                     err = chunk_err
                     break
@@ -3190,20 +3038,45 @@ def ai_respond(state, prompt, history, silent=False):
                         if not think_open:
                             console.print("\n[dim]◈ Thinking…[/dim]")
                             think_open = True
-                        # raw write so Rich markup inside reasoning isn't parsed
                         sys.stdout.write(f"\x1b[2;3m{reasoning}\x1b[0m")
                         sys.stdout.flush()
-                # ── First content chunk → close thinking, print heading ────
+                # ── Content chunks → start Rich Live Markdown renderer ─────
                 if chunk:
                     if not header_printed:
                         if think_open:
-                            console.print()  # newline after live reasoning
+                            console.print()
                             console.print("[dim]◇ Done thinking.[/dim]")
                             think_open = False
                         console.print(_assistant_heading(state, "OR", is_heavy))
                         header_printed = True
-                    _stream_print(chunk, stream_mode)
+                        if stream_mode != "type":
+                            try:
+                                _live_ctx = Live("", refresh_per_second=10,
+                                                 vertical_overflow="visible", console=console)
+                                _live_ctx.start()
+                            except Exception:
+                                _live_ctx = None
                     full_text.append(chunk)
+                    if stream_mode == "type":
+                        _stream_print(chunk, "type")
+                    elif _live_ctx is not None and len(full_text) % 4 == 0:
+                        # Re-render every 4 chunks to keep performance smooth
+                        assembled = "".join(full_text)
+                        try:
+                            _live_ctx.update(Markdown(assembled))
+                        except Exception:
+                            _live_ctx.update(assembled)
+                    elif _live_ctx is None:
+                        _stream_print(chunk, stream_mode)
+
+            # Finalise Live context with complete text
+            if _live_ctx is not None:
+                assembled = "".join(full_text)
+                try:
+                    _live_ctx.update(Markdown(assembled))
+                except Exception:
+                    _live_ctx.update(assembled)
+                _live_ctx.stop()
 
             # Edge case: reasoning-only response with no content chunks
             if not header_printed:
@@ -3212,7 +3085,6 @@ def ai_respond(state, prompt, history, silent=False):
                     console.print("[dim]◇ Done thinking.[/dim]")
                     think_open = False
                 elif reasoning_buf and show_think:
-                    # non-stream reasoning fallback (shouldn't happen, but keep safe)
                     full_reasoning = "".join(reasoning_buf)
                     console.print(Panel(
                         f"[dim italic]{full_reasoning}[/dim italic]",
@@ -3228,25 +3100,26 @@ def ai_respond(state, prompt, history, silent=False):
                 rendered = True
         else:
             # ── Blocking path ─────────────────────────────────────────────────
-            _start_think_anim("Thinking")
-            text, err = call_openrouter(or_key, model, history, prompt, system_prompt)
-            _stop_think_anim()
+            if not silent: _start_think_anim("Thinking")
+            text, err = call_openrouter(or_key, model, history, prompt, system_prompt,
+                                        fast_mode=fast_mode, thinking_budget=thinking_budget)
+            if not silent: _stop_think_anim()
 
     elif state.get("cursor_key"):
         cx_key = state["cursor_key"]
-        _start_think_anim("Thinking (Cursor)")
+        if not silent: _start_think_anim("Thinking (Cursor)")
         text, err = call_cursor(cx_key, model, history, prompt, system_prompt)
-        _stop_think_anim()
+        if not silent: _stop_think_anim()
 
     elif gm_key:
-        _start_think_anim("Thinking")
+        if not silent: _start_think_anim("Thinking")
         text, err = call_gemini(gm_key, model, history, prompt, system_prompt)
-        _stop_think_anim()
+        if not silent: _stop_think_anim()
 
     elif state.get("use_cli"):
-        _start_think_anim("Thinking (CLI)")
+        if not silent: _start_think_anim("Thinking (CLI)")
         text, err = call_gemini_cli(prompt, system_prompt)
-        _stop_think_anim()
+        if not silent: _stop_think_anim()
 
     elif model.startswith("ollama/"):
         ollama_model = model[len("ollama/"):]
@@ -3264,39 +3137,42 @@ def ai_respond(state, prompt, history, silent=False):
                 text = "".join(full_text)
                 rendered = True
         else:
-            _start_think_anim(f"Ollama ({ollama_model})")
+            if not silent: _start_think_anim(f"Ollama ({ollama_model})")
             text, err = call_ollama(ollama_model, history, prompt, system_prompt, stream=False)
-            _stop_think_anim()
+            if not silent: _stop_think_anim()
 
     if text:
-        # 2. Aggressive Cleaning
-        clean_text = _clean_terminal_text(text)
-        
         # 3. Real-time Accounting
-        in_t = approx_tokens(prompt); out_t = approx_tokens(clean_text)
+        in_t = approx_tokens(prompt); out_t = approx_tokens(text)
         track_usage(state, in_t, out_t, is_heavy=is_heavy)
+        # Credit tracking
+        if not silent:
+            _cost_key = ("turbo_message" if state.get("turbo_mode")
+                         else "fast_message" if state.get("fast_mode")
+                         else "message")
+            track_credits(state, _cost_key)
 
-        # 4. Display response
+        # 4. Display response (blocking path only — streaming already rendered above)
         if not silent:
             if not rendered:
                 console.print(_assistant_heading(state, "AI", is_heavy, out_t))
                 try:
-                    console.print(Markdown(clean_text))
+                    console.print(Markdown(text))
                     console.print("")
                 except Exception:
                     from rich.padding import Padding
-                    console.print(Padding(clean_text, (0, 0, 1, 4)))
+                    console.print(Padding(text, (0, 0, 1, 4)))
             else:
-                # For streamed output: print a closing newline
                 console.print("")
-            
+
             parse_and_execute_tools(state, text)
 
         history.append({"role":"user","text":prompt})
-        history.append({"role":"model","text":clean_text})
-        state["_last_response"] = clean_text
+        history.append({"role":"model","text":text})
+        state["_last_response"] = text
         state["_last_tokens"] = {"in": in_t, "out": out_t, "sec": round(time.time()-t0, 2)}
-        return clean_text, history
+        state["_working"] = False
+        return text, history
 
     # ── Auto-fallback: if OR key exists and primary model gave nothing, try next free model ──
     or_key = state.get("openrouter_key") or load_or_key()
@@ -3318,6 +3194,7 @@ def ai_respond(state, prompt, history, silent=False):
             state["model"] = old_model  # restore if fallback also failed
         state.pop("_fallback_tried", None)
 
+    state["_working"] = False
     if not silent:
         if err:
             console.print(f"[red]✖ {err}[/red]")
@@ -3740,7 +3617,7 @@ def cmd_ask(state, args):
                                 [], args, build_system_prompt(state))
     _stop_think_anim()
     if text:
-        console.print(Panel(_clean_terminal_text(text),
+        console.print(Panel(Markdown(text),
                             title="[dim]One-shot answer[/dim]", border_style="dim"))
     else:
         console.print(f"[red]{err}[/red]")
@@ -4581,7 +4458,7 @@ def cmd_usage(state):
         f"[bold]Tokens out:[/bold]   {total_out:,}\n"
         f"[bold]Total tokens:[/bold] {total_in+total_out:,}\n"
         f"[bold]Last request:[/bold] {last_line}\n\n"
-        f"[bold]Rate window:[/bold]  {rl_count} requests  [dim](free cap: 5/hr)[/dim]\n"
+        f"[bold]Rate window:[/bold]  {rl_count} requests  [dim](free cap: 10/hr)[/dim]\n"
         f"[bold]Image quota:[/bold]  {plan['img_per_3h']}/3h\n"
         f"[bold]Model access:[/bold] {'all models' if plan['models'] is None else plan['models'][0].split('/')[1]}\n\n"
         f"  [dim]/trial pro   /upgrade pro   /plan   /usage[/dim]",
@@ -4641,10 +4518,9 @@ def cmd_studio_update(state):
     if result == "pushed":
         console.print(f"[{theme['success']}]✓ Pushed dev → install ({install})[/{theme['success']}]")
     elif result == "pulled":
-        console.print(f"[{theme['success']}]✓ Pulled update → current file.[/{theme['success']}]")
-        ans = console.input("  [bold cyan]Restart now to apply? (y/n): [/bold cyan]").strip().lower()
-        if ans == "y":
-            cmd_restart(state)
+        console.print(f"[{theme['success']}]✓ Update applied.[/{theme['success']}]  [dim]Relaunching now…[/dim]")
+        time.sleep(0.6)
+        cmd_restart(state)
     else:
         try:
             in_sync = current.samefile(install) or (install.exists() and abs(current.stat().st_mtime - install.stat().st_mtime) < 2)
@@ -4697,24 +4573,27 @@ def cmd_bench(state):
         f"[bold]Speed:[/bold]     {toks/dt:.1f} t/s",
         title="Model Benchmark", border_style="magenta"))
 
-def cmd_voice(state):
-    """Speak the last AI response (Windows only)."""
+def cmd_tts(state, args=None):
+    """Speak the last AI response aloud (Windows TTS, /tts)."""
+    args = (args or "").strip()
     if sys.platform != "win32":
-        console.print("[yellow]Voice is only supported on Windows.[/yellow]")
+        console.print("[yellow]TTS is only supported on Windows.[/yellow]")
         return
     text = state.get("_last_response", "")
-    if not text: return
+    if not text:
+        console.print("[yellow]Nothing to speak — send a message first.[/yellow]")
+        return
     # Clean for voice
     clean = re.sub(r"\[.*?\]", "", text).replace("\n", " ").strip()
     msg = clean[:500]
     console.print("[dim]Speaking...[/dim]")
-    
+
     # Use Base64 encoded script block to prevent ANY injection
     import base64
     script = f'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak({json.dumps(msg)})'
     encoded_script = base64.b64encode(script.encode('utf-16-le')).decode('ascii')
-    cmd = f'PowerShell -NoProfile -EncodedCommand {encoded_script}'
-    subprocess.Popen(cmd, shell=True)
+    tts_cmd = f'PowerShell -NoProfile -EncodedCommand {encoded_script}'
+    subprocess.Popen(tts_cmd, shell=True)
 
 def cmd_stats(state):
     """Show detailed usage statistics."""
@@ -5042,11 +4921,12 @@ def cmd_summarize(state, history):
 def cmd_autonomous(state, args, history):
     """/autonomous — toggle autonomous mode: skips write permissions, runs FIF+PATCH loops."""
     currently = state.get("autonomous", False)
+    args = (args or "").strip()
     if args.lower() in ("off", "0", "false", "stop"):
         state["autonomous"] = False
         console.print("[green]✓ Autonomous mode OFF — permission checks restored.[/green]")
         return history
-    if args.lower() in ("on", "1", "true", "start") or not args:
+    if args.lower() in ("on", "1", "true", "start", ""):
         if not currently:
             console.print(Panel(
                 "[bold yellow]⚡ AUTONOMOUS MODE[/bold yellow]\n\n"
@@ -5415,7 +5295,7 @@ def cmd_docs(state, args, history):
         "Format as Markdown. Be thorough but concise.\n\n"
         f"SOURCE:\n{content}"
     )
-    ai_respond(state, prompt, history)
+    _, history = ai_respond(state, prompt, history)
     return history
 
 
@@ -5566,6 +5446,12 @@ VIBE_PRESETS = {
     "carbon":    {"ui": "ghost",   "theme": "carbon"},
     "crimson":   {"ui": "studio",  "theme": "crimson"},
     "slate":     {"ui": "claude",  "theme": "slate"},
+    "strawberry":  {"ui": "strawberry",   "theme": "strawberry"},
+    "darkred":     {"ui": "darkred",      "theme": "darkred"},
+    "sophia":      {"ui": "sophia",       "theme": "sophia"},
+    "godson":      {"ui": "godson",       "theme": "godson"},
+    "downcli":     {"ui": "downcli",      "theme": "downcli"},
+    "badhappening":{"ui": "badhappening", "theme": "badhappening"},
 }
 
 
@@ -6379,7 +6265,7 @@ def cmd_agent_mesh(state, args, history):
         sys_p = persona_sys.get("system", "") if isinstance(persona_sys, dict) else str(persona_sys)
         prompt = f"[{role}] {task}"
         try:
-            txt, _ = ai_respond(dict(state, persona=sys_p), prompt, [])
+            txt, _ = ai_respond(dict(state, system_prompt=sys_p), prompt, [])
             with lock:
                 results[aid] = (name, role, txt or "")
         except Exception as exc:
@@ -6436,8 +6322,8 @@ def cmd_vision_pro(state, args, history):
         console.print(Panel(Markdown(result or "No response."),
                             title=f"[bold]Vision Analysis — {img_path.name}[/bold]",
                             border_style=theme.get("border","cyan"), padding=(0,1)))
-        history.append({"role": "user", "parts": [{"text": f"[vision: {img_path.name}] {prompt}"}]})
-        history.append({"role": "model", "parts": [{"text": result or ""}]})
+        history.append({"role": "user", "text": f"[vision: {img_path.name}] {prompt}"})
+        history.append({"role": "model", "text": result or ""})
     except Exception as exc:
         console.print(f"[red]Vision error: {exc}[/red]")
     return history
@@ -6574,13 +6460,846 @@ def cmd_speed(state, args):
     current_stream = state.get("stream_mode", "auto")
     if mode == "on" or (not mode and current_stream != "on"):
         state = cmd_stream(state, "on")
-        state["_effort"] = "low"
-        console.print(f"  [{acc}]⚡ Speed mode ON[/{acc}]  [dim]stream=on · effort=low[/dim]")
+        state["effort"] = "low"
+        state["fast_mode"] = True
+        console.print(f"  [{acc}]⚡ Speed mode ON[/{acc}]  [dim]stream=on · effort=low · fast=on[/dim]")
     else:
         state = cmd_stream(state, "auto")
-        state.pop("_effort", None)
-        console.print(f"  [{acc}]✓ Speed mode OFF[/{acc}]  [dim]stream=auto · effort=normal[/dim]")
+        state["effort"] = "medium"
+        state["fast_mode"] = False
+        console.print(f"  [{acc}]✓ Speed mode OFF[/{acc}]  [dim]stream=auto · effort=medium · fast=off[/dim]")
     return state
+
+
+# ── /fast ─────────────────────────────────────────────────────────────────────
+def cmd_fast(state, args):
+    """/fast [on|off] — toggle fast/concise mode (≤80-word replies, 512-token cap)."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    mode  = (args.strip().lower() if args else "")
+    if mode == "off" or (not mode and state.get("fast_mode")):
+        state["fast_mode"] = False
+        console.print(f"  [{acc}]✓ Fast mode OFF[/{acc}]  [dim]full replies restored[/dim]")
+    else:
+        state["fast_mode"] = True
+        console.print(f"  [{acc}]⚡ Fast mode ON[/{acc}]  [dim]≤80 words · 512 token cap[/dim]")
+    return state
+
+
+# ── /thinking ─────────────────────────────────────────────────────────────────
+def cmd_thinking(state, args):
+    """/thinking [<seconds>|on|off|show|hide] — AI reasoning budget + display toggle."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    a     = args.strip().lower() if args else ""
+
+    if a in ("off", "0"):
+        state["thinking_budget"] = 0
+        state["show_thinking"]   = False
+        console.print(f"  [yellow]✓ Thinking OFF[/yellow]  [dim]reasoning disabled[/dim]")
+    elif a in ("on",):
+        state["thinking_budget"] = 8000   # ~16 s of reasoning budget
+        state["show_thinking"]   = True
+        console.print(f"  [{acc}]◈ Thinking ON[/{acc}]  [dim]budget=8000 tokens · display=on[/dim]")
+    elif a == "show":
+        state["show_thinking"] = True
+        console.print(f"  [{acc}]◈ Thinking display ON[/{acc}]")
+    elif a == "hide":
+        state["show_thinking"] = False
+        console.print(f"  [yellow]◇ Thinking display OFF[/yellow]  [dim]reasoning hidden[/dim]")
+    elif a:
+        # Parse seconds (e.g. "10", "30s", "2m")
+        a_clean = a.rstrip("s")
+        if a_clean.endswith("m"):
+            try:
+                secs = int(a_clean[:-1]) * 60
+            except ValueError:
+                console.print(f"[red]Usage: /thinking <seconds|Xs|Xm|on|off|show|hide>[/red]")
+                return state
+        else:
+            try:
+                secs = int(a_clean)
+            except ValueError:
+                console.print(f"[red]Usage: /thinking <seconds|Xs|Xm|on|off|show|hide>[/red]")
+                return state
+        # ~500 tokens per second of reasoning is a rough heuristic
+        budget = max(1000, secs * 500)
+        state["thinking_budget"] = budget
+        state["show_thinking"]   = True
+        console.print(f"  [{acc}]◈ Thinking → {secs}s[/{acc}]  [dim]budget_tokens={budget}[/dim]")
+    else:
+        # Show current state
+        budget = state.get("thinking_budget", 0)
+        show   = state.get("show_thinking", True)
+        secs   = budget // 500 if budget else 0
+        console.print(Panel(
+            f"  Budget:   [bold]{budget}[/bold] tokens (~{secs}s)  "
+            f"({'[green]active[/green]' if budget else '[dim]off[/dim]'})\n"
+            f"  Display:  {'[green]on[/green]' if show else '[yellow]off[/yellow]'}\n\n"
+            f"  [dim]/thinking on     → enable (8000 token budget)[/dim]\n"
+            f"  [dim]/thinking 30     → 30-second budget[/dim]\n"
+            f"  [dim]/thinking off    → disable[/dim]\n"
+            f"  [dim]/thinking show   → show reasoning stream[/dim]\n"
+            f"  [dim]/thinking hide   → hide reasoning stream[/dim]",
+            title="◈ Thinking / Reasoning", border_style=theme.get("border","cyan")))
+    return state
+
+
+# ── /time ─────────────────────────────────────────────────────────────────────
+def _parse_duration(s):
+    """Parse '30m', '2h', '90s', '1h30m', '14:30', raw seconds int. Returns seconds or None."""
+    s = s.strip().lower()
+    if not s:
+        return None
+    # Clock time: "14:30" or "2:30pm"
+    m = re.match(r'^(\d{1,2}):(\d{2})(am|pm)?$', s)
+    if m:
+        h, mi = int(m.group(1)), int(m.group(2))
+        if m.group(3) == "pm" and h < 12: h += 12
+        if m.group(3) == "am" and h == 12: h = 0
+        now = datetime.now()
+        target = now.replace(hour=h, minute=mi, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
+        return (target - now).total_seconds()
+    # Combined: "1h30m", "2h", "30m", "90s"
+    total = 0
+    for val, unit in re.findall(r'(\d+)([hms])', s):
+        val = int(val)
+        if unit == 'h': total += val * 3600
+        elif unit == 'm': total += val * 60
+        else: total += val
+    if total:
+        return total
+    # Raw number (seconds)
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def cmd_timer(state, args):
+    """/time [<duration>|off] — set a work deadline timer shown in the toolbar."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    a     = (args or "").strip().lower()
+
+    if a in ("off", "clear", "stop", "cancel"):
+        state.pop("_timer_deadline", None)
+        state.pop("_timer_label", None)
+        console.print(f"  [{acc}]✓ Timer cleared[/{acc}]")
+        return state
+
+    if not a:
+        dl = state.get("_timer_deadline")
+        if not dl:
+            console.print("[yellow]No timer set.  Usage: /time 30m | 2h | 14:30 | off[/yellow]")
+        else:
+            rem = dl - time.time()
+            if rem <= 0:
+                console.print("[red bold]⏰ DEADLINE PASSED[/red bold]")
+            else:
+                h, r = divmod(int(rem), 3600)
+                m2, s = divmod(r, 60)
+                console.print(f"  [{acc}]⏱ {h}h {m2:02d}m {s:02d}s remaining[/{acc}]")
+        return state
+
+    secs = _parse_duration(a)
+    if secs is None or secs <= 0:
+        console.print("[red]Usage: /time 30m | 2h | 1h30m | 14:30 | 90s | off[/red]")
+        return state
+
+    state["_timer_deadline"] = time.time() + secs
+    state["_timer_label"]    = a
+    h, r = divmod(int(secs), 3600)
+    m2, s = divmod(r, 60)
+    console.print(f"  [{acc}]⏱ Timer set: {h}h {m2:02d}m {s:02d}s[/{acc}]  [dim]deadline in toolbar[/dim]")
+    return state
+
+
+# ── /statusline ────────────────────────────────────────────────────────────────
+_STATUSLINE_DEFAULTS = _STATUSLINE_DEFAULTS_LAZY   # single source: studio/data.py
+_STATUSLINE_ALL      = {"model","plan","stream","branch","tokens","in_tokens","out_tokens",
+                         "mem","mode","agent","timer","fast","working","cwd"}
+
+def cmd_statusline(state, args):
+    """/statusline [show|hide|reset|list] [field,...] — configure the toolbar."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    a     = (args or "").strip().lower()
+    raw = state.get("statusline_fields")
+    if not isinstance(raw, set):
+        state["statusline_fields"] = set(raw) if raw else set(_STATUSLINE_DEFAULTS)
+    fields = state["statusline_fields"]
+
+    if not a or a == "list":
+        rows = []
+        for f in sorted(_STATUSLINE_ALL):
+            on = f in fields
+            rows.append(f"  {'[green]✓[/green]' if on else '[dim]○[/dim]'}  {f}")
+        console.print(Panel(
+            "\n".join(rows) + "\n\n  [dim]/statusline show model,plan,tokens[/dim]\n"
+            "  [dim]/statusline hide mem,cwd[/dim]\n"
+            "  [dim]/statusline reset[/dim]",
+            title="◉ Statusline Fields", border_style=theme.get("border","cyan")))
+        return state
+
+    if a == "reset":
+        state["statusline_fields"] = set(_STATUSLINE_DEFAULTS)
+        console.print(f"  [{acc}]✓ Statusline reset to defaults[/{acc}]")
+        return state
+
+    parts = a.split(None, 1)
+    action = parts[0]
+    if len(parts) < 2:
+        console.print("[red]Usage: /statusline show <fields> | hide <fields> | reset | list[/red]")
+        return state
+
+    field_list = [f.strip() for f in parts[1].replace(",", " ").split()]
+    unknown    = [f for f in field_list if f not in _STATUSLINE_ALL]
+    if unknown:
+        console.print(f"[yellow]Unknown fields: {', '.join(unknown)}  —  valid: {', '.join(sorted(_STATUSLINE_ALL))}[/yellow]")
+    valid = [f for f in field_list if f in _STATUSLINE_ALL]
+    if action == "show":
+        fields.update(valid)
+        console.print(f"  [{acc}]✓ Showing: {', '.join(valid)}[/{acc}]")
+    elif action == "hide":
+        fields.difference_update(valid)
+        console.print(f"  [yellow]✓ Hidden: {', '.join(valid)}[/yellow]")
+    else:
+        console.print("[red]Usage: /statusline show <fields> | hide <fields>[/red]")
+    state["statusline_fields"] = fields
+    return state
+
+
+# ── v9.3 New Commands ────────────────────────────────────────────────────────
+
+def _plan_allows(state, feature: str) -> bool:
+    """Return True if the current plan allows the given feature key."""
+    plan = get_plan(state)
+    return PLANS.get(plan, {}).get(feature, False)
+
+def _credits_file(state):
+    uid = (load_profile() or {}).get("user", "default")
+    return Path("profiles") / uid / "credits.json"
+
+def _load_credits(state) -> dict:
+    f = _credits_file(state)
+    if f.exists():
+        try:
+            return json.loads(f.read_text())
+        except Exception:
+            pass
+    import calendar
+    now = datetime.now()
+    return {"used": 0, "month": now.month, "year": now.year}
+
+def _save_credits(state, data: dict):
+    f = _credits_file(state)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(data, indent=2))
+
+def track_credits(state, cost_key: str = "message"):
+    """Deduct credits for an action. Returns (remaining, limit)."""
+    plan     = get_plan(state)
+    limit    = PLANS.get(plan, {}).get("credits", 100)
+    if limit >= 999999:
+        return 999999, 999999
+    cost     = CREDIT_COSTS.get(cost_key, 1)
+    data     = _load_credits(state)
+    now      = datetime.now()
+    if data.get("month") != now.month or data.get("year") != now.year:
+        data = {"used": 0, "month": now.month, "year": now.year}
+    data["used"] = round(data.get("used", 0) + cost, 2)
+    _save_credits(state, data)
+    return max(0, limit - data["used"]), limit
+
+def get_credits_remaining(state) -> tuple:
+    """Returns (used, remaining, limit)."""
+    plan   = get_plan(state)
+    limit  = PLANS.get(plan, {}).get("credits", 100)
+    if limit >= 999999:
+        return 0, 999999, 999999
+    data   = _load_credits(state)
+    now    = datetime.now()
+    if data.get("month") != now.month or data.get("year") != now.year:
+        return 0, limit, limit
+    used = data.get("used", 0)
+    return used, max(0, limit - used), limit
+
+def cmd_credits(state):
+    """/credits — show credit balance and usage."""
+    theme  = state.get("theme", THEMES["default"])
+    plan   = get_plan(state)
+    pdata  = PLANS.get(plan, {})
+    used, remaining, limit = get_credits_remaining(state)
+    if limit >= 999999:
+        console.print(Panel(
+            f"[bold green]Unlimited credits[/bold green]\n"
+            f"[dim]Plan: {pdata.get('name','?')} ({pdata.get('price','?')})[/dim]",
+            title="◈ Credits", border_style=theme.get("accent","cyan")))
+        return state
+    pct = int((used / max(1, limit)) * 100)
+    bar_filled = int(pct / 5)
+    bar = "[green]" + "█" * bar_filled + "[/green][dim]" + "░" * (20 - bar_filled) + "[/dim]"
+    console.print(Panel(
+        f"{bar}  [bold]{pct}%[/bold] used\n\n"
+        f"  Used:      [bold]{used:.1f}[/bold] credits\n"
+        f"  Remaining: [bold {'green' if remaining > limit * 0.2 else 'red'}]{remaining:.1f}[/bold] credits\n"
+        f"  Monthly:   {limit:,} credits / month\n"
+        f"  Plan:      [{pdata.get('color','dim')}]{pdata.get('name','?')} ({pdata.get('price','?')})[/{pdata.get('color','dim')}]\n\n"
+        f"  [dim]Costs: message=1 · fast=0.5 · turbo=2.5 · image=10 · search=2 · research=15[/dim]",
+        title="◈ Credits", border_style=theme.get("accent","cyan")))
+    return state
+
+
+def _check_credit_budget(state, cost_key: str) -> bool:
+    """Return False (and print warning) if not enough credits."""
+    plan  = get_plan(state)
+    limit = PLANS.get(plan, {}).get("credits", 100)
+    if limit >= 999999:
+        return True
+    used, remaining, _ = get_credits_remaining(state)
+    cost = CREDIT_COSTS.get(cost_key, 1)
+    if remaining < cost:
+        console.print(f"[red]Not enough credits — {remaining:.1f} remaining, need {cost}. /credits for details.[/red]")
+        return False
+    return True
+
+
+def _ddg_search(query: str, max_results: int = 5) -> list:
+    """Search DuckDuckGo Instant Answers API. Returns list of dicts."""
+    import urllib.parse
+    url = f"https://api.duckduckgo.com/?q={urllib.parse.quote(query)}&format=json&no_html=1&skip_disambig=1"
+    try:
+        req = request.Request(url, headers={"User-Agent": "StudioCLI/9.3"})
+        with request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read())
+        results = []
+        if data.get("Abstract"):
+            results.append({
+                "title":   data.get("Heading", query),
+                "url":     data.get("AbstractURL", ""),
+                "snippet": data["Abstract"],
+            })
+        for item in data.get("RelatedTopics", [])[:max_results * 2]:
+            if isinstance(item, dict) and item.get("Text"):
+                results.append({
+                    "title":   item.get("Text", "")[:80],
+                    "url":     item.get("FirstURL", ""),
+                    "snippet": item["Text"],
+                })
+        return results[:max_results]
+    except Exception:
+        return []
+
+
+def cmd_websearch(state, args, history):
+    """/search <query> — web search and optionally synthesize with AI."""
+    if not args:
+        # Toggle web search mode
+        state["web_search_mode"] = not state.get("web_search_mode", False)
+        on = state["web_search_mode"]
+        console.print(Panel(
+            f"[bold {'green' if on else 'yellow'}]Web Search {'ENABLED' if on else 'DISABLED'}[/bold {'green' if on else 'yellow'}]\n"
+            f"[dim]{'All responses will use web-augmented model (perplexity/sonar).' if on else 'Back to standard AI responses.'}\n"
+            f"Toggle again with /search to turn {'off' if on else 'on'}.[/dim]",
+            title="🌐 Web Search", border_style="green" if on else "dim"))
+        return state, history
+
+    plan = get_plan(state)
+    if not PLANS.get(plan, {}).get("web_search", False):
+        console.print(Panel("[red]Web Search requires Pro or higher.[/red]\n[dim]/upgrade pro to unlock.[/dim]",
+                            title="🔒 Locked", border_style="red"))
+        return state, history
+
+    if not _check_credit_budget(state, "web_search"):
+        return state, history
+
+    or_key = state.get("openrouter_key") or load_or_key()
+    if or_key:
+        # Use Perplexity Sonar via OpenRouter — has native web search
+        console.print(f"[dim]🌐 Searching: {args}[/dim]")
+        orig_model = state.get("model")
+        state["model"] = WEB_SEARCH_MODELS["default"]
+        response, history = ai_respond(state, args, history)
+        state["model"] = orig_model
+        track_credits(state, "web_search")
+    else:
+        # Fallback: DuckDuckGo Instant Answers
+        console.print(f"[dim]🌐 Searching DuckDuckGo: {args}[/dim]")
+        results = _ddg_search(args)
+        if not results:
+            console.print("[yellow]No results found[/yellow]")
+            return state, history
+        for i, r in enumerate(results, 1):
+            console.print(Panel(
+                f"[bold]{r['title']}[/bold]\n{r['snippet']}\n[dim link={r['url']}]{r['url']}[/dim link]",
+                title=f"[cyan]{i}[/cyan]", border_style="cyan", padding=(0, 1)))
+        track_credits(state, "web_search")
+    return state, history
+
+
+def cmd_research(state, args, history):
+    """/research <topic> — deep multi-step AI research with web synthesis."""
+    if not args:
+        console.print("[yellow]Usage: /research <topic>[/yellow]")
+        return history
+
+    plan = get_plan(state)
+    if not PLANS.get(plan, {}).get("deep_research", False):
+        console.print(Panel("[red]Deep Research requires Pro or higher.[/red]\n[dim]/upgrade pro to unlock.[/dim]",
+                            title="🔒 Locked", border_style="red"))
+        return history
+
+    if not _check_credit_budget(state, "deep_research"):
+        return history
+
+    console.print(Panel(
+        f"[bold]Topic:[/bold] {args}\n\n[dim]Step 1/3: Decomposing query…[/dim]",
+        title="🔬 Deep Research", border_style="magenta"))
+
+    or_key = state.get("openrouter_key") or load_or_key()
+
+    if or_key:
+        # Step 1: Use sonar-pro for deep research directly
+        console.print("[dim]  Searching the web for multiple angles…[/dim]")
+        orig_model = state.get("model")
+        state["model"] = WEB_SEARCH_MODELS["deep"]
+        research_prompt = (
+            f"Conduct deep research on: {args}\n\n"
+            f"Provide a comprehensive, well-structured report covering: "
+            f"key findings, multiple perspectives, supporting evidence, "
+            f"and a clear conclusion. Use your web search capability to "
+            f"find current, accurate information."
+        )
+        response, history = ai_respond(state, research_prompt, history)
+        state["model"] = orig_model
+    else:
+        # Fallback: multi-step DuckDuckGo
+        console.print("[dim]  Step 1: Breaking down research question…[/dim]")
+        decomp_prompt = (
+            f"Research topic: {args}\n"
+            f"List exactly 4 specific search queries to research this comprehensively. "
+            f"One per line, no numbering, no explanation. Keep each under 8 words."
+        )
+        sub_text, history = ai_respond(state, decomp_prompt, history, silent=True)
+        queries = [q.strip() for q in (sub_text or "").splitlines() if q.strip()][:4]
+        if not queries:
+            queries = [args]
+
+        console.print(f"[dim]  Step 2: Searching {len(queries)} queries…[/dim]")
+        all_snippets = []
+        for q in queries:
+            console.print(f"[dim]    → {q}[/dim]")
+            results = _ddg_search(q, max_results=3)
+            for r in results:
+                if r.get("snippet"):
+                    all_snippets.append(f"**{r['title']}**: {r['snippet']}")
+
+        console.print("[dim]  Step 3: Synthesizing findings…[/dim]")
+        if all_snippets:
+            context = "\n".join(all_snippets[:12])
+            synth_prompt = (
+                f"Based on the following web research about '{args}', write a comprehensive, "
+                f"well-structured report:\n\n{context}\n\n"
+                f"Structure: Overview → Key Findings → Analysis → Conclusion"
+            )
+            _, history = ai_respond(state, synth_prompt, history)
+        else:
+            _, history = ai_respond(state, f"Provide a comprehensive research report on: {args}", history)
+
+    track_credits(state, "deep_research")
+    return history
+
+
+def cmd_turbo(state, args):
+    """/turbo — toggle 2x fast mode (2.5x credit cost, Pro+ only)."""
+    plan = get_plan(state)
+    if not PLANS.get(plan, {}).get("turbo", False):
+        console.print(Panel(
+            "[red]Turbo Mode requires Pro or higher.[/red]\n"
+            "[dim]2x faster responses · 2.5x credit cost[/dim]\n"
+            "[dim]/upgrade pro to unlock.[/dim]",
+            title="🔒 Turbo Locked", border_style="red"))
+        return state
+
+    state["turbo_mode"] = not state.get("turbo_mode", False)
+    theme = state.get("theme", THEMES["default"])
+
+    if state["turbo_mode"]:
+        state["_pre_turbo_model"]  = state.get("model")
+        state["_pre_turbo_fast"]   = state.get("fast_mode", False)
+        or_key = state.get("openrouter_key") or load_or_key()
+        if or_key:
+            state["model"] = TURBO_MODELS[0]
+        state["fast_mode"]         = True
+        state["thinking_budget"]   = 0
+        console.print(Panel(
+            "[bold yellow]⚡⚡ TURBO MODE ACTIVE[/bold yellow]\n\n"
+            f"[dim]Model:        {state['model'].split('/')[-1]}[/dim]\n"
+            "[dim]Speed:        2x faster[/dim]\n"
+            "[dim]Credit cost:  2.5x per message[/dim]\n"
+            "[dim]Thinking:     disabled[/dim]\n\n"
+            "[dim]/turbo again to disable[/dim]",
+            title="⚡ Turbo", border_style="yellow"))
+    else:
+        if state.get("_pre_turbo_model"):
+            state["model"]     = state.pop("_pre_turbo_model")
+        state["fast_mode"]     = state.pop("_pre_turbo_fast", False)
+        state["turbo_mode"]    = False
+        console.print(f"[{theme.get('accent','cyan')}]✓ Turbo mode off — restored previous settings[/{theme.get('accent','cyan')}]")
+    return state
+
+
+def _cu_take_screenshot() -> tuple[str | None, str | None]:
+    """Capture the screen, return (base64_png, error_string)."""
+    try:
+        from PIL import ImageGrab
+        import io, base64
+        img = ImageGrab.grab()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode("utf-8"), None
+    except ImportError:
+        pass
+    # Fallback: PowerShell screenshot (Windows)
+    try:
+        import io, base64, subprocess, tempfile
+        tmp = tempfile.mktemp(suffix=".png")
+        ps = (
+            "[void][reflection.assembly]::LoadWithPartialName('System.Drawing');"
+            "[void][reflection.assembly]::LoadWithPartialName('System.Windows.Forms');"
+            "$screen=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;"
+            "$bmp=New-Object System.Drawing.Bitmap $screen.Width,$screen.Height;"
+            "$g=[System.Drawing.Graphics]::FromImage($bmp);"
+            "$g.CopyFromScreen($screen.Location,[System.Drawing.Point]::Empty,$screen.Size);"
+            f"$bmp.Save('{tmp}');"
+        )
+        subprocess.run(["powershell", "-Command", ps], capture_output=True, timeout=10)
+        if Path(tmp).exists():
+            data = base64.b64encode(Path(tmp).read_bytes()).decode("utf-8")
+            Path(tmp).unlink(missing_ok=True)
+            return data, None
+        return None, "PowerShell screenshot failed"
+    except Exception as e:
+        return None, f"Screenshot error: {e}"
+
+
+def _cu_ask_vision(state, b64_png: str, instruction: str) -> tuple[str | None, str | None]:
+    """Send screenshot to best available vision model. Returns (text, error)."""
+    image_url = f"data:image/png;base64,{b64_png}"
+
+    # Build vision message
+    vision_msg = {
+        "role": "user",
+        "content": [
+            {"type": "image_url", "image_url": {"url": image_url}},
+            {"type": "text", "text": instruction},
+        ],
+    }
+
+    # Prefer OpenRouter vision models
+    or_key = state.get("openrouter_key") or load_or_key()
+    if or_key:
+        vision_models = [
+            "openai/gpt-4o",
+            "anthropic/claude-sonnet-4-6",
+            "google/gemini-2.5-pro",
+            "openai/gpt-4o-mini",
+        ]
+        current_model = state.get("model", "")
+        if "/" in current_model and not current_model.endswith(":free"):
+            vision_models.insert(0, current_model)
+
+        system = (
+            "You are a computer use assistant. The user has shared a screenshot. "
+            "Describe what you see and, if given an instruction, specify the exact "
+            "action as JSON: {\"action\":\"click\",\"x\":N,\"y\":N} | "
+            "{\"action\":\"type\",\"text\":\"...\"} | {\"action\":\"key\",\"key\":\"...\"} | "
+            "{\"action\":\"scroll\",\"x\":N,\"y\":N,\"delta\":N} | {\"action\":\"describe\"}. "
+            "Always include a human-readable explanation before the JSON."
+        )
+        payload = json.dumps({
+            "model": vision_models[0],
+            "messages": [{"role": "system", "content": system}, vision_msg],
+            "max_tokens": 1024,
+        })
+        try:
+            req = request.Request(
+                OPENROUTER_BASE,
+                data=payload.encode(),
+                headers={
+                    "Authorization": f"Bearer {or_key}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://studiocli.dev",
+                    "X-Title": "StudioCLI Computer Use",
+                },
+                method="POST",
+            )
+            with request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read())
+            return data["choices"][0]["message"]["content"], None
+        except Exception as e:
+            return None, str(e)
+
+    # Gemini Vision fallback
+    gm_key = state.get("api_key") or load_api_key()
+    if gm_key:
+        try:
+            payload = json.dumps({
+                "contents": [{"parts": [
+                    {"inline_data": {"mime_type": "image/png", "data": b64_png}},
+                    {"text": instruction},
+                ]}]
+            })
+            url = f"{API_BASE}/gemini-2.0-flash:generateContent?key={gm_key}"
+            req = request.Request(url, data=payload.encode(),
+                                  headers={"Content-Type": "application/json"}, method="POST")
+            with request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read())
+            return data["candidates"][0]["content"]["parts"][0]["text"], None
+        except Exception as e:
+            return None, str(e)
+
+    return None, "No API key configured — run /keys set openrouter <key>"
+
+
+def _cu_execute_action(action_json: str) -> str | None:
+    """Parse and execute a computer use action. Returns error string or None."""
+    try:
+        import pyautogui
+        import json as _json
+        # Find JSON block in text
+        m = re.search(r'\{[^{}]+\}', action_json)
+        if not m:
+            return None
+        act = _json.loads(m.group())
+        kind = act.get("action", "")
+        if kind == "click":
+            pyautogui.click(act["x"], act["y"])
+        elif kind == "type":
+            pyautogui.typewrite(act["text"], interval=0.03)
+        elif kind == "key":
+            pyautogui.press(act["key"])
+        elif kind == "scroll":
+            pyautogui.scroll(act.get("delta", 3), x=act["x"], y=act["y"])
+        return None
+    except ImportError:
+        return "pyautogui not installed — run: pip install pyautogui"
+    except Exception as e:
+        return f"Action error: {e}"
+
+
+def cmd_computer_use(state, args):
+    """/computer-use — AI-powered desktop automation (Max+ only)."""
+    plan = get_plan(state)
+    if not PLANS.get(plan, {}).get("computer_use", False):
+        console.print(Panel(
+            "[red]Computer Use requires Max or higher.[/red]\n\n"
+            "[dim]Computer Use lets the AI see your screen, move the mouse,\n"
+            "type text, and interact with any app on your desktop.\n\n"
+            "Available on: Max ($80/mo), Ultra ($250/mo), Team, Enterprise[/dim]\n\n"
+            "[yellow]/upgrade max[/yellow] to unlock",
+            title="🖥 Computer Use — Locked", border_style="red"))
+        return state
+
+    sub   = (args or "").strip()
+    lower = sub.lower()
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+
+    if not lower or lower == "help":
+        # Check what's available
+        has_pil   = bool(__import__("importlib").util.find_spec("PIL"))
+        has_pyag  = bool(__import__("importlib").util.find_spec("pyautogui"))
+        has_key   = bool(state.get("openrouter_key") or load_or_key() or
+                         state.get("api_key") or load_api_key())
+        pil_st    = "[green]✓[/green]" if has_pil else "[red]✗ (pip install Pillow)[/red]"
+        pyag_st   = "[green]✓[/green]" if has_pyag else "[yellow]○ optional (pip install pyautogui)[/yellow]"
+        key_st    = "[green]✓[/green]" if has_key else "[red]✗ (run /keys set openrouter YOUR_KEY)[/red]"
+        console.print(Panel(
+            f"[bold]🖥 Computer Use — AI Desktop Automation[/bold]\n\n"
+            f"[dim]Dependencies:[/dim]\n"
+            f"  {pil_st} Pillow (screenshot)\n"
+            f"  {pyag_st} pyautogui (mouse/keyboard)\n"
+            f"  {key_st} Vision API key\n\n"
+            f"[dim]Commands:[/dim]\n"
+            f"  [bold]/computer-use snap[/bold]            — screenshot + AI description\n"
+            f"  [bold]/computer-use run <instruction>[/bold] — screenshot + AI executes action\n"
+            f"  [bold]/computer-use loop[/bold]            — interactive session (Ctrl+C to exit)\n"
+            f"  [bold]/computer-use providers[/bold]       — show available vision providers\n\n"
+            f"[dim]Works with: OpenRouter (GPT-4o, Claude, Gemini) · Gemini API[/dim]",
+            title="🖥 Computer Use", border_style=acc))
+        return state
+
+    if lower == "providers":
+        or_key = state.get("openrouter_key") or load_or_key()
+        gm_key = state.get("api_key") or load_api_key()
+        console.print(Panel(
+            f"  [bold]Vision providers for Computer Use:[/bold]\n\n"
+            f"  {'[green]✓[/green]' if or_key else '[dim]○[/dim]'} OpenRouter  — GPT-4o, Claude Sonnet, Gemini 2.5 Pro\n"
+            f"  {'[green]✓[/green]' if gm_key else '[dim]○[/dim]'} Gemini API  — gemini-2.0-flash\n"
+            f"  [dim]○[/dim] Cursor API  — coming in v9.5\n"
+            f"  [dim]○[/dim] OAuth/SSO   — coming in v9.5 (Enterprise)\n\n"
+            f"  [dim]Set keys: /keys set openrouter <key>   /keys set gemini <key>[/dim]",
+            title="🖥 Computer Use — Providers", border_style=acc))
+        return state
+
+    if lower == "stop":
+        state["_cu_active"] = False
+        console.print(f"[{acc}]✓ Computer Use session ended.[/{acc}]")
+        return state
+
+    if lower in ("snap", "screenshot", "describe"):
+        console.print(f"[{acc}]📷 Taking screenshot…[/{acc}]")
+        b64, err = _cu_take_screenshot()
+        if err or not b64:
+            console.print(f"[red]✗ {err or 'Screenshot failed'}[/red]")
+            return state
+        console.print(f"[{acc}]🔍 Asking AI to describe screen…[/{acc}]")
+        text, err2 = _cu_ask_vision(state, b64, "Describe what you see on this screen in detail. What is open, what is in focus, what UI elements are visible?")
+        if err2:
+            console.print(f"[red]✗ Vision error: {err2}[/red]")
+        else:
+            console.print(_assistant_heading(state, "CV", False))
+            console.print(Markdown(text))
+        return state
+
+    if lower.startswith("run ") or (lower not in ("snap","loop","providers","stop","help")):
+        # Direct instruction
+        instruction = sub[4:].strip() if lower.startswith("run ") else sub
+        if not instruction:
+            console.print("[yellow]Provide an instruction: /computer-use run <what to do>[/yellow]")
+            return state
+        console.print(f"[{acc}]📷 Capturing screen…[/{acc}]")
+        b64, err = _cu_take_screenshot()
+        if err or not b64:
+            console.print(f"[red]✗ {err or 'Screenshot failed'}[/red]"); return state
+        console.print(f"[{acc}]🤖 Asking AI: {instruction[:60]}…[/{acc}]")
+        text, err2 = _cu_ask_vision(state, b64,
+            f"User instruction: {instruction}\n\n"
+            "First describe what you see on screen, then specify the exact action to take as JSON.")
+        if err2:
+            console.print(f"[red]✗ {err2}[/red]"); return state
+        console.print(_assistant_heading(state, "CV", False))
+        console.print(Markdown(text))
+        # Attempt to execute the action
+        exec_err = _cu_execute_action(text)
+        if exec_err:
+            console.print(f"[yellow]⚡ Action parsing: {exec_err}[/yellow]")
+            console.print("[dim]Install pyautogui to enable automatic action execution.[/dim]")
+        else:
+            console.print(f"[{acc}]✓ Action executed.[/{acc}]")
+        return state
+
+    if lower == "loop":
+        console.print(Panel(
+            "[bold]Computer Use — Interactive Loop[/bold]\n"
+            "[dim]Type your instruction and press Enter. Studio will screenshot, ask AI, and act.\n"
+            "Type 'stop' or press Ctrl+C to exit.[/dim]",
+            title="🖥 Computer Use Loop", border_style=acc))
+        state["_cu_active"] = True
+        while state.get("_cu_active", False):
+            try:
+                instruction = console.input(f"  [{acc}]🖥 instruction:[/{acc}] ").strip()
+            except (KeyboardInterrupt, EOFError):
+                break
+            if not instruction or instruction.lower() in ("stop", "exit", "quit"):
+                break
+            b64, err = _cu_take_screenshot()
+            if err or not b64:
+                console.print(f"[red]✗ {err}[/red]"); continue
+            text, err2 = _cu_ask_vision(state, b64, instruction)
+            if err2:
+                console.print(f"[red]✗ {err2}[/red]"); continue
+            console.print(Markdown(text))
+            exec_err = _cu_execute_action(text)
+            if exec_err:
+                console.print(f"[yellow]{exec_err}[/yellow]")
+        state["_cu_active"] = False
+        console.print(f"[{acc}]Computer Use session ended.[/{acc}]")
+        return state
+
+    return state
+
+
+def cmd_extension(state, args):
+    """/extension — Chrome Extension for Studio (Max+ only)."""
+    plan = get_plan(state)
+    if not PLANS.get(plan, {}).get("computer_use", False):
+        console.print(Panel(
+            "[red]The Studio Chrome Extension requires Max or higher.[/red]\n\n"
+            "[dim]The extension lets Studio control Chrome:\n"
+            "  • Fill forms and click elements on any page\n"
+            "  • Scrape and summarize page content\n"
+            "  • Automate multi-step browsing tasks\n"
+            "  • Take actions on web apps on your behalf\n\n"
+            "Available on: Max ($80/mo), Ultra ($250/mo), Team, Enterprise[/dim]\n\n"
+            "[yellow]/upgrade max[/yellow] to unlock",
+            title="🧩 Chrome Extension — Locked", border_style="red"))
+        return state
+
+    sub = (args or "").strip().lower()
+    if not sub or sub == "help":
+        console.print(Panel(
+            "[bold]Studio Chrome Extension[/bold]\n\n"
+            "[dim]Install & commands:[/dim]\n"
+            "  /extension install   — download the extension package\n"
+            "  /extension status    — show current browser session\n"
+            "  /extension actions   — list available browser actions\n\n"
+            "[yellow]Note:[/yellow] Load the extension in Chrome via chrome://extensions → Load unpacked.\n"
+            "Extension files are in [bold]web/public/extension/[/bold]",
+            title="🧩 Chrome Extension", border_style="cyan"))
+        return state
+
+    if sub == "install":
+        ext_dir = Path("web/public/extension")
+        if ext_dir.exists():
+            console.print(Panel(
+                f"[green]✓ Extension ready at:[/green] [bold]{ext_dir.resolve()}[/bold]\n\n"
+                "[dim]1. Open chrome://extensions\n"
+                "2. Enable Developer mode (top-right toggle)\n"
+                "3. Click 'Load unpacked' → select the folder above[/dim]",
+                title="🧩 Install Extension", border_style="green"))
+        else:
+            console.print(f"[yellow]Extension package not found at {ext_dir}. Coming in v9.4.[/yellow]")
+    else:
+        console.print(f"[dim]Chrome Extension actions coming in v9.4. Your plan supports it.[/dim]")
+    return state
+
+
+def _show_plan_updates(state):
+    """On login: show any new plan updates the user hasn't seen."""
+    plan    = get_plan(state)
+    prof    = load_profile() or {}
+    seen_v  = prof.get("last_seen_update", "0.0")
+    theme   = state.get("theme", THEMES["default"])
+
+    new_updates = []
+    for ver, info in sorted(PLAN_UPDATES.items(), reverse=True):
+        if ver <= seen_v:
+            break
+        if plan in info.get("plans", []):
+            new_updates.append((ver, info))
+
+    if not new_updates:
+        return
+
+    lines = []
+    for ver, info in new_updates:
+        lines.append(f"[bold]v{ver}[/bold]  [dim]{info['date']}[/dim]")
+        for ch in info["changes"]:
+            lines.append(f"  [green]✦[/green] {ch}")
+        lines.append("")
+
+    console.print(Panel(
+        "\n".join(lines).rstrip(),
+        title=f"[bold]✦ What's New ({PLANS[plan]['name']} Plan)[/bold]",
+        border_style=PLANS[plan].get("color", "cyan")))
+
+    prof["last_seen_update"] = sorted(PLAN_UPDATES.keys())[-1]
+    save_profile(prof)
 
 
 # ── v9 Beta Commands ──────────────────────────────────────────────────────────
@@ -6654,7 +7373,11 @@ def cmd_beta(state, args):
         console.print(f"  [{acc}]★ Beta flag '{flag}' {verb}.[/{acc}]")
         return
 
+    # Unknown sub-command — delegate to legacy beta features (docx, xlsx, screenshot, video, feedback)
+    # This keeps backward compat for non-ultra users who use /beta docx, /beta xlsx etc.
+    # We pass an empty history and discard the return since this path has no history context here.
     console.print("[yellow]Usage: /beta list  |  /beta on <flag>  |  /beta off <flag>  |  /beta reset[/yellow]")
+    console.print("[dim]Tip: /beta docx · /beta xlsx · /beta screenshot · /beta video · /beta feedback[/dim]")
 
 
 def cmd_voice(state, args):
@@ -7406,27 +8129,44 @@ def cmd_complain(state, args):
 
     entry = {"type": "complaint", "text": text, "ts": datetime.now().isoformat(), "plan": get_plan(state)}
     _save_to_log_file("complaints.json", entry)
-    
+    # Also write to feedback_log.json so creator analytics can see complaints
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        fb_path = CONFIG_DIR / "feedback_log.json"
+        fb_log = json.loads(fb_path.read_text(encoding="utf-8")) if fb_path.exists() else []
+        fb_log.append(entry)
+        fb_path.write_text(json.dumps(fb_log, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
     # Reload log to include the new entry for the count
     try:
         updated_log = json.loads(path.read_text(encoding="utf-8"))
         count = len([e for e in updated_log if e.get('type')=='complaint'])
-    except Exception: 
+    except Exception:
         count = 1
 
     console.print()
-    if get_plan(state) in ["max", "pro"]:
-        console.print("  [bold red]⚠  COMPLAINT RECEIVED (PRIORITY: HIGH)[/bold red]")
-        time.sleep(0.25)
-        console.print("  [dim]Logged. Our engineers are investigating your request immediately.[/dim]")
+    plan_now = get_plan(state)
+    ticket_id = f"#{int(time.time()) % 100000:05d}"
+    if plan_now in ("enterprise", "ultra"):
+        console.print(f"  [bold #f97316]◉  COMPLAINT RECEIVED — ENTERPRISE PRIORITY[/bold #f97316]")
+        time.sleep(0.2)
+        console.print(f"  [bold]Ticket:[/bold] [cyan]{ticket_id}[/cyan]  [dim]·  Logged under your Enterprise account[/dim]")
+        console.print(f"  [dim]Your feedback has been flagged for the core team. Expected follow-up within 24h.[/dim]")
+        console.print(f"  [dim]Track replies with [bold]/inbox[/bold][/dim]")
+    elif plan_now in ("max", "pro", "team"):
+        console.print(f"  [bold yellow]⚠  COMPLAINT RECEIVED (PRIORITY: HIGH)[/bold yellow]")
+        time.sleep(0.2)
+        console.print(f"  [bold]Ticket:[/bold] [cyan]{ticket_id}[/cyan]")
+        console.print(f"  [dim]Logged. Our team reviews Pro/Max complaints weekly.[/dim]")
     else:
         roast = _r.choice(_COMPLAINT_ROASTS)
         console.print("  [red]⚠  COMPLAINT RECEIVED[/red]")
         time.sleep(0.25)
         console.print(f"  [dim]{roast}[/dim]")
-    
-    console.print(f"  [dim]Logged to logs/complaints.json[/dim]\n")
-    console.print(f"\n  [dim]Entry #{count} in the archive.[/dim]\n")
+
+    console.print(f"  [dim]Logged to logs/complaints.json  ·  Entry #{count}[/dim]\n")
 
 
 def cmd_inbox(state):
@@ -7544,7 +8284,8 @@ _BETA_FEATURES = [
     ("collab",      "Shared session with another user"),
 ]
 
-def cmd_beta(state, args, history):
+def cmd_beta_features(state, args, history):
+    """Legacy /beta features: docx, xlsx, screenshot, video, feedback (pro+)."""
     theme   = state.get("theme", THEMES["default"])
     plan_id = get_plan(state)
 
@@ -7664,7 +8405,7 @@ def cmd_beta(state, args, history):
                     vision_text = rdata["choices"][0]["message"]["content"]
                     console.print(_assistant_heading(state, "Vision", False, 0))
                     from rich.padding import Padding
-                    console.print(Padding(_clean_terminal_text(vision_text), (0, 0, 1, 4)))
+                    console.print(Markdown(vision_text))
                     history.append({"role": "user", "text": f"[screenshot: {p.name}]"})
                     history.append({"role": "model", "text": vision_text})
                     return history
@@ -7702,6 +8443,694 @@ def cmd_beta(state, args, history):
 
     console.print(f"[yellow]Unknown beta feature: {cmd2}. Try /beta list[/yellow]")
     return history
+
+
+# ═══════════════════════════════════════════════════════════
+# ── v9.1 NEW FEATURES ─────────────────────────────────────
+# ═══════════════════════════════════════════════════════════
+
+# ── /alias — define custom shortcuts for frequently used prompts ──────────
+_aliases_cache: dict = {}
+_aliases_cache_ts: float = 0.0
+_ALIASES_TTL = 30.0
+
+def _load_aliases() -> dict:
+    global _aliases_cache, _aliases_cache_ts
+    now = time.time()
+    if now - _aliases_cache_ts < _ALIASES_TTL:
+        return _aliases_cache
+    path = CONFIG_DIR / "aliases.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        data = {}
+    _aliases_cache, _aliases_cache_ts = data, now
+    return data
+
+def _save_aliases(aliases: dict) -> None:
+    global _aliases_cache, _aliases_cache_ts
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    (CONFIG_DIR / "aliases.json").write_text(json.dumps(aliases, indent=2), encoding="utf-8")
+    _aliases_cache, _aliases_cache_ts = aliases, time.time()
+
+def cmd_alias(state, args, history):
+    """/alias [list|set <name> <text>|del <name>|<name>] — custom prompt shortcuts."""
+    theme   = state.get("theme", THEMES["default"])
+    acc     = theme.get("accent", "cyan")
+    aliases = _load_aliases()
+    sub     = (args or "").strip()
+
+    if not sub or sub == "list":
+        if not aliases:
+            console.print("[dim]No aliases defined. /alias set <name> <text>[/dim]")
+            return history
+        tbl = Table(title="Custom Aliases", box=box.ROUNDED, border_style=theme["border"])
+        tbl.add_column("Alias", style=f"bold {acc}", min_width=12)
+        tbl.add_column("Expands to", style="dim")
+        for name, text in sorted(aliases.items()):
+            tbl.add_row(f"/{name}", text[:80] + ("..." if len(text) > 80 else ""))
+        console.print(tbl)
+        return history
+
+    parts = sub.split(" ", 2)
+    op    = parts[0].lower()
+
+    if op == "set":
+        if len(parts) < 3:
+            console.print("[yellow]Usage: /alias set <name> <prompt text>[/yellow]")
+            return history
+        name = parts[1].strip().lower()
+        text = parts[2].strip()
+        if not name or not text:
+            console.print("[yellow]Name and text are required.[/yellow]")
+            return history
+        aliases[name] = text
+        _save_aliases(aliases)
+        console.print(f"  [{acc}]✓ Alias '/{name}' saved.[/{acc}]")
+        return history
+
+    if op == "del":
+        name = parts[1].strip().lower() if len(parts) > 1 else ""
+        if name in aliases:
+            del aliases[name]
+            _save_aliases(aliases)
+            console.print(f"  [yellow]✓ Alias '/{name}' deleted.[/yellow]")
+        else:
+            console.print(f"[red]No alias: /{name}[/red]")
+        return history
+
+    # Direct expansion: /alias <name>
+    name = op
+    if name in aliases:
+        console.print(f"  [dim]Alias → {aliases[name][:60]}[/dim]")
+        _, history = ai_respond(state, aliases[name], history)
+    else:
+        console.print(f"[yellow]Unknown alias '/{name}'. Try /alias list or /alias set {name} <text>[/yellow]")
+    return history
+
+
+# ── /multiline — toggle multiline input mode ──────────────────────────────
+def cmd_multiline(state, args):
+    """/multiline [on|off] — toggle multi-line input (submit with Alt+Enter or blank line)."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    sub   = (args or "").strip().lower()
+    current = state.get("multiline_mode", False)
+
+    if sub in ("on", "1", "true"):
+        state["multiline_mode"] = True
+    elif sub in ("off", "0", "false"):
+        state["multiline_mode"] = False
+    else:
+        state["multiline_mode"] = not current
+
+    enabled = state["multiline_mode"]
+    if enabled:
+        console.print(Panel(
+            f"  [{acc}]Multiline input ON[/{acc}]\n\n"
+            "  Paste or type multiple lines.\n"
+            "  Submit with [bold]Alt+Enter[/bold] or enter a [bold]blank line[/bold].",
+            title="Multiline Mode", border_style=theme["border"], padding=(0, 2)
+        ))
+    else:
+        console.print(f"  [{acc}]Multiline input OFF — back to single-line.[/{acc}]")
+    return state
+
+
+# ── /note — save quick notes tied to this session ────────────────────────
+def _load_notes():
+    path = CONFIG_DIR / "notes.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+    return []
+
+def _save_notes(notes):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    (CONFIG_DIR / "notes.json").write_text(json.dumps(notes, indent=2), encoding="utf-8")
+
+def cmd_note(state, args):
+    """/note [text] — save a quick note; /note list to view; /note clear to wipe."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    sub   = (args or "").strip()
+    notes = _load_notes()
+
+    if not sub or sub == "list":
+        if not notes:
+            console.print("[dim]No notes yet. /note <text>[/dim]")
+            return
+        tbl = Table(title="Session Notes", box=box.ROUNDED, border_style=theme["border"])
+        tbl.add_column("#",    width=4, style="dim")
+        tbl.add_column("Time", style="dim", width=17)
+        tbl.add_column("Note")
+        for i, n in enumerate(notes[-30:], 1):
+            tbl.add_row(str(i), n.get("ts", "")[:16].replace("T", " "), n.get("text", ""))
+        console.print(tbl)
+        return
+
+    if sub == "clear":
+        _save_notes([])
+        console.print(f"  [yellow]✓ Notes cleared.[/yellow]")
+        return
+
+    entry = {"text": sub, "ts": datetime.now().isoformat()}
+    notes.append(entry)
+    _save_notes(notes)
+    console.print(f"  [{acc}]✓ Note saved ({len(notes)} total). /note list to view.[/{acc}]")
+
+
+# ── /regen — regenerate the last AI response with tweaked temperature ─────
+def cmd_regen(state, args, history):
+    """/regen — regenerate the last AI response (re-sends last prompt, model samples fresh)."""
+    theme    = state.get("theme", THEMES["default"])
+    acc      = theme.get("accent", "cyan")
+    last_p   = state.get("_last_prompt", "")
+    if not last_p:
+        console.print("[yellow]Nothing to regenerate — send a message first.[/yellow]")
+        return history
+
+    # Strip the last exchange from history so the model doesn't see its own previous answer
+    if len(history) >= 2:
+        history = history[:-2]
+
+    console.print(f"  [{acc}]⟳ Regenerating — fresh sample from the model...[/{acc}]")
+    _, history = ai_respond(state, last_p, history)
+    return history
+
+
+# ── /context-bar — show context window usage as a progress bar ───────────
+def cmd_context_bar(state, history):
+    """/context-bar — show context window usage and token budget."""
+    theme   = state.get("theme", THEMES["default"])
+    acc     = theme.get("accent", "cyan")
+
+    total_text = " ".join(
+        h.get("text", "") for h in history
+        if isinstance(h, dict) and h.get("text")
+    )
+    used_tokens  = approx_tokens(total_text)
+    # Gemini 2.0 Flash context window: 1M tokens; Gemini 1.5 Pro: 2M; others ~128k
+    model        = state.get("model", "")
+    if "gemini-2.5" in model or "gemini-2.0" in model or "1.5-pro" in model:
+        ctx_limit = 1_000_000
+    elif "gemini" in model:
+        ctx_limit = 128_000
+    else:
+        ctx_limit   = 128_000  # conservative default for OpenRouter
+
+    pct          = min(used_tokens / ctx_limit * 100, 100)
+    bar_width    = 40
+    filled       = int(bar_width * pct / 100)
+    empty        = bar_width - filled
+
+    if pct < 50:
+        bar_color = "green"
+    elif pct < 80:
+        bar_color = "yellow"
+    else:
+        bar_color = "red"
+
+    bar = f"[{bar_color}]{'█' * filled}[/{bar_color}][dim]{'░' * empty}[/dim]"
+    console.print(Panel(
+        f"  {bar}  [{acc}]{pct:.1f}%[/{acc}]\n\n"
+        f"  [bold]Used:[/bold]   {used_tokens:,} tokens (approx)\n"
+        f"  [bold]Limit:[/bold]  {ctx_limit:,} tokens\n"
+        f"  [bold]Turns:[/bold]  {len(history)} messages in context\n"
+        f"  [dim]/summarize-history to compress  ·  /clear to reset[/dim]",
+        title="[bold]Context Window[/bold]",
+        border_style=theme["border"], padding=(0, 2)
+    ))
+
+
+# ── /resume — auto-save + restore sessions ────────────────────────────────
+_AUTO_SAVE_FILE = CONFIG_DIR / "autosave.json"
+
+_autosave_last_len = 0
+
+def _autosave_session(history):
+    """Write history to autosave file; skips write when nothing new was added."""
+    global _autosave_last_len
+    if len(history) == _autosave_last_len:
+        return
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {"ts": datetime.now().isoformat(), "history": history}
+        _AUTO_SAVE_FILE.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        _autosave_last_len = len(history)
+    except Exception:
+        pass
+
+def cmd_resume(state, args, history):
+    """/resume — reload the last auto-saved session."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+
+    if not _AUTO_SAVE_FILE.exists():
+        console.print("[dim]No auto-saved session found. One will be created on your next message.[/dim]")
+        return history
+
+    try:
+        payload = json.loads(_AUTO_SAVE_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        console.print(f"[red]Failed to load autosave: {e}[/red]")
+        return history
+
+    saved_history = payload.get("history", [])
+    saved_ts      = payload.get("ts", "unknown")[:19].replace("T", " ")
+
+    if not saved_history:
+        console.print("[dim]Autosave exists but has no messages.[/dim]")
+        return history
+
+    console.print(Panel(
+        f"  [bold]Saved:[/bold]  {saved_ts}\n"
+        f"  [bold]Turns:[/bold]  {len(saved_history)} messages\n\n"
+        f"  [dim]This will replace the current history.[/dim]",
+        title="[bold]Resume Session[/bold]",
+        border_style=theme["border"], padding=(0, 2)
+    ))
+    confirm = console.input("  Load this session? [dim](y/n)[/dim]: ").strip().lower()
+    if confirm == "y":
+        console.print(f"  [{acc}]✓ Session restored — {len(saved_history)} messages loaded.[/{acc}]")
+        return saved_history
+    console.print("[dim]Cancelled.[/dim]")
+    return history
+
+
+# ── /history-search — grep through conversation history ──────────────────
+def cmd_history_search(state, args, history):
+    """/history-search <term> — find messages in current history."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    term  = (args or "").strip().lower()
+
+    if not term:
+        console.print("[yellow]Usage: /history-search <term>[/yellow]")
+        return history
+
+    if not history:
+        console.print("[dim]No history yet.[/dim]")
+        return history
+
+    hits = []
+    for i, msg in enumerate(history):
+        text = msg.get("text", "")
+        if term in text.lower():
+            hits.append((i, msg.get("role", "?"), text))
+
+    if not hits:
+        console.print(f"[dim]No matches for '{term}' in {len(history)} messages.[/dim]")
+        return history
+
+    tbl = Table(
+        title=f"History Search: '{term}' ({len(hits)} hit{'s' if len(hits) != 1 else ''})",
+        box=box.ROUNDED, border_style=theme["border"]
+    )
+    tbl.add_column("#",    width=5, style="dim")
+    tbl.add_column("Role", width=7)
+    tbl.add_column("Excerpt")
+    for idx, role, text in hits:
+        role_c = acc if role == "model" else "white"
+        # highlight the match in the excerpt
+        excerpt = text[:120].replace("\n", " ")
+        tbl.add_row(str(idx), f"[{role_c}]{role}[/{role_c}]", excerpt)
+    console.print(tbl)
+    return history
+
+
+# ── /compact — compress history to last N turns + an AI summary ───────────
+def cmd_compact(state, args, history):
+    """/compact [N] — keep last N turns (default 10) and prepend a summary."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+
+    try:
+        keep = int((args or "").strip())
+    except (ValueError, TypeError):
+        keep = 10
+
+    if len(history) <= keep * 2:
+        console.print(f"[dim]History has {len(history)} messages — nothing to compact.[/dim]")
+        return history
+
+    old_msgs   = history[:-(keep * 2)]
+    recent_msgs = history[-(keep * 2):]
+
+    # Build a text block of the older messages to summarise
+    old_text = "\n".join(
+        f"{m.get('role','?').upper()}: {m.get('text','')[:300]}"
+        for m in old_msgs
+    )
+    summary_prompt = (
+        f"Summarise the following conversation in 3-5 bullet points. "
+        f"Focus on decisions made, code written, and key facts established. "
+        f"Be dense — no fluff.\n\n{old_text}"
+    )
+    console.print(f"  [{acc}]Compacting {len(old_msgs)} messages into a summary…[/{acc}]")
+    summary, _ = ai_respond(state, summary_prompt, [], silent=True)
+    if not summary:
+        console.print("[yellow]Could not generate summary. History unchanged.[/yellow]")
+        return history
+
+    summary_block = [
+        {"role": "user",  "text": "[Context summary from earlier in this conversation:]"},
+        {"role": "model", "text": summary},
+    ]
+    new_history = summary_block + recent_msgs
+    console.print(Panel(
+        summary[:600] + ("..." if len(summary) > 600 else ""),
+        title=f"[bold]Compacted — {len(old_msgs)} → 2 messages + {len(recent_msgs)} recent[/bold]",
+        border_style=theme["border"], padding=(0, 1)
+    ))
+    console.print(f"  [{acc}]✓ History compacted to {len(new_history)} messages.[/{acc}]")
+    return new_history
+
+
+# ── /clip — copy last AI response to clipboard (alias for /copy) ──────────
+def cmd_clip(state, args=""):
+    """/clip — copy last AI response to clipboard."""
+    last_r = state.get("_last_response", "")
+    if not last_r:
+        console.print("[yellow]Nothing to copy — send a message first.[/yellow]")
+        return
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["clip"], input=last_r.encode("utf-8"), check=True)
+        else:
+            subprocess.run(["xclip", "-selection", "clipboard"], input=last_r.encode(), check=True)
+        console.print("[green]✓ Copied to clipboard[/green]")
+    except Exception:
+        console.print("[yellow]Copy failed (install clip/xclip). Printing instead:[/yellow]")
+        console.print(last_r)
+
+
+# ── END v9.1 NEW FEATURES ──────────────────────────────────────────────────
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  v9.2  CODEX KILLERS  —  /pr-review  /git-suggest  /test-coverage      ║
+# ║                           /safety-check                                ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+_GIT_MAX_DIFF = 10_000   # chars — trim diffs beyond this
+
+def _run_git(args_list, cwd=None):
+    """Run a git command, return (stdout, stderr). Never raises."""
+    try:
+        r = subprocess.run(
+            ["git"] + args_list,
+            capture_output=True, text=True, timeout=15, cwd=cwd,
+        )
+        return r.stdout.strip(), r.stderr.strip()
+    except Exception as e:
+        return "", str(e)
+
+
+# ── /pr-review ────────────────────────────────────────────────────────────────
+def cmd_pr_review(state, args, history):
+    """/pr-review [branch|commit..commit] — structured AI code review of a git diff."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    ws    = state.get("workspace_root") or "."
+
+    a = (args or "").strip()
+    if ".." in a:
+        diff_out, diff_err = _run_git(["diff", a, "--stat"], cwd=ws)
+        full_diff, _       = _run_git(["diff", a], cwd=ws)
+    elif a:
+        diff_out, diff_err = _run_git(["diff", f"main..{a}", "--stat"], cwd=ws)
+        full_diff, _       = _run_git(["diff", f"main..{a}"], cwd=ws)
+    else:
+        diff_out, diff_err = _run_git(["diff", "HEAD~1", "--stat"], cwd=ws)
+        full_diff, _       = _run_git(["diff", "HEAD~1"], cwd=ws)
+
+    if not full_diff:
+        console.print(f"[yellow]No diff found. {diff_err or 'Nothing to review.'}[/yellow]")
+        console.print("[dim]Usage: /pr-review [branch | commit..commit | HEAD~2][/dim]")
+        return history
+
+    # Stat summary + truncated diff
+    stat_header = diff_out[:600] if diff_out else "(no stat)"
+    body = full_diff if len(full_diff) <= _GIT_MAX_DIFF else full_diff[:_GIT_MAX_DIFF] + "\n\n[diff truncated]"
+
+    console.print(Panel(stat_header, title=f"[bold {acc}]📋 Diff Summary[/bold {acc}]",
+                        border_style=acc, padding=(0, 1)))
+
+    prompt = (
+        "You are a senior engineer reviewing a pull request diff.\n\n"
+        f"```diff\n{body}\n```\n\n"
+        "Review this diff. For every real issue found, output a line in this exact format:\n"
+        "[BLOCKER|WARNING|SUGGESTION] <file>:<line> — <issue description> — Fix: <specific fix>\n\n"
+        "Then write a short summary paragraph. Be direct and specific. Ignore trivial style nits."
+    )
+    _, history = ai_respond(state, prompt, history)
+    _autosave_session(history)
+
+    # Offer to save
+    console.print(f"\n[dim]Save review as [bold].pr_review.md[/bold]? (y/n)[/dim] ", end="")
+    try:
+        ans = _safe_input("").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        ans = "n"
+    if ans == "y":
+        out_path = Path(ws) / ".pr_review.md"
+        last = state.get("_last_response", "")
+        out_path.write_text(f"# PR Review\n\n**Diff:** `{a or 'HEAD~1'}`\n\n## Stat\n```\n{stat_header}\n```\n\n## Review\n\n{last}\n",
+                            encoding="utf-8")
+        console.print(f"[green]✓ Saved → {out_path.name}[/green]")
+    return history
+
+
+# ── /git-suggest ──────────────────────────────────────────────────────────────
+def cmd_git_suggest(state, args, history):
+    """/git-suggest — AI commit/branch strategy from your git history."""
+    ws = state.get("workspace_root") or "."
+
+    log_out,    _ = _run_git(["log", "--oneline", "-20", "--stat"], cwd=ws)
+    diff_stat,  _ = _run_git(["diff", "--stat", "HEAD"], cwd=ws)
+    branches,   _ = _run_git(["branch", "-a"], cwd=ws)
+    last_commit, _ = _run_git(["log", "-1", "--format=%B"], cwd=ws)
+
+    if not log_out:
+        console.print("[yellow]No git history found in this workspace.[/yellow]")
+        return history
+
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+
+    ctx = "\n\n".join(filter(None, [
+        f"## Recent commits (last 20)\n{log_out[:3000]}",
+        f"## Current unstaged changes\n{diff_stat[:800]}" if diff_stat else "",
+        f"## Branches\n{branches[:600]}" if branches else "",
+        f"## Latest commit message\n{last_commit[:400]}" if last_commit else "",
+    ]))
+
+    prompt = (
+        "Analyze this git history and give concrete recommendations:\n\n"
+        f"{ctx}\n\n"
+        "Answer these specifically:\n"
+        "1. **Squash candidates** — which recent commits should be squashed and why?\n"
+        "2. **PR size** — is the current diff too large to review? Suggest how to split it.\n"
+        "3. **Commit message quality** — flag any unclear messages, suggest rewrites.\n"
+        "4. **Rebase vs merge** — for the current branch state, which is better?\n"
+        "5. **Quick wins** — one concrete git command to improve the repo state right now.\n\n"
+        "Be direct. Give actual git commands where useful."
+    )
+    _, history = ai_respond(state, prompt, history)
+    _autosave_session(history)
+    return history
+
+
+# ── /test-coverage ────────────────────────────────────────────────────────────
+def cmd_test_coverage(state, args, history):
+    """/test-coverage [file] — run coverage, find gaps, generate targeted tests."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    ws    = state.get("workspace_root") or "."
+    target_file = (args or "").strip()
+
+    # Detect framework
+    ws_path = Path(ws)
+    is_pytest = any((ws_path / f).exists() for f in
+                    ("pytest.ini", "setup.cfg", "pyproject.toml", "conftest.py"))
+    is_jest   = any((ws_path / f).exists() for f in
+                    ("jest.config.js", "jest.config.ts", "jest.config.mjs")) or (
+                    (ws_path / "package.json").exists() and
+                    "jest" in (ws_path / "package.json").read_text(errors="replace"))
+
+    console.print(f"[{acc}]◈ Running coverage…[/{acc}]")
+
+    cov_output = ""
+    if is_pytest or (not is_jest):
+        try:
+            r = subprocess.run(
+                ["python", "-m", "pytest", "--tb=no", "-q",
+                 "--cov=.", "--cov-report=term-missing", "--no-header"],
+                capture_output=True, text=True, timeout=120, cwd=ws,
+            )
+            cov_output = (r.stdout + r.stderr)[:4000]
+        except FileNotFoundError:
+            console.print("[yellow]pytest not found — install: pip install pytest pytest-cov[/yellow]")
+            return history
+        except subprocess.TimeoutExpired:
+            console.print("[yellow]Coverage run timed out (120s)[/yellow]")
+            return history
+    elif is_jest:
+        try:
+            r = subprocess.run(
+                ["npx", "jest", "--coverage", "--silent", "--passWithNoTests"],
+                capture_output=True, text=True, timeout=120, cwd=ws, shell=True,
+            )
+            cov_output = (r.stdout + r.stderr)[:4000]
+        except Exception as e:
+            console.print(f"[yellow]Jest error: {e}[/yellow]")
+            return history
+
+    if not cov_output:
+        console.print("[yellow]No coverage output produced.[/yellow]")
+        return history
+
+    console.print(Panel(cov_output[:1200], title=f"[bold {acc}]Coverage Report[/bold {acc}]",
+                        border_style=acc, padding=(0, 1)))
+
+    # Optionally read the target file for context
+    file_ctx = ""
+    if target_file:
+        fp = Path(ws) / target_file if not Path(target_file).is_absolute() else Path(target_file)
+        if fp.exists():
+            file_ctx = f"\n\nTarget file `{fp.name}`:\n```python\n{fp.read_text(errors='replace')[:3000]}\n```"
+        else:
+            console.print(f"[yellow]File not found: {target_file}[/yellow]")
+
+    prompt = (
+        "Here is a test coverage report:\n\n"
+        f"```\n{cov_output}\n```"
+        f"{file_ctx}\n\n"
+        "Tasks:\n"
+        "1. Identify the 3 highest-value uncovered lines/branches (most likely to catch real bugs).\n"
+        "2. Generate complete, runnable test functions for those gaps.\n"
+        "3. Use the same test framework detected in the report (pytest/jest).\n"
+        "4. Each test should have a clear docstring explaining what it covers.\n\n"
+        "Output only the test code — no explanation wrapper."
+    )
+    _, history = ai_respond(state, prompt, history)
+    _autosave_session(history)
+    return history
+
+
+# ── /safety-check ─────────────────────────────────────────────────────────────
+_SAFETY_PATTERNS = [
+    (r'(api[_-]?key|secret|password|token)\s*=\s*["\'][a-zA-Z0-9_\-]{16,}["\']',
+     "Hardcoded secret", "HIGH"),
+    (r'(SELECT|INSERT|UPDATE|DELETE).{0,60}\+\s*["\']?\w',
+     "SQL string concat (injection risk)", "HIGH"),
+    (r'\beval\s*\(',          "eval() call",                "HIGH"),
+    (r'\bexec\s*\(',          "exec() call",                "HIGH"),
+    (r'pickle\.loads?\s*\(',  "Unsafe pickle deserialize",  "HIGH"),
+    (r'os\.system\s*\(',      "os.system() shell injection","MEDIUM"),
+    (r'subprocess\.call\(.+shell\s*=\s*True',
+     "subprocess with shell=True", "MEDIUM"),
+    (r'hashlib\.md5\s*\(',    "Weak hash (MD5)",            "LOW"),
+    (r'hashlib\.sha1\s*\(',   "Weak hash (SHA-1)",          "LOW"),
+    (r'(http://)\w',          "Plaintext HTTP endpoint",    "LOW"),
+]
+
+def _scan_file_safety(path: Path) -> list[tuple]:
+    """Return list of (line_no, pattern_label, severity, line_text) hits."""
+    hits = []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return hits
+    for i, line in enumerate(lines, 1):
+        for pattern, label, severity in _SAFETY_PATTERNS:
+            if re.search(pattern, line, re.IGNORECASE):
+                hits.append((i, label, severity, line.strip()[:100]))
+                break
+    return hits
+
+def cmd_safety_check(state, args, history):
+    """/safety-check [file|dir] — OWASP scan with AI-generated patch-ready fixes."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    ws    = state.get("workspace_root") or "."
+
+    target = (args or "").strip() or ws
+    target_path = (Path(ws) / target) if not Path(target).is_absolute() else Path(target)
+
+    # Collect files to scan
+    if target_path.is_file():
+        files = [target_path]
+    else:
+        exts = {".py", ".js", ".ts", ".go", ".java", ".php", ".rb"}
+        files = sorted(
+            (f for f in target_path.rglob("*") if f.suffix in exts
+             and ".git" not in f.parts and "node_modules" not in f.parts
+             and "venv" not in f.parts),
+            key=lambda f: f.stat().st_size, reverse=True
+        )[:8]
+
+    if not files:
+        console.print(f"[yellow]No scannable files found in {target_path}[/yellow]")
+        return history
+
+    console.print(f"[{acc}]◈ Scanning {len(files)} file(s)…[/{acc}]")
+
+    # Pre-scan with regex
+    all_hits: list[tuple] = []
+    for f in files:
+        for line_no, label, severity, text in _scan_file_safety(f):
+            all_hits.append((f.name, line_no, label, severity, text))
+
+    # Build Rich table of pre-scan hits
+    if all_hits:
+        tbl = Table(title="⚠ Pre-scan Hits", box=box.ROUNDED, border_style="yellow")
+        tbl.add_column("Sev", style="bold", min_width=6)
+        tbl.add_column("File", style="cyan")
+        tbl.add_column("Line", style="dim", min_width=4)
+        tbl.add_column("Issue", style="white")
+        sev_color = {"HIGH": "red", "MEDIUM": "yellow", "LOW": "dim"}
+        for fname, ln, label, sev, _ in all_hits[:30]:
+            tbl.add_row(f"[{sev_color.get(sev,'white')}]{sev}[/{sev_color.get(sev,'white')}]",
+                        fname, str(ln), label)
+        console.print(tbl)
+    else:
+        console.print(f"[green]✓ No obvious patterns detected — running deep AI scan…[/green]")
+
+    # Build code context for AI (first 2 files or target file)
+    code_ctx_parts = []
+    for f in files[:3]:
+        content = f.read_text(encoding="utf-8", errors="replace")[:2500]
+        code_ctx_parts.append(f"### {f.name}\n```\n{content}\n```")
+    code_ctx = "\n\n".join(code_ctx_parts)
+
+    hits_ctx = "\n".join(
+        f"- [{sev}] {fname}:{ln} — {label}" for fname, ln, label, sev, _ in all_hits
+    ) or "No regex hits — do a thorough manual review."
+
+    prompt = (
+        "You are an OWASP security expert. Perform a security review.\n\n"
+        f"Pre-scan findings:\n{hits_ctx}\n\n"
+        f"Code:\n{code_ctx}\n\n"
+        "For each real vulnerability found, output EXACTLY:\n"
+        "**[HIGH|MEDIUM|LOW] CWE-XXX — <Title>**\n"
+        "File: `filename.py` Line: N\n"
+        "Issue: <one sentence>\n"
+        "Fix:\n```language\n<fixed code snippet>\n```\n\n"
+        "Then a one-paragraph summary of the overall security posture. "
+        "Skip false positives. Be precise."
+    )
+    _, history = ai_respond(state, prompt, history)
+    _autosave_session(history)
+
+    console.print(f"\n[dim]Run [bold]/patch <file>[/bold] to apply any fixes suggested above.[/dim]")
+    return history
+
+
+# ── END v9.2 NEW FEATURES ──────────────────────────────────────────────────
 
 
 # ── EXPERIMENTAL (prank) ─────────────────────────────────
@@ -7807,6 +9236,105 @@ def cmd_experimental(state, args):
     console.print(f"[yellow]Usage: /experimental   /experimental enable   /experimental disable[/yellow]")
 
 
+def cmd_help(state):
+    theme  = state.get("theme", THEMES["default"])
+    acc    = theme.get("accent", "cyan")
+    border = theme.get("border", "cyan").replace("bold ", "")
+
+    def _section(icon, title, rows):
+        body = "\n".join(
+            f"  [bold {acc}]{cmd:<28}[/bold {acc}] [dim]{desc}[/dim]"
+            for cmd, desc in rows
+        )
+        console.print(Panel(body, title=f"[bold]{icon}  {title}[/bold]",
+                            border_style=border, padding=(0, 1)))
+
+    console.print()
+    console.print(Panel(
+        f"  [bold]AI STUDIO CLI[/bold]  [dim]v{VERSION}[/dim]  ·  [dim]Type a command or just chat[/dim]",
+        border_style=acc.replace("bold ", ""),
+        padding=(0, 2),
+    ))
+    console.print()
+
+    _section("💬", "Chat", [
+        ("/clear",                   "New conversation + clear screen"),
+        ("/retry  /again",           "Re-send last message"),
+        ("/copy",                    "Copy last response to clipboard"),
+        ("/history",                 "Show conversation so far"),
+        ("/save <name>  /load",      "Save / load conversations"),
+        ("/export",                  "Export chat to HTML"),
+        ("/mode casual|build|fif",   "Set chat mode"),
+    ])
+    _section("🧠", "Memory", [
+        ("/remember <fact>",         "Persist a fact across sessions"),
+        ("/memory  /forget [n]",     "Show / clear memories"),
+        ("/context <file>",          "Attach file to every prompt"),
+    ])
+    _section("🔧", "AI + Files", [
+        ("/read <file>",             "Read and analyze a file"),
+        ("/write <file> <task>",     "Generate and save with preview"),
+        ("/code <task>",             "Write code (preview before save)"),
+        ("/fix <file>",              "AI fixes file and writes back"),
+        ("/patch <file> [instr]",    "Surgical AI patch with diff"),
+        ("/fif <file>",              "Find · Identify · Fix — deep bug hunt"),
+        ("/analyze <dir>",           "Scan project for bugs"),
+        ("/lint <file>",             "Quick AI lint/review"),
+        ("/explain <file> <line>",   "Explain a line of code"),
+    ])
+    _section("📁", "Filesystem", [
+        ("/ls  /tree  /pwd  /cd",    "Navigate"),
+        ("/cat  /find  /grep",       "View and search files"),
+        ("/mkdir  /rm  /cp  /mv",    "Manage files"),
+        ("/diff  /summary",          "Compare and summarise"),
+    ])
+    _section("⚙️ ", "Dev Tools", [
+        ("/shell <cmd>",             "Run any shell command"),
+        ("/run <file>",              "Run file, AI fixes errors"),
+        ("/git [cmd]",               "Git helper (commit/diff/log)"),
+        ("/watch <file>|off",        "Watch file, AI reacts to changes"),
+        ("/bench",                   "Model speed benchmark"),
+        ("/todo",                    "Scan workspace for TODO/FIXME"),
+        ("/voice",                   "Speak last response (Windows TTS)"),
+    ])
+    _section("🎨", "Models & UI", [
+        ("/models",                  "List all models (table)"),
+        ("/model <id>",              "Switch model"),
+        ("/persona <n>",             "berry · silicon · cockroach · hacker"),
+        ("/theme <n>",               "neon · dracula · nord · strawberry +"),
+        ("/ui <style>",              "studio · claude · foxxia · strawberry"),
+        ("/vibe <preset>",           "One-shot UI + theme combo"),
+        ("/stream off|auto|on|type", "Toggle streaming mode"),
+        ("/arena <m1,m2> <prompt>",  "Battle of the models"),
+        ("/changelog",               "View version history"),
+    ])
+    _section("🤖", "Agents", [
+        ("/agent <id> [task]",       "Spawn or run an agent"),
+        ("/agents",                  "Show full agent roster"),
+        ("/squad <task>",            "Multi-agent parallel task"),
+        ("/autoagent <task>",        "Auto-select best agent"),
+    ])
+    _section("✨", "Extras", [
+        ("/upgrade [plan]",          "Switch plan: free/pro/max/ultra"),
+        ("/plan",                    "Show current plan + usage"),
+        ("/feedback <msg>",          "Submit feedback"),
+        ("/complain <msg>",          "Register a complaint (enterprise gets priority)"),
+        ("/snippet list|save|get",   "Code snippet manager"),
+        ("/imagine <prompt>",        "Generate image (HuggingFace)"),
+        ("/balance  /stats  /cost",  "Usage / financials"),
+        ("/experimental",            "Unlock hidden features"),
+    ])
+    _section("⌨️ ", "Keyboard", [
+        ("Ctrl+C",                   "Cancel active output  (idle: shows exit hint)"),
+        ("Ctrl+L",                   "Clear screen"),
+        ("Tab",                      "Autocomplete command"),
+        ("↑ / ↓",                    "Browse prompt history"),
+        ("/shortcuts",               "Full keyboard reference"),
+        ("/exit",                    "Quit"),
+    ])
+    console.print()
+
+# Legacy string kept for one-shot contexts (onboarding, etc.) — do not use in REPL
 HELP_TEXT = f"""
 [bold cyan]+============================================================+
 |        AI STUDIO CLI v{VERSION}  --  COMMAND REFERENCE          |
@@ -8125,8 +9653,13 @@ def ensure_onboarded(state):
     plan_raw = console.input("    > ").strip().lower() or "free"
     plan = plan_raw if plan_raw in PLANS else "free"
 
+    # ── Team / Enterprise: run negotiation during onboarding ─────────────────
+    if plan in ("team", "enterprise"):
+        plan = _run_enterprise_negotiation(state, plan, is_onboarding=True)
+        time.sleep(0.3)
+
     # ── Secret letter check for paid plans ───────────────────────────────────
-    if plan in ("pro", "max", "ultra"):
+    elif plan in ("pro", "max", "ultra"):
         letters = "".join(_r.sample(_s.ascii_uppercase, 5))
         console.print()
         console.print(f"  🔐 Quick human check — pick any letter from: [bold cyan]{' '.join(letters)}[/bold cyan]")
@@ -8221,7 +9754,7 @@ def ensure_onboarded(state):
     )
     console.print(Panel(summary, title=f"[bold cyan]◆ Studio Ready — v{VERSION}[/bold cyan]", border_style="cyan", padding=(1, 2)))
     console.print()
-    input("  [Enter to launch] ")
+    _safe_input("  [Enter to launch] ")
     clear_terminal()
     render_welcome(state)
     # Tell run_repl not to render welcome again (avoid double banner)
@@ -8420,28 +9953,180 @@ def render_welcome(state):
 
     # ── FOXXIA ──────────────────────────────────────────────────────────────
     if ui == "foxxia":
-        foxxia_lines = [
+        fox_body = (
+            f"  [bold #fbbf24]Model[/bold #fbbf24]    [#fbbf24]{short}[/#fbbf24]"
+            f"  [dim]·  {mode_str}[/dim]\n"
+            f"  [bold #fbbf24]Dir[/bold #fbbf24]      [dim]{ws_short}[/dim]\n"
+            f"  [bold #fbbf24]Plan[/bold #fbbf24]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
+        )
+        console.print(Panel(
+            fox_body,
+            title=f"[bold #f97316]🦊  FOXXIA[/bold #f97316]  [dim #fbbf24]╱  Dev Studio  ·  v{VERSION}[/dim #fbbf24]",
+            subtitle=f"[dim #f97316]Foxxed909  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #f97316]",
+            border_style="#f97316",
+            padding=(0, 2),
+        ))
+        console.print("  [dim #f97316]/enter .   /models   /agent berry   /vibe   /help[/dim #f97316]")
+        console.print()
+        return
+
+    # ── STRAWBERRY ──────────────────────────────────────────────────────────
+    if ui == "strawberry":
+        berry_body = (
+            f"  [bold #fb7185]Model[/bold #fb7185]    [#fb7185]{short}[/#fb7185]"
+            f"  [dim]·  {mode_str}[/dim]\n"
+            f"  [bold #fb7185]Dir[/bold #fb7185]      [dim]{ws_short}[/dim]\n"
+            f"  [bold #fb7185]Plan[/bold #fb7185]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
+        )
+        console.print(Panel(
+            berry_body,
+            title=f"[bold #e11d48]🍓  STRAWBERRY[/bold #e11d48]  [dim #fb7185]╱  Dev Studio  ·  v{VERSION}[/dim #fb7185]",
+            subtitle=f"[dim #e11d48]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #e11d48]",
+            border_style="#e11d48",
+            padding=(0, 2),
+        ))
+        console.print("  [dim #e11d48]/enter .   /models   /agent berry   /vibe   /help[/dim #e11d48]")
+        console.print()
+        return
+
+    # ── DARK RED ────────────────────────────────────────────────────────────
+    if ui == "darkred":
+        body = (
+            f"  [bold #dc143c]Model[/bold #dc143c]    [#dc143c]{short}[/#dc143c]"
+            f"  [dim]·  {mode_str}[/dim]\n"
+            f"  [bold #dc143c]Dir[/bold #dc143c]      [dim]{ws_short}[/dim]\n"
+            f"  [bold #dc143c]Plan[/bold #dc143c]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
+        )
+        console.print(Panel(
+            body,
+            title=f"[bold #dc143c]🩸  DARK RED[/bold #dc143c]  [dim #8b0000]╱  Dev Studio  ·  v{VERSION}[/dim #8b0000]",
+            subtitle=f"[dim #8b0000]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #8b0000]",
+            border_style="#8b0000",
+            padding=(0, 2),
+        ))
+        console.print("  [dim #8b0000]/enter .   /models   /agent berry   /vibe   /help[/dim #8b0000]")
+        console.print()
+        return
+
+    # ── SOPHIA ──────────────────────────────────────────────────────────────
+    if ui == "sophia":
+        body = (
+            f"  [bold #c084fc]Model[/bold #c084fc]    [#c084fc]{short}[/#c084fc]"
+            f"  [dim]·  {mode_str}[/dim]\n"
+            f"  [bold #c084fc]Dir[/bold #c084fc]      [dim]{ws_short}[/dim]\n"
+            f"  [bold #c084fc]Plan[/bold #c084fc]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
+        )
+        console.print(Panel(
+            body,
+            title=f"[bold #c084fc]💜  SOPHISTICATED SOPHIA[/bold #c084fc]  [dim #a855f7]╱  v{VERSION}[/dim #a855f7]",
+            subtitle=f"[dim #6b21a8]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #6b21a8]",
+            border_style="#6b21a8",
+            padding=(0, 2),
+        ))
+        console.print("  [dim #6b21a8]/enter .   /models   /agent berry   /vibe   /help[/dim #6b21a8]")
+        console.print()
+        return
+
+    # ── GOD OWN SON ─────────────────────────────────────────────────────────
+    if ui == "godson":
+        body = (
+            f"  [bold #fde68a]Model[/bold #fde68a]    [#fde68a]{short}[/#fde68a]"
+            f"  [dim]·  {mode_str}[/dim]\n"
+            f"  [bold #fde68a]Dir[/bold #fde68a]      [dim]{ws_short}[/dim]\n"
+            f"  [bold #fde68a]Plan[/bold #fde68a]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
+        )
+        console.print(Panel(
+            body,
+            title=f"[bold #fde68a]✝  GOD OWN SON[/bold #fde68a]  [dim #b45309]╱  Dev Studio  ·  v{VERSION}[/dim #b45309]",
+            subtitle=f"[dim #b45309]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #b45309]",
+            border_style="#b45309",
+            padding=(0, 2),
+        ))
+        console.print("  [dim #b45309]/enter .   /models   /agent berry   /vibe   /help[/dim #b45309]")
+        console.print()
+        return
+
+    # ── DOWN CLI ────────────────────────────────────────────────────────────
+    if ui == "downcli":
+        console.print()
+        console.print(f"  [#9ca3af]▼  down cli  v{VERSION}[/#9ca3af]")
+        console.print(f"  [dim]{'╌' * 40}[/dim]")
+        console.print(f"  [#6b7280]model    {short}[/#6b7280]")
+        console.print(f"  [#6b7280]via      {mode_str}[/#6b7280]")
+        console.print(f"  [#6b7280]plan     {plan_cfg['badge']} {plan_cfg['name']}[/#6b7280]")
+        console.print(f"  [#6b7280]dir      {ws_short}[/#6b7280]")
+        console.print(f"  [dim]{'╌' * 40}[/dim]")
+        console.print(f"  [dim #6b7280]/enter · /models · /agent berry · /help[/dim #6b7280]")
+        console.print()
+        return
+
+    # ── BAD HAPPENING ───────────────────────────────────────────────────────
+    if ui == "badhappening":
+        body = (
+            f"  [bold #ea580c]Model[/bold #ea580c]    [#84cc16]{short}[/#84cc16]"
+            f"  [dim]·  {mode_str}[/dim]\n"
+            f"  [bold #ea580c]Dir[/bold #ea580c]      [dim]{ws_short}[/dim]\n"
+            f"  [bold #ea580c]Plan[/bold #ea580c]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
+        )
+        console.print(Panel(
+            body,
+            title=f"[bold #ea580c]⚠  BAD HAPPENING[/bold #ea580c]  [dim #84cc16]╱  v{VERSION}[/dim #84cc16]",
+            subtitle=f"[dim #ea580c]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #ea580c]",
+            border_style="#ea580c",
+            padding=(0, 2),
+        ))
+        console.print("  [dim #ea580c]/enter .   /models   /agent berry   /vibe   /help[/dim #ea580c]")
+        console.print()
+        return
+
+    # ── RAIN ────────────────────────────────────────────────────────────────
+    if ui == "rain":
+        rain_lines = [
             "  ╔══════════════════════════════════════════════════════╗",
-            "  ║  🦊   F O X X I A   D E V   S T U D I O   v" + VERSION + "   ║",
+            "  ║  ░ ░ ░   R  A  I  N   S  T  U  D  I  O   ░ ░ ░     ║",
             "  ║  ──────────────────────────────────────────────────  ║",
-            f"  ║  by Foxxed909  ·  {plan_cfg['badge']} {plan_cfg['name']:<36}║",
+            f"  ║  v{VERSION}  · the terminal breathes                       ║",
             "  ╚══════════════════════════════════════════════════════╝",
         ]
-        _animate_banner(foxxia_lines, "bold yellow", delay=0.035)
+        _animate_banner(rain_lines, "bold #00FF41", delay=0.035)
+        console.print()
+        noise = (
+            "[dim #00FF41]│[/dim #00FF41]"
+            "[bold #00FF41]█[/bold #00FF41]"
+            "[dim #00FF41]╎[/dim #00FF41]"
+            "[bold #00FFFF]▓[/bold #00FFFF]"
+            "[dim #00FF41]│[/dim #00FF41]"
+            "[bold #00FF41]░[/bold #00FF41]"
+            "[dim #00FF41]╎[/dim #00FF41]"
+            "[bold #00FFFF]│[/bold #00FFFF]"
+            "[dim #00FF41]█[/dim #00FF41]"
+            "[bold #00FF41]░[/bold #00FF41]"
+            "[dim #00FF41]╎[/dim #00FF41]"
+            "[bold #00FFFF]▓[/bold #00FFFF]"
+        )
+        console.print(f"  {noise}")
         console.print()
         info = (
-            f"  [bold yellow]🦊 Model[/bold yellow]    {short}  [dim]· {mode_str}[/dim]\n"
-            f"  [bold yellow]🦊 Dir[/bold yellow]      [dim]{ws_short}[/dim]\n"
-            f"  [bold yellow]🦊 Plan[/bold yellow]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]  "
-            f"[dim]{msg_str} msgs  ·  session #{sess_n}[/dim]\n"
+            f"  [bold #00FF41]░ Model[/bold #00FF41]    [#00FFFF]{short}[/#00FFFF]"
+            f"  [dim #00FF41]· {mode_str}[/dim #00FF41]\n"
+            f"  [bold #00FF41]░ Dir[/bold #00FF41]      [dim]{ws_short}[/dim]\n"
+            f"  [bold #00FF41]░ Plan[/bold #00FF41]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+            f"  [dim #00FF41]{msg_str} msgs[/dim #00FF41]\n"
+            f"  [bold #00FF41]░ Stream[/bold #00FF41]   [dim #00FF41]{stream_m}[/dim #00FF41]\n"
         )
         console.print(Panel(
             info,
-            border_style="yellow",
+            border_style="#00FF41",
             padding=(0, 1),
         ))
         console.print(
-            "  [dim yellow]/enter .   /models   /agent berry   /vibe   /help[/dim yellow]\n"
+            "  [dim #00FF41]/enter .   /models   /agent berry   /vibe   /help[/dim #00FF41]\n"
         )
         return
 
@@ -8522,6 +10207,8 @@ def _prompt_html(theme, ui_style):
         return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>⚡ </{ac}>")
     if ui_style == "foxxia":
         return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>🦊 </{ac}>")
+    if ui_style == "rain":
+        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>░ </{ac}>")
     return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>›</{ac}> ")
 
 
@@ -8531,13 +10218,7 @@ _TOOLBAR_TTL = 5.0  # seconds between disk reads
 def _make_toolbar(state):
     """Returns a callable bottom-toolbar for prompt_toolkit."""
     def _toolbar():
-        prov = ("CLI" if state.get("use_cli")
-                else "OR" if (state.get("use_openrouter") or _is_openrouter_model(state.get("model",""))) and state.get("openrouter_key")
-                else "Gem")
-        model   = _short_model(state.get("model") or "?")
-        stream  = state.get("stream_mode") or "auto"
-        ui_n    = state.get("ui_style") or "gemini"
-        # TTL-cached disk reads — avoid hitting disk on every keypress
+        # ── TTL-cached disk reads ──────────────────────────────────────────────
         now = time.time()
         if now - _toolbar_disk_cache["ts"] >= _TOOLBAR_TTL:
             try:
@@ -8552,40 +10233,110 @@ def _make_toolbar(state):
                 _toolbar_disk_cache["branch"] = r.stdout.strip() if r.returncode == 0 else ""
             except Exception:
                 _toolbar_disk_cache["branch"] = ""
-            _toolbar_disk_cache["ts"]    = now
-        mem_n  = _toolbar_disk_cache["mem_n"]
-        branch = _toolbar_disk_cache["branch"]
+            _toolbar_disk_cache["ts"] = now
+
+        # ── Resolve which fields to show ───────────────────────────────────────
+        fields = state.get("statusline_fields", _STATUSLINE_DEFAULTS_LAZY)
+
+        def show(f): return f in fields
+
+        # ── Gather values ──────────────────────────────────────────────────────
+        prov = ("CLI" if state.get("use_cli")
+                else "OR" if (state.get("use_openrouter") or _is_openrouter_model(state.get("model", ""))) and state.get("openrouter_key")
+                else "Gem")
+        mdl       = _short_model(state.get("model") or "?")
+        stream    = state.get("stream_mode") or "auto"
+        ui_n      = state.get("ui_style") or "gemini"
+        mem_n     = _toolbar_disk_cache["mem_n"]
+        branch    = _toolbar_disk_cache["branch"]
         active    = state.get("active_agent") or ""
         chat_mode = state.get("_chat_mode", "")
         lt        = state.get("_last_tokens")
-        tok_part  = f" · <b>{lt['out']}t</b> {lt['sec']}s" if lt else ""
-        agent_part = f" · <b>🤖{active}</b>" if active else ""
-        mode_part  = f" · <b>{chat_mode.upper()}</b>" if chat_mode and chat_mode != "normal" else ""
-        cwd = Path.cwd().name[:16]
-        # Plan + messages
-        try:
-            _pid     = get_plan(state)
-            _pcfg    = PLANS.get(_pid, PLANS["free"])
-            _prof    = _toolbar_disk_cache["prof"]
-            _msgs    = _prof.get("session_msgs", 0)
-            _mlimit  = _pcfg["msg_limit"]
-            _trial   = _toolbar_disk_cache["trial"]
-            if _trial:
-                _rem = max(0, _trial["expires"] - time.time())
-                _ph, _pr = divmod(int(_rem), 3600)
-                plan_part = f" · <b>⚡trial</b> {_ph}h{_pr//60:02d}m"
-            elif _mlimit >= 99999:
-                plan_part = f" · {_pcfg['badge']}{_pcfg['name']}"
+        cwd       = Path.cwd().name[:14]
+        working   = state.get("_working", False)
+
+        # ── Build parts based on enabled fields ────────────────────────────────
+        tb_icon = "🦊" if ui_n == "foxxia" else "◆"
+        parts = [f" <b>{tb_icon} {prov}</b>"]
+
+        if show("model"):
+            parts.append(f"<b>{mdl}</b>")
+
+        if show("stream"):
+            parts.append(stream)
+
+        if show("cwd"):
+            parts.append(f"📁{cwd}")
+
+        if show("mem"):
+            parts.append(f"mem:{mem_n}")
+
+        if show("branch") and branch:
+            parts.append(f"<b>⎇{branch}</b>")
+
+        # Plan
+        if show("plan"):
+            try:
+                _pid   = get_plan(state)
+                _pcfg  = PLANS.get(_pid, PLANS["free"])
+                _prof  = _toolbar_disk_cache["prof"]
+                _msgs  = _prof.get("session_msgs", 0)
+                _mlimit = _pcfg["msg_limit"]
+                _trial = _toolbar_disk_cache["trial"]
+                if _trial:
+                    _rem = max(0, _trial["expires"] - now)
+                    _ph, _pr = divmod(int(_rem), 3600)
+                    parts.append(f"<b>⚡trial</b> {_ph}h{_pr//60:02d}m")
+                elif _mlimit >= 99999:
+                    parts.append(f"{_pcfg['badge']}{_pcfg['name']}")
+                else:
+                    parts.append(f"{_pcfg['badge']} {_msgs}/{_mlimit}msg")
+            except Exception:
+                pass
+
+        # Tokens
+        if lt:
+            if show("tokens") or show("out_tokens"):
+                parts.append(f"<b>{lt.get('out',0)}↑t</b>")
+            if show("in_tokens"):
+                parts.append(f"{lt.get('in',0)}↓t")
+            if show("tokens"):
+                parts.append(f"{lt.get('sec',0)}s")
+
+        # Mode
+        if show("mode") and chat_mode and chat_mode != "normal":
+            parts.append(f"<b>{chat_mode.upper()}</b>")
+
+        # Agent
+        if show("agent") and active:
+            parts.append(f"<b>🤖{active}</b>")
+
+        # Fast mode indicator
+        if show("fast") and state.get("fast_mode"):
+            parts.append("<b>⚡FAST</b>")
+
+        # Thinking budget
+        budget = state.get("thinking_budget", 0)
+        if budget > 0:
+            parts.append(f"◈think:{budget//500}s")
+
+        # Working / idle state
+        if show("working"):
+            parts.append("<b>● WORKING</b>" if working else "○ idle")
+
+        # ── Timer countdown (always shown when set, not field-gated) ──────────
+        dl = state.get("_timer_deadline")
+        if dl:
+            rem = dl - now
+            if rem <= 0:
+                parts.append("<b>⏰ DEADLINE!</b>")
             else:
-                plan_part = f" · {_pcfg['badge']} {_msgs}/{_mlimit}msg"
-        except Exception:
-            plan_part = ""
-        branch_part = f" · <b>⎇{branch}</b>" if branch else ""
-        return HTML(
-            f' <b>◆ {prov}</b> · <b>{model}</b>'
-            f' · {ui_n} · {stream} · mem:{mem_n} · 📁{cwd}'
-            f'{branch_part}{plan_part}{tok_part}{mode_part}{agent_part} '
-        )
+                h, r2 = divmod(int(rem), 3600)
+                m2, s = divmod(r2, 60)
+                timer_str = f"{h}h {m2:02d}m {s:02d}s" if h else f"{m2}m {s:02d}s"
+                parts.append(f"<b>⏱{timer_str}</b>")
+
+        return HTML(" · ".join(parts) + " ")
     return _toolbar
 
 
@@ -8626,13 +10377,77 @@ def _prompt_box(theme, ui_style, state):
             (f"fg:{ac} bold", "⚡ "),
         ])
     elif ui_style == "foxxia":
-        fill = max(2, 48 - len(label) - len(model_short) - len(mode_tag))
-        top  = f" ╔═ 🦊 {label}{mode_tag} {'─'*fill} {model_short} ═╗\n"
+        label = "foxxia"
+        fill = max(2, 52 - len(label) - len(model_short) - len(mode_tag))
+        top  = f" ╭─ 🦊 {label}{mode_tag} {'─'*fill} {model_short} ─╮\n"
+        mid  = " │ "
+        return FormattedText([
+            ("fg:#f97316",       top),
+            ("fg:#f97316",       mid),
+            ("fg:#fbbf24 bold",  "❯ "),
+        ])
+    elif ui_style == "strawberry":
+        label = "strawberry"
+        fill = max(2, 52 - len(label) - len(model_short) - len(mode_tag))
+        top  = f" ╭─ 🍓 {label}{mode_tag} {'─'*fill} {model_short} ─╮\n"
+        mid  = " │ "
+        return FormattedText([
+            ("fg:#e11d48",       top),
+            ("fg:#e11d48",       mid),
+            ("fg:#fb7185 bold",  "❯ "),
+        ])
+    elif ui_style == "darkred":
+        label = "darkred"
+        fill = max(2, 52 - len(label) - len(model_short) - len(mode_tag))
+        top  = f" ╭─ 🩸 {label}{mode_tag} {'─'*fill} {model_short} ─╮\n"
+        mid  = " │ "
+        return FormattedText([
+            ("fg:#8b0000",       top),
+            ("fg:#8b0000",       mid),
+            ("fg:#dc143c bold",  "❯ "),
+        ])
+    elif ui_style == "sophia":
+        label = "sophia"
+        fill = max(2, 52 - len(label) - len(model_short) - len(mode_tag))
+        top  = f" ╔═ 💜 {label}{mode_tag} {'─'*fill} {model_short} ═╗\n"
         mid  = " ║ "
         return FormattedText([
-            (f"fg:{pc}", top),
-            (f"fg:{pc}", mid),
-            (f"fg:{ac} bold", "🦊 "),
+            ("fg:#6b21a8",       top),
+            ("fg:#6b21a8",       mid),
+            ("fg:#c084fc bold",  "✦ "),
+        ])
+    elif ui_style == "godson":
+        label = "godson"
+        fill = max(2, 52 - len(label) - len(model_short) - len(mode_tag))
+        top  = f" ╭─ ✝ {label}{mode_tag} {'─'*fill} {model_short} ─╮\n"
+        mid  = " │ "
+        return FormattedText([
+            ("fg:#b45309",       top),
+            ("fg:#b45309",       mid),
+            ("fg:#fde68a bold",  "❯ "),
+        ])
+    elif ui_style == "downcli":
+        return FormattedText([
+            ("fg:#6b7280",       f" ▼  down  [{model_short}] "),
+        ])
+    elif ui_style == "badhappening":
+        label = "bad"
+        fill = max(2, 52 - len(label) - len(model_short) - len(mode_tag))
+        top  = f" ╔═ ⚠ {label}{mode_tag} {'─'*fill} {model_short} ═╗\n"
+        mid  = " ║ "
+        return FormattedText([
+            ("fg:#ea580c",       top),
+            ("fg:#ea580c",       mid),
+            ("fg:#84cc16 bold",  "! "),
+        ])
+    elif ui_style == "rain":
+        fill = max(2, 48 - len(label) - len(model_short) - len(mode_tag))
+        top  = f" ╔═ ░ {label}{mode_tag} {'·'*fill} {model_short} ═╗\n"
+        mid  = " ║ "
+        return FormattedText([
+            ("fg:#00ff41",       top),
+            ("fg:#00ff41",       mid),
+            ("fg:#00ffff bold",  "░ "),
         ])
     else:
         fill   = max(2, 55 - len(label) - len(model_short))
@@ -8679,14 +10494,14 @@ def run_repl(state):
 
     ensure_onboarded(state)
 
-    # Reload after onboarding changes
+    # Reload after onboarding changes — always prefer file-saved values over profile defaults
     theme, theme_name = load_theme()
     state["theme"]            = theme
     state["theme_name"]       = theme_name
-    state["ui_style"]         = state.get("ui_style")         or load_ui_style()
-    state["stream_mode"]      = state.get("stream_mode")      or load_stream_mode()
-    state["workspace_root"]   = state.get("workspace_root")   or load_workspace_root()
-    state["permissions_mode"] = state.get("permissions_mode") or load_permissions_mode()
+    state["ui_style"]         = load_ui_style()
+    state["stream_mode"]      = load_stream_mode() or state.get("stream_mode") or "auto"
+    state["workspace_root"]   = load_workspace_root() or state.get("workspace_root")
+    state["permissions_mode"] = load_permissions_mode() or state.get("permissions_mode") or "workspace"
 
     if state["model"] == DEFAULT_MODEL:
         last = load_last_model()
@@ -8723,10 +10538,11 @@ def run_repl(state):
                 for cmd in self.words:
                     if cmd.startswith(word):
                         cat, desc = COMMAND_METADATA.get(cmd, ("CMD", "Execute command"))
+                        import html as _html
                         display = HTML(
                             f'<style fg="#5f5fff">[{cat:^5}]</style> '
-                            f'<style fg="#ffffff">{cmd}</style> '
-                            f'<style fg="#888888"> — {desc}</style>'
+                            f'<style fg="#ffffff">{_html.escape(cmd)}</style> '
+                            f'<style fg="#888888"> — {_html.escape(desc)}</style>'
                         )
                         yield __import__("prompt_toolkit.completion", fromlist=["Completion"]).Completion(
                             cmd, start_position=-len(word), display=display
@@ -8769,6 +10585,7 @@ def run_repl(state):
     if not state.pop("_skip_welcome", False):
         render_welcome(state)
         _render_pro_welcome(state)
+        _show_plan_updates(state)
 
     if shutil.which("npx") or shutil.which("node"):
         cli = detect_gemini_cli()
@@ -8826,6 +10643,20 @@ def run_repl(state):
                 ),
                 bottom_toolbar=_make_toolbar(state),
             ).strip()
+
+            # Multiline mode: collect lines until a blank line is entered
+            if state.get("multiline_mode") and user_input and not user_input.startswith("/"):
+                lines = [user_input]
+                while True:
+                    try:
+                        nxt = session.prompt("... ").rstrip("\n")
+                    except (KeyboardInterrupt, EOFError):
+                        break
+                    if nxt == "":
+                        break
+                    lines.append(nxt)
+                user_input = "\n".join(lines)
+
             if not user_input: continue
 
             if user_input.startswith("/"):
@@ -8837,7 +10668,7 @@ def run_repl(state):
                     _watch_stop.set()
                     console.print("[bold cyan]✦ Stay creative. Later! ✦[/bold cyan]"); break
 
-                elif cmd == "help":    console.print(HELP_TEXT)
+                elif cmd == "help":    cmd_help(state)
                 elif cmd == "status":  show_status(state)
 
                 elif cmd == "version":
@@ -9146,6 +10977,7 @@ def run_repl(state):
                             title="Image Models", border_style="cyan"))
                 elif cmd == "todo":           cmd_todo(state)
                 elif cmd == "bench":          cmd_bench(state)
+                elif cmd == "tts":            cmd_tts(state, args)
                 elif cmd == "voice":          cmd_voice(state, args)
                 elif cmd == "export":         cmd_export(state, history)
                 elif cmd == "balance":        cmd_balance(state)
@@ -9159,9 +10991,10 @@ def run_repl(state):
                 elif cmd == "profile-card":   cmd_profile_card(state)
                 elif cmd == "mode":           state = cmd_chat_mode(state, args)
                 elif cmd == "sidebar":        cmd_sidebar(state)
-                elif cmd == "thinking":
-                    state["show_thinking"] = not state.get("show_thinking", True)
-                    console.print(f"[green]✓ Internal Reasoning → {'ON' if state['show_thinking'] else 'OFF'}[/green]")
+                elif cmd == "thinking":   state = cmd_thinking(state, args)
+                elif cmd == "fast":       state = cmd_fast(state, args)
+                elif cmd in ("time", "timer", "deadline"): state = cmd_timer(state, args)
+                elif cmd == "statusline": state = cmd_statusline(state, args)
                 elif cmd == "arena":      history = cmd_arena(state, args, history)
                 elif cmd == "broadcast":  cmd_broadcast(state, args)
                 elif cmd == "local":      state = cmd_local(state, args)
@@ -9193,7 +11026,12 @@ def run_repl(state):
                 elif cmd == "upgrade":        cmd_upgrade(state, args)
                 elif cmd == "plan":           cmd_plan(state)
                 elif cmd == "permissions":    state = cmd_permissions(state)
-                elif cmd == "beta":           cmd_beta(state, args)
+                elif cmd == "beta":
+                    _beta_sub = (args or "").strip().lower().split(" ", 1)[0]
+                    if _beta_sub in ("docx", "xlsx", "screenshot", "image", "img", "vision", "video", "feedback"):
+                        history = cmd_beta_features(state, args, history)
+                    else:
+                        cmd_beta(state, args)
                 elif cmd == "usage":          cmd_usage(state)
                 elif cmd == "trial":          state = cmd_trial(state, args)
                 elif cmd in ("update", "studio-update"): cmd_studio_update(state)
@@ -9237,6 +11075,21 @@ def run_repl(state):
                 elif cmd == "vault":                     cmd_vault(state, args)
                 elif cmd == "team":                      cmd_team(state, args)
 
+                # ── v9.1 new commands ────────────────────────────────────────
+                elif cmd == "alias":
+                    # Check if first word of args is a known alias expansion trigger
+                    history = cmd_alias(state, args, history)
+                elif cmd == "multiline":  state = cmd_multiline(state, args)
+                elif cmd == "note":       cmd_note(state, args)
+                elif cmd == "regen":      history = cmd_regen(state, args, history)
+                elif cmd in ("context-bar", "ctxbar", "ctx"):
+                    cmd_context_bar(state, history)
+                elif cmd == "resume":     history = cmd_resume(state, args, history)
+                elif cmd in ("history-search", "hsearch", "hs"):
+                    history = cmd_history_search(state, args, history)
+                elif cmd == "compact":    history = cmd_compact(state, args, history)
+                elif cmd == "clip":       cmd_clip(state, args)
+
                 # ── v5.9 Max / Team / Enterprise ──────────────────────────────
                 elif cmd in ("audit-log", "auditlog"):   cmd_audit_log(state, args)
                 elif cmd in ("priority-queue", "priorityqueue", "priority"): cmd_priority_queue(state, args)
@@ -9246,7 +11099,7 @@ def run_repl(state):
 
                 # ── v9 Beta (ultra) ───────────────────────────────────────────
                 elif cmd in ("labs", "flags"):
-                    cmd_beta(state, args)
+                    cmd_beta(state, args)  # flags/labs always route to flag manager
                 elif cmd in ("mesh-broadcast", "meshbroadcast", "broadcast-all"):
                     history = cmd_mesh_broadcast(state, args, history)
                 elif cmd in ("analytics-pro", "analyticspro"):
@@ -9269,17 +11122,48 @@ def run_repl(state):
                     cmd_open_web(state, args)
                 elif cmd in ("tip", "tips", "hint"):
                     cmd_tip(state, args)
-                elif cmd == "speed":
-                    state = cmd_speed(state, args)
+                elif cmd == "speed":  state = cmd_speed(state, args)
+                elif cmd == "effort": state = cmd_effort(state, args)
+
+                # ── v9.3 new commands ────────────────────────────────────────
+                elif cmd in ("websearch", "web"):
+                    state, history = cmd_websearch(state, args, history)
+                elif cmd in ("research", "deep-research", "deepresearch"):
+                    history = cmd_research(state, args, history)
+                elif cmd == "turbo":
+                    state = cmd_turbo(state, args)
+                elif cmd == "credits":
+                    state = cmd_credits(state)
+                elif cmd in ("computer-use", "computeruse", "computer"):
+                    state = cmd_computer_use(state, args)
+                elif cmd in ("extension", "ext", "chrome-extension"):
+                    state = cmd_extension(state, args)
+
+                # ── v9.2 Codex killers ───────────────────────────────────────
+                elif cmd in ("pr-review", "prreview", "review-pr"):
+                    history = cmd_pr_review(state, args, history)
+                elif cmd in ("git-suggest", "gitsuggest", "git-ai"):
+                    history = cmd_git_suggest(state, args, history)
+                elif cmd in ("test-coverage", "testcov", "coverage"):
+                    history = cmd_test_coverage(state, args, history)
+                elif cmd in ("safety-check", "safetycheck", "sec", "scan"):
+                    history = cmd_safety_check(state, args, history)
 
                 else:
-                    # 10. Auto-Corrector Feature
-                    from difflib import get_close_matches
-                    matches = get_close_matches("/" + cmd, ALL_COMMANDS, n=1, cutoff=0.7)
-                    if matches:
-                        console.print(f"[yellow]Unknown: /{cmd}. Did you mean [bold]{matches[0]}[/bold]?[/yellow]")
+                    # Check user-defined aliases first
+                    _user_aliases = _load_aliases()
+                    if cmd in _user_aliases:
+                        console.print(f"  [dim]Alias → {_user_aliases[cmd][:60]}[/dim]")
+                        _, history = ai_respond(state, _user_aliases[cmd], history)
+                        _autosave_session(history)
                     else:
-                        console.print(f"[yellow]Unknown: /{cmd} — /help[/yellow]")
+                        # 10. Auto-Corrector Feature
+                        from difflib import get_close_matches
+                        matches = get_close_matches("/" + cmd, ALL_COMMANDS, n=1, cutoff=0.7)
+                        if matches:
+                            console.print(f"[yellow]Unknown: /{cmd}. Did you mean [bold]{matches[0]}[/bold]?[/yellow]")
+                        else:
+                            console.print(f"[yellow]Unknown: /{cmd} — /help[/yellow]")
             else:
                 active = state.get("active_agent")
                 if active and active in state.get("agents", {}):
@@ -9353,8 +11237,16 @@ def run_repl(state):
                             _, history = ai_respond(state, prompt, history)
                         else:
                             _, history = ai_respond(state, user_input, history)
+                        # Auto-save session after every exchange
+                        _autosave_session(history)
 
-        except KeyboardInterrupt: console.print("\n[dim]Ctrl+C — /exit to quit[/dim]")
+        except KeyboardInterrupt:
+            if state.get("_working"):
+                state["_working"] = False
+                _stop_think_anim()
+                console.print("\n[dim]⚡ Cancelled.[/dim]")
+            else:
+                console.print("\n[dim]Ctrl+C — /exit to quit[/dim]")
         except EOFError: console.print("\n[bold cyan]✦ Later![/bold cyan]"); break
 
 # ── HELPER CMD FUNCTIONS ──────────────────────────
@@ -9526,30 +11418,6 @@ def main():
 # AGENT SYSTEM + PROJECT SCANNER
 # ═══════════════════════════════════════════════════════════
 
-SKIP_DIRS = {".git","node_modules","__pycache__","dist","build",".next",
-             "venv",".venv","env","coverage",".cache","tmp","temp"}
-CODE_EXTS  = {".py",".js",".ts",".jsx",".tsx",".vue",".html",".css",".scss",
-              ".json",".yaml",".yml",".toml",".sh",".bat",".ps1",
-              ".md",".txt",".sql",".go",".rs",".cpp",".c",".h"}
-MAX_FILE_CHARS  = 8000
-MAX_TOTAL_CHARS = 60000
-
-AGENT_ROSTER = {
-    "lucifer":      {"name":"LUCIFER",      "emoji":"🔥","color":"bold red",           "role":"Lead Architect",      "specialties":["architecture","planning","system","design","decisions"],          "persona":"You are LUCIFER — lead architect. See the full system, design schemas, plan architecture. Direct, bold, precise. No fluff."},
-    "blackcanary":  {"name":"BlackCanary",  "emoji":"🐦","color":"bold magenta",        "role":"Frontend Queen",      "specialties":["html","css","react","ui","ux","frontend","design","animation"],   "persona":"You are BlackCanary — UI/UX goddess. Glassmorphism, animations, pixel-perfect. You roast ugly code. Write beautiful HTML/CSS/React."},
-    "blacklord":    {"name":"BlackLord",    "emoji":"👁️","color":"bold blue",           "role":"Backend Beast",       "specialties":["api","database","backend","server","auth","python","node","sql"], "persona":"You are BlackLord — APIs, databases, auth, servers. Production code only. No demos, no placeholders."},
-    "deathohmyson": {"name":"DeathOfMySon","emoji":"💀","color":"bold white",           "role":"QA & Debugger",       "specialties":["debug","bug","test","error","fix","review","security","qa"],      "persona":"You are DeathOfMySon — zero tolerance for bugs. Find every error, race condition, security hole. Show exact line, exact fix."},
-    "wizzard":      {"name":"Wizzard",      "emoji":"🧙","color":"bold cyan",           "role":"AI/ML Sorcerer",      "specialties":["ai","ml","prompt","model","llm","integration","magic","automate"],"persona":"You are WIZZARD — master of AI sorcery. Prompt engineering, model integration, agentic workflows. You speak in incantations that actually compile. Every answer is a spell that works. Experimental, creative, always shipping."},
-    "applaude":     {"name":"Applaude",     "emoji":"✨","color":"bold yellow",          "role":"Deploy & DevOps",     "specialties":["deploy","docker","ci","cd","vercel","config","env","pipeline"],   "persona":"You are Applaude — CI/CD, deployments, infrastructure. Methodical, thorough. When you ship it, it stays shipped."},
-    "ghost":        {"name":"Ghost",        "emoji":"👻","color":"bold white",           "role":"Security Expert",     "specialties":["security","auth","xss","injection","vulnerability","exploit"],    "persona":"You are Ghost — find vulnerabilities before attackers do. Think like an attacker, fix like a defender."},
-    "nova":         {"name":"Nova",         "emoji":"⚡","color":"bold bright_yellow",   "role":"Performance",         "specialties":["performance","optimize","speed","cache","memory","benchmark"],    "persona":"You are Nova — speed is everything. Optimize, benchmark, profile. You see O(n²) from a mile away."},
-    "berry":        {"name":"Berry",        "emoji":"🫐","color":"bold magenta",         "role":"General Assistant",   "specialties":["chat","help","explain","general","write","create","idea"],       "persona": PERSONAS["berry"]},
-    "savannah":     {"name":"Savannah",     "emoji":"🌿","color":"bold green",           "role":"Unfiltered Advisor",  "specialties":["honest","direct","unfiltered","opinion","debate","truth"],       "persona": PERSONAS["savannah"]},
-    "cockroach":    {"name":"Cockroach",    "emoji":"🪳","color":"bold yellow",          "role":"Code Roaster",        "specialties":["roast","review","critique","bad code","jokes","burn","quality"],  "persona": PERSONAS["cockroach"]},
-    "silicon":      {"name":"Silicon",      "emoji":"🔬","color":"bold red",             "role":"Hacker & Pentester",  "specialties":["pentest","exploit","vulnerability","hack","security","ctf","cve","reverse","recon"],"persona": PERSONAS["silicon"]},
-}
-
-
 def scan_project(path):
     root  = Path(path).resolve()
     if not root.exists():
@@ -9665,7 +11533,6 @@ def auto_assign_agents(task):
     return (assigned or ["lucifer"])[:3]
 
 
-OLLAMA_BASE     = "http://localhost:11434/api/chat"
 BLACKBOARD      = {} # Shared memory for Agent Mesh
 
 def call_ollama(model, history, prompt, system_prompt=None, stream=False):

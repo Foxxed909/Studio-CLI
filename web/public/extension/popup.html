@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 220px; font-family: system-ui; padding: 12px; background: #0f172a; color: #f1f5f9; }
+    .btn { background: #3b82f6; color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; width: 100%; margin-bottom: 8px; font-weight: 600; }
+    .btn:disabled { background: #334155; cursor: not-allowed; }
+    .title { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+    .status { font-size: 11px; color: #94a3b8; margin-top: 8px; }
+    .badge { background: #ec4899; color: white; font-size: 9px; padding: 2px 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="title">StudioCLI <span class="badge">MAX</span></div>
+  <button class="btn" id="shareScreen">Share Screen</button>
+  <button class="btn" id="takeAction">Take Action</button>
+  <div class="status" id="status">Plan: Max (Active)</div>
+  <script src="popup.js"></script>
+</body>
+</html>

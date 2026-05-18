@@ -727,9 +727,14 @@ app.post("/api/stripe/create-checkout", async (req, res) => {
   }
 });
 
+const _CREATOR_EMAILS = new Set(["applaudeai@gmail.com"]);
+
 app.get("/api/stripe/plan", (req, res) => {
   const { email } = req.query;
   if (!email) return res.status(400).json({ error: "email required" });
+  if (_CREATOR_EMAILS.has(email.toLowerCase().trim())) {
+    return res.json({ plan: "creator", sub: { plan: "creator", credits: Infinity, updatedAt: new Date().toISOString() } });
+  }
   const sub = loadSub(email);
   res.json({ plan: sub?.plan || "free", sub: sub || null });
 });

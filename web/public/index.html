@@ -107,6 +107,12 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
 .sf-upgrade-plan{font-size:11px;font-weight:700;color:#19c37d;text-transform:uppercase;letter-spacing:.06em}
 .sf-upgrade-label{font-size:12px;color:var(--text2);font-weight:500}
 .sf-upgrade-arrow{font-size:14px;color:rgba(25,195,125,.7)}
+.sf-upgrade.creator{background:linear-gradient(135deg,rgba(168,85,247,.15),rgba(236,72,153,.1));
+  border-color:rgba(168,85,247,.35)}
+.sf-upgrade.creator:hover{border-color:rgba(168,85,247,.6);background:linear-gradient(135deg,rgba(168,85,247,.22),rgba(236,72,153,.15))}
+.sf-upgrade.creator .sf-upgrade-plan{background:linear-gradient(90deg,#a855f7,#ec4899);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sf-upgrade.creator .sf-upgrade-arrow{color:rgba(168,85,247,.8)}
 
 /* ── Mobile ─────────────────────────────────────────────────────────────────── */
 .mob-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:19}
@@ -1795,7 +1801,7 @@ function toggleLiveCode(){
 function toggleComputer(){
   // Check plan (mocked)
   const plan = localStorage.getItem("studioPlan") || "free";
-  if(["max", "ultra", "team", "enterprise"].includes(plan)){
+  if(["max", "ultra", "team", "enterprise", "creator"].includes(plan)){
     document.getElementById("computerBtn").classList.toggle("active");
     alert("Computer Use session started. Ensure the Chrome Extension is active.");
   } else {
@@ -1829,13 +1835,18 @@ document.addEventListener("DOMContentLoaded", _checkPlanUpdates);
 
 // ── Sidebar upgrade pill ──────────────────────────────────────────────────────
 (function _initUpgradePill(){
-  const planNames = {free:"Free",starter:"Starter",pro:"Pro",dev:"Dev",max:"Max",ultra:"Ultra"};
+  const planNames = {free:"Free",starter:"Starter",pro:"Pro",dev:"Dev",max:"Max",ultra:"Ultra",creator:"Creator"};
   function _setPill(plan){
     const el = document.getElementById("sfPlanName");
     if(!el) return;
     el.textContent = (planNames[plan] || plan).toUpperCase();
     const wrap = document.getElementById("sfUpgrade");
-    if(plan !== "free"){
+    if(plan === "creator"){
+      wrap.classList.add("creator");
+      wrap.querySelector(".sf-upgrade-label").textContent = "Creator access ✦";
+      wrap.removeAttribute("href");
+      wrap.style.cursor = "default";
+    } else if(plan !== "free"){
       wrap.querySelector(".sf-upgrade-label").textContent = "Manage plan →";
     }
   }
@@ -1903,7 +1914,7 @@ function lcpSwitch(mode){
 }
 
 // ── Credits badge ──────────────────────────────────────────────────────────────
-const _PLAN_CREDITS = {free:100,starter:500,pro:2000,dev:5000,max:10000,ultra:50000,team:25000,enterprise:999999};
+const _PLAN_CREDITS = {free:100,starter:500,pro:2000,dev:5000,max:10000,ultra:50000,team:25000,enterprise:999999,creator:999999};
 function _initCreditsFromPlan(){
   const plan = localStorage.getItem("studioPlan") || "free";
   const limit = _PLAN_CREDITS[plan] ?? 100;

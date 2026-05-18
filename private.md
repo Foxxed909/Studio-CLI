@@ -37,6 +37,41 @@ Plans are purely local / honor-system. No server-side enforcement. The "secret l
 
 ---
 
+## v9.5 second patch — Fixes & Features (2026-05-18)
+
+### Duplicate-function cleanup (third pass)
+Five more blocks of duplicate function declarations were found and removed in `aistudio.py`:
+- **Block A** (~line 728–832): `load_profile`, `save_profile`, `load_trial`, `start_trial`, `get_plan`, `set_plan`, `check_msg_limit`, `reset_msg_counter`, `check_img_quota`, `_RICH_TAG_RE`
+- **Block B** (~line 822–860): `load_upgrade_slots`, `save_upgrade_slots`, `claim_upgrade_slot`
+- **Block C+D** (~line 1257–1309): `save_theme`, `load_last_model`, `save_last_model`, `KEYS_FILE`, `SUPPORTED_PROVIDERS`, `load_all_keys`, `save_all_keys`, `get_key`, `mask_key`
+- **Block E** (~line 1622–1673): `load_api_key`, `save_api_key`, `load_or_key`, `save_or_key`, `load_hf_key`, `save_hf_key`
+- **Block F** (~line 2109–2127): `USAGE_FILE`, `load_usage`, `save_usage`
+
+`release_upgrade_slot` was NOT removed — it is only in `aistudio.py`, not in `studio.session`.
+
+Also removed the old single-argument `cmd_cost(state)` (last-turn only) in favour of the new `cmd_cost(state, args)` which shows session totals.
+
+### New features (v9.5 second patch)
+- `cmd_recap(state, args, history)` — AI session summary; registered at `/recap` in main dispatch
+- `cmd_gitdiff(state, args)` — runs `git diff` in workspace root; `args == "stat"` runs `--stat HEAD`
+- `cmd_branch(state, args)` — runs `git rev-parse --abbrev-ref HEAD` + `git log --oneline -7` + `git status --short`
+- `cmd_setmodel(state, args)` — delegates to `cmd_model`; exposed via `/set model <name>` dispatch
+- `cmd_cost(state, args)` — session-total cost panel using `load_usage()` + `MODEL_PRICING`; replaces old last-turn-only version
+- `cmd_quicknote(state, args)` / `cmd_quicknotes(state, args)` — session notes stored in `~/.aistudio/notes.json`; exposed as `/qnote` / `/qnotes`
+- `cmd_undo_exchange(state, args, history)` — removes last user+model turn pair from history; NOT yet wired to a slash command (conflict with `/undo` which handles file restores)
+
+### Bug fixes
+- `cmd_usage`: plan-aware rate limit cap derived from `_rl_caps`/`_rl_windows` dicts matching `check_rate_limit()` limits; was hardcoded `10/hr` for all plans
+- `cmd_tokens`: now shows session totals (via `load_usage()`) and estimated cost; was always printing "Usage: /tokens" when no last_turn
+
+### Nova welcome screen
+Old: hardcoded fixed-width ASCII art `╔══...══╗` box via `_animate_banner`. VERSION injection was misaligned when VERSION length changed.
+New: `Panel()` with `title` and `subtitle`, consistent with all other UI styles.
+
+### Deferred items
+- `/undo-exchange` or equivalent — history undo is implemented in `cmd_undo_exchange` but no slash command registered yet (conflict with `/undo` = file restore)
+- `rain` and other `_animate_banner`-based welcome screens still use hardcoded-width ASCII boxes — same alignment risk as nova had
+
 ## v9.5 patch — Bug Fixes (2026-05-18)
 
 ### Re-declaration cleanup (second pass)

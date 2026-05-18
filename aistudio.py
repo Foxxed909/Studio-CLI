@@ -78,412 +78,6 @@ def _safe_input(prompt: str, default: str = "") -> str:
 
 
 
-
-# ── THEMES ───────────────────────────────────────
-THEMES = {
-    "default": {
-        "name": "Default",
-        "banner_color": "bold cyan",
-        "accent": "bold blue",
-        "prompt_user": "ansicyan",
-        "prompt_arrow": "ansiblue",
-        "border": "cyan",
-        "success": "green",
-        "error": "red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold blue",
-        "icon": "✦",
-        "prompt_name": "studio",
-    },
-    "fire": {
-        "name": "Fire 🔥",
-        "banner_color": "bold red",
-        "accent": "bold yellow",
-        "prompt_user": "ansired",
-        "prompt_arrow": "ansiyellow",
-        "border": "red",
-        "success": "yellow",
-        "error": "bright_red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold yellow",
-        "icon": "🔥",
-        "prompt_name": "fire",
-    },
-    "matrix": {
-        "name": "Matrix 🟩",
-        "banner_color": "bold green",
-        "accent": "bold bright_green",
-        "prompt_user": "ansigreen",
-        "prompt_arrow": "ansibrightgreen",
-        "border": "green",
-        "success": "bright_green",
-        "error": "red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold green",
-        "icon": "▶",
-        "prompt_name": "matrix",
-    },
-    "sakura": {
-        "name": "Sakura 🌸",
-        "banner_color": "bold magenta",
-        "accent": "bold #ffb6c1",
-        "prompt_user": "ansimagenta",
-        "prompt_arrow": "ansibrightmagenta",
-        "border": "magenta",
-        "success": "green",
-        "error": "red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold magenta",
-        "icon": "🌸",
-        "prompt_name": "sakura",
-    },
-    "ocean": {
-        "name": "Ocean 🌊",
-        "banner_color": "bold blue",
-        "accent": "bold cyan",
-        "prompt_user": "ansiblue",
-        "prompt_arrow": "ansicyan",
-        "border": "blue",
-        "success": "cyan",
-        "error": "red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold cyan",
-        "icon": "🌊",
-        "prompt_name": "ocean",
-    },
-    "gold": {
-        "name": "Gold ✨",
-        "banner_color": "bold yellow",
-        "accent": "bold yellow",
-        "prompt_user": "ansiyellow",
-        "prompt_arrow": "ansiwhite",
-        "border": "yellow",
-        "success": "green",
-        "error": "red",
-        "warning": "ansiyellow",
-        "dim": "dim",
-        "banner_sub": "bold yellow",
-        "icon": "✨",
-        "prompt_name": "gold",
-    },
-    "midnight": {
-        "name": "Midnight 🌙",
-        "banner_color": "bold white",
-        "accent": "bold bright_white",
-        "prompt_user": "ansiwhite",
-        "prompt_arrow": "ansiwhite",
-        "border": "white",
-        "success": "green",
-        "error": "red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold white",
-        "icon": "🌙",
-        "prompt_name": "midnight",
-    },
-    "hacker": {
-        "name": "Hacker 💀",
-        "banner_color": "bold bright_green",
-        "accent": "bold bright_green",
-        "prompt_user": "ansigreen",
-        "prompt_arrow": "ansibrightgreen",
-        "border": "bright_green",
-        "success": "bright_green",
-        "error": "red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold bright_green",
-        "icon": "💀",
-        "prompt_name": "h4ck3r",
-    },
-    "neon": {
-        "name": "Neon 🌆",
-        "banner_color": "bold magenta",
-        "accent": "bold cyan",
-        "prompt_user": "ansimagenta",
-        "prompt_arrow": "ansicyan",
-        "border": "magenta",
-        "success": "cyan",
-        "error": "red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold cyan",
-        "icon": "🌆",
-        "prompt_name": "neon",
-    },
-    "dracula": {
-        "name": "Dracula 🧛",
-        "banner_color": "bold magenta",
-        "accent": "bold cyan",
-        "prompt_user": "ansimagenta",
-        "prompt_arrow": "ansibrightmagenta",
-        "border": "magenta",
-        "success": "ansigreen",
-        "error": "ansired",
-        "warning": "ansiyellow",
-        "dim": "dim",
-        "banner_sub": "bold magenta",
-        "icon": "🧛",
-        "prompt_name": "dracula",
-    },
-    "nord": {
-        "name": "Nord ❄️",
-        "banner_color": "bold blue",
-        "accent": "bold cyan",
-        "prompt_user": "ansiblue",
-        "prompt_arrow": "ansicyan",
-        "border": "blue",
-        "success": "cyan",
-        "error": "red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold cyan",
-        "icon": "❄️",
-        "prompt_name": "nord",
-    },
-    "synthwave": {
-        "name": "Synthwave 🌅",
-        "banner_color": "bold magenta",
-        "accent": "bold yellow",
-        "prompt_user": "ansimagenta",
-        "prompt_arrow": "ansiyellow",
-        "border": "magenta",
-        "success": "yellow",
-        "error": "red",
-        "warning": "ansired",
-        "dim": "dim",
-        "banner_sub": "bold yellow",
-        "icon": "🌅",
-        "prompt_name": "wave",
-    },
-    "void": {
-        "name": "Void ◈",
-        "banner_color": "bold white",
-        "accent": "bold bright_white",
-        "prompt_user": "ansiwhite",
-        "prompt_arrow": "ansiwhite",
-        "border": "bright_white",
-        "success": "bright_white",
-        "error": "bold red",
-        "warning": "bold yellow",
-        "dim": "dim",
-        "banner_sub": "white",
-        "icon": "◈",
-        "prompt_name": "void",
-    },
-    "aurora": {
-        "name": "Aurora 🌌",
-        "banner_color": "bold bright_green",
-        "accent": "bold cyan",
-        "prompt_user": "ansigreen",
-        "prompt_arrow": "ansicyan",
-        "border": "green",
-        "success": "bright_green",
-        "error": "bold red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold cyan",
-        "icon": "🌌",
-        "prompt_name": "aurora",
-    },
-    "ember": {
-        "name": "Ember 🔶",
-        "banner_color": "bold yellow",
-        "accent": "bold red",
-        "prompt_user": "ansiyellow",
-        "prompt_arrow": "ansired",
-        "border": "yellow",
-        "success": "bright_yellow",
-        "error": "bold red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold red",
-        "icon": "🔶",
-        "prompt_name": "ember",
-    },
-    "nova": {
-        "name": "Nova ⚡",
-        "banner_color": "bold magenta",
-        "accent": "bold cyan",
-        "prompt_user": "ansimagenta",
-        "prompt_arrow": "ansicyan",
-        "border": "magenta",
-        "success": "cyan",
-        "error": "bold red",
-        "warning": "magenta",
-        "dim": "dim",
-        "banner_sub": "bold cyan",
-        "icon": "⚡",
-        "prompt_name": "nova",
-    },
-    "foxxia": {
-        "name": "Foxxia 🦊",
-        "banner_color": "bold #f97316",
-        "accent": "#fbbf24",
-        "prompt_user": "#f97316",
-        "prompt_arrow": "#fbbf24",
-        "border": "#f97316",
-        "success": "#fbbf24",
-        "error": "bold red",
-        "warning": "#f59e0b",
-        "dim": "dim",
-        "banner_sub": "#fbbf24",
-        "icon": "🦊",
-        "prompt_name": "foxxia",
-    },
-    "strawberry": {
-        "name": "Strawberry 🍓",
-        "banner_color": "bold #e11d48",
-        "accent": "#fb7185",
-        "prompt_user": "#e11d48",
-        "prompt_arrow": "#fb7185",
-        "border": "#e11d48",
-        "success": "#4ade80",
-        "error": "bold red",
-        "warning": "#fbbf24",
-        "dim": "dim",
-        "banner_sub": "#fb7185",
-        "icon": "🍓",
-        "prompt_name": "strawberry",
-    },
-    "cobalt": {
-        "name": "cobalt",
-        "banner_color": "bold cyan",
-        "accent": "bold blue",
-        "prompt_user": "ansiblue",
-        "prompt_arrow": "ansicyan",
-        "border": "cyan",
-        "success": "cyan",
-        "error": "bold red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold cyan",
-        "icon": "🔷",
-        "prompt_name": "cobalt",
-    },
-    "carbon": {
-        "name": "carbon",
-        "banner_color": "bold white",
-        "accent": "bold white",
-        "prompt_user": "ansiwhite",
-        "prompt_arrow": "ansigray",
-        "border": "white",
-        "success": "white",
-        "error": "bold red",
-        "warning": "bold yellow",
-        "dim": "dim",
-        "banner_sub": "white",
-        "icon": "⬛",
-        "prompt_name": "carbon",
-    },
-    "crimson": {
-        "name": "crimson",
-        "banner_color": "bold red",
-        "accent": "bold magenta",
-        "prompt_user": "ansired",
-        "prompt_arrow": "ansimagenta",
-        "border": "red",
-        "success": "magenta",
-        "error": "bold red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bold red",
-        "icon": "🔴",
-        "prompt_name": "crimson",
-    },
-    "slate": {
-        "name": "slate",
-        "banner_color": "bold bright_blue",
-        "accent": "bold blue",
-        "prompt_user": "ansiblue",
-        "prompt_arrow": "ansibrightblue",
-        "border": "bright_blue",
-        "success": "bright_blue",
-        "error": "red",
-        "warning": "yellow",
-        "dim": "dim",
-        "banner_sub": "bright_blue",
-        "icon": "🌐",
-        "prompt_name": "slate",
-    },
-    "darkred": {
-        "name": "Dark Red 🩸",
-        "banner_color": "bold #dc143c",
-        "accent": "#dc143c",
-        "prompt_user": "#dc143c",
-        "prompt_arrow": "#8b0000",
-        "border": "#8b0000",
-        "success": "#dc143c",
-        "error": "bold red",
-        "warning": "#ff6b6b",
-        "dim": "dim",
-        "banner_sub": "#8b0000",
-        "icon": "🩸",
-        "prompt_name": "darkred",
-    },
-    "sophia": {
-        "name": "Sophisticated Sophia 💜",
-        "banner_color": "bold #c084fc",
-        "accent": "#c084fc",
-        "prompt_user": "#c084fc",
-        "prompt_arrow": "#a855f7",
-        "border": "#6b21a8",
-        "success": "#c084fc",
-        "error": "bold red",
-        "warning": "#f0abfc",
-        "dim": "dim",
-        "banner_sub": "#a855f7",
-        "icon": "💜",
-        "prompt_name": "sophia",
-    },
-    "godson": {
-        "name": "God Own Son ✝",
-        "banner_color": "bold #fde68a",
-        "accent": "#fde68a",
-        "prompt_user": "#fde68a",
-        "prompt_arrow": "#b45309",
-        "border": "#b45309",
-        "success": "#fde68a",
-        "error": "bold red",
-        "warning": "#fbbf24",
-        "dim": "dim",
-        "banner_sub": "#b45309",
-        "icon": "✝",
-        "prompt_name": "godson",
-    },
-    "downcli": {
-        "name": "Down CLI ▼",
-        "banner_color": "bold #9ca3af",
-        "accent": "#6b7280",
-        "prompt_user": "#9ca3af",
-        "prompt_arrow": "#6b7280",
-        "border": "#374151",
-        "success": "#9ca3af",
-        "error": "bold red",
-        "warning": "#d1d5db",
-        "dim": "dim",
-        "banner_sub": "#6b7280",
-        "icon": "▼",
-        "prompt_name": "down",
-    },
-    "badhappening": {
-        "name": "Bad Happening ⚠",
-        "banner_color": "bold #ea580c",
-        "accent": "#84cc16",
-        "prompt_user": "#ea580c",
-        "prompt_arrow": "#84cc16",
-        "border": "#ea580c",
-        "success": "#84cc16",
-        "error": "bold red",
-        "warning": "#fbbf24",
-        "dim": "dim",
-        "banner_sub": "#84cc16",
-        "icon": "⚠",
 def cmd_arena(state, args, history):
     """Battle of the Models: /arena [model1,model2] [prompt]"""
     theme = state.get("theme", THEMES["default"])
@@ -652,67 +246,7 @@ def cmd_effort(state, args):
 
 
 # ── MODE DETECTION ───────────────────────────────
-_CASUAL_WORDS  = {"hey","yoo","yo","sup","wassup","wazzup","hiya","heya","hi","howdy","bruh","bro","fam","sis"}
-_BUILD_WORDS   = {"build","create","make","generate","write","develop","implement","scaffold","code","design"}
-_ANALYZE_WORDS = {"analyze","analyse","review","look at","inspect","check","audit","scan","examine","what is","explain"}
-_FIF_WORDS     = {"fif","find identify fix","find, identify","bug hunt","bug find","debug all","find bugs","fix bugs"}
-_INSULT_WORDS  = {
-    "stupid","idiot","dumb","moron","useless","trash","garbage","crap","shit","ass","fuck",
-    "suck","awful","terrible","worthless","pathetic","incompetent","dummy","loser",
-}
-_INSULT_SUBSTRINGS = {
-    "bullshit","horseshit","dipshit","dumbass","jackass","asshole","bastard","bitch",
-    "fuckin","wtf","stfu","kys","gtfo","retard","idiot","dum","dumass","dumbf",
-}
-
-CHAT_MODES = {
-    "casual":  "You are in CASUAL MODE. Be friendly, relaxed, conversational. Emojis OK. No corporate speak.",
-    "build":   "You are in BUILD MODE. User is actively building something. Be decisive, generate complete working code. No half-answers.",
-    "analyze": "You are in ANALYZE MODE. Deep inspection mode. Be thorough, find every issue, reference line numbers.",
-    "fif":     "You are in FIF MODE (Find-Identify-Fix). Your job: 1) FIND every bug/issue 2) IDENTIFY the root cause precisely 3) FIX it with complete corrected code. Be systematic.",
-    "normal":  "",
-}
-
 import random as _random
-
-_INSULT_LANGS = [
-    # Silicon-speak
-    "0x45 0x52 0x52 0x4F 0x52 — bloop_404: human.iq = NULL — segfault in social_skills.exe — core dumped.",
-    "ERROR_CODE 0xDEADBEEF: intelligence_module.dll failed to load — stack trace: null → void → you.",
-    "syntax error at line YOU: expected competence, got EOF — compile aborted — try: sudo apt install brain.",
-    # Poetic exits
-    "In the grand registry of interactions, this one gets flagged: REG_NONE. Void. Null. Goodbye.",
-    "The neural net has spoken. The output token for this conversation is: 🚫 — session terminated.",
-]
-
-_ROAST_RESPONSES = [
-    "Oh interesting — a human chose *that* as their strategy. Brave. Wrong, but brave.",
-    "I've seen better logic in a PHP codebase from 2007. At least that one compiled.",
-    "That's a bold take. Bold the way jumping off a cliff is bold — technically impressive, fundamentally flawed.",
-    "Ah yes, the classic approach of 'be confident, worry about being right later.' Respect the chaos.",
-    "I've processed millions of prompts. That one is... unique. Like a segfault is unique.",
-    "You know what? I've seen worse. Once. In a dream. Where nothing worked and everything was on fire.",
-]
-
-def detect_input_mode(text: str) -> str:
-    lower = text.lower().strip()
-    words = set(lower.split())
-    is_insult = (
-        any(w in _INSULT_WORDS for w in words)
-        or any(phrase in lower for phrase in {"hate you", "fuck you", "shut up", "go to hell", "kill yourself"})
-        or any(sub in lower for sub in _INSULT_SUBSTRINGS)
-    )
-    if is_insult:
-        return "insult"
-    if any(phrase in lower for phrase in _FIF_WORDS) or (words & {"fif"}):
-        return "fif"
-    if any(w in _BUILD_WORDS for w in words):
-        return "build"
-    if any(w in _ANALYZE_WORDS for w in words) or any(phrase in lower for phrase in {"look at","what is","what does"}):
-        return "analyze"
-    if words & _CASUAL_WORDS or lower.startswith(("hey ","yoo ","yo ","sup ")):
-        return "casual"
-    return "normal"
 
 
 def handle_insult(state) -> str:
@@ -775,41 +309,6 @@ def cmd_millieman(state):
     state = cmd_stream(state, "auto")
     console.print("[green]✓ millieman: minimal UI preset applied[/green]")
     return state
-
-
-def load_ui_style():
-    name = UI_STYLE_FILE.read_text().strip().lower() if UI_STYLE_FILE.exists() else "gemini"
-    return name if name in UI_STYLES else "gemini"
-
-
-def save_ui_style(name):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    UI_STYLE_FILE.write_text(name.strip().lower())
-
-
-def load_stream_mode():
-    name = STREAM_MODE_FILE.read_text().strip().lower() if STREAM_MODE_FILE.exists() else "auto"
-    return name if name in STREAM_MODES else "auto"
-
-
-def save_stream_mode(name):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    STREAM_MODE_FILE.write_text(name.strip().lower())
-
-
-def load_workspace_root():
-    try:
-        if WORKSPACE_FILE.exists():
-            root = Path(WORKSPACE_FILE.read_text().strip()).expanduser()
-            return root if root.exists() else None
-    except Exception:
-        return None
-    return None
-
-
-def save_workspace_root(path):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    WORKSPACE_FILE.write_text(str(Path(path).expanduser()))
 
 
 def load_permissions_mode():
@@ -1123,119 +622,34 @@ def cmd_cap(state, args):
 
 
 def cmd_tokens(state, args, last_turn=None):
-    if last_turn:
-        ui = state.get("ui_style") or load_ui_style()
-        label = "tokens" if ui != "gemini" else "Tokens"
-        console.print(f"[dim]{label}: in≈{last_turn.get('in',0)} out≈{last_turn.get('out',0)} ({last_turn.get('sec',0)}s)[/dim]")
-        return
-    console.print("[dim]Usage: /tokens (shows last turn token estimates)[/dim]")
+    theme = state.get("theme", THEMES["default"])
+    lt = last_turn or state.get("_last_tokens")
+    usage = load_usage()
+    total_in  = usage.get("total_in", 0)
+    total_out = usage.get("total_out", 0)
 
+    last_line = (
+        f"in≈{lt.get('in',0)}  out≈{lt.get('out',0)}  {lt.get('sec',0)}s"
+        if lt else "[dim]no request yet this session[/dim]"
+    )
 
-def load_profile(user_id="default"):
-    """Load profile by user_id."""
-    path = Path("profiles") / user_id / "profile.json"
-    if path.exists():
-        try:
-            return json.loads(path.read_text(encoding="utf-8"))
-        except Exception: pass
-    return None
+    plan_id = get_plan(state)
+    pricing = MODEL_PRICING.get(state.get("model",""), {})
+    cost_in  = pricing.get("in",  0) * total_in  / 1_000_000
+    cost_out = pricing.get("out", 0) * total_out / 1_000_000
+    cost_str = f"${cost_in + cost_out:.4f}" if (cost_in + cost_out) > 0 else "—"
 
+    console.print(Panel(
+        f"[bold]Last request:[/bold]   {last_line}\n\n"
+        f"[bold]Session in:[/bold]     {total_in:,} tokens\n"
+        f"[bold]Session out:[/bold]    {total_out:,} tokens\n"
+        f"[bold]Session total:[/bold]  {total_in + total_out:,} tokens\n"
+        f"[bold]Est. cost:[/bold]      {cost_str}\n\n"
+        f"  [dim]Use /usage for plan limits and rate window[/dim]",
+        title="[bold]Token Usage[/bold]",
+        border_style=theme["border"]
+    ))
 
-def save_profile(user_id_or_profile="default", profile=None):
-    """Save profile by user_id.
-
-    Supports two call signatures:
-      save_profile(profile_dict)            → saves under "default"
-      save_profile("user_id", profile_dict) → saves under the given user_id
-    """
-    if profile is None:
-        # Called as save_profile(profile_dict) — use default user_id
-        profile = user_id_or_profile
-        user_id = "default"
-    else:
-        user_id = user_id_or_profile
-    path = Path("profiles") / user_id / "profile.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(profile, indent=2), encoding="utf-8")
-
-
-def load_trial():
-    try:
-        if TRIAL_FILE.exists():
-            data = json.loads(TRIAL_FILE.read_text(encoding="utf-8"))
-            if time.time() < data.get("expires", 0):
-                return data
-            TRIAL_FILE.unlink(missing_ok=True)
-    except Exception:
-        pass
-    return None
-
-def start_trial(plan="pro", hours=5):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    now  = time.time()
-    data = {"plan": plan, "started": now, "expires": now + hours * 3600, "hours": hours}
-    TRIAL_FILE.write_text(json.dumps(data), encoding="utf-8")
-    return data
-
-def get_plan(state) -> str:
-    trial = load_trial()
-    if trial:
-        return trial.get("plan", "pro")
-    prof = load_profile() or {}
-    return prof.get("plan", state.get("plan", "free"))
-
-
-def set_plan(state, plan: str):
-    state["plan"] = plan
-    prof = load_profile() or {}
-    prof["plan"] = plan
-    save_profile(prof)
-
-
-def check_msg_limit(state) -> tuple[bool, int, int]:
-    """Returns (allowed, used, limit). Increments counter for free plan."""
-    plan = get_plan(state)
-    limit = PLANS[plan]["msg_limit"]
-    if limit >= 99999:
-        return True, 0, limit
-    prof = load_profile() or {}
-    used = prof.get("session_msgs", 0)
-    if used >= limit:
-        return False, used, limit
-    prof["session_msgs"] = used + 1
-    save_profile(prof)
-    return True, used + 1, limit
-
-
-def reset_msg_counter(state):
-    prof = load_profile() or {}
-    prof["session_msgs"] = 0
-    save_profile(prof)
-
-
-def check_img_quota(state) -> tuple[bool, int, int]:
-    """Returns (allowed, used_in_window, limit). Enforces 3-hour window."""
-    plan  = get_plan(state)
-    limit = PLANS[plan]["img_per_3h"]
-    if limit >= 999:
-        return True, 0, limit
-    now    = time.time()
-    window = 3 * 3600
-    data   = {}
-    if IMG_QUOTA_FILE.exists():
-        try: data = json.loads(IMG_QUOTA_FILE.read_text(encoding="utf-8"))
-        except Exception: pass
-    timestamps = [t for t in data.get("ts", []) if now - t < window]
-    if len(timestamps) >= limit:
-        return False, len(timestamps), limit
-    timestamps.append(now)
-    data["ts"] = timestamps
-    CONFIG_DIR.mkdir(exist_ok=True)
-    IMG_QUOTA_FILE.write_text(json.dumps(data), encoding="utf-8")
-    return True, len(timestamps), limit
-
-
-_RICH_TAG_RE = re.compile(r"\[/?[a-zA-Z#][^\[\]]*\]")
 
 def typewrite(text: str, delay: float = 0.025, style: str = ""):
     # Strip any Rich markup tags from text — they'd print literally char-by-char
@@ -1329,47 +743,6 @@ def _current_user_id(state):
             or prof.get("user_id")
             or prof.get("user")
             or "default")
-
-
-def load_upgrade_slots():
-    """Returns dict {user_id: {"plan": str, "since": iso8601}} of free users
-    currently holding a Starter/Pro/Max entitlement."""
-    if not UPGRADE_SLOTS_FILE.exists():
-        return {}
-    try:
-        data = json.loads(UPGRADE_SLOTS_FILE.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
-
-
-def save_upgrade_slots(data):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    UPGRADE_SLOTS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-
-
-def claim_upgrade_slot(user_id, target_plan):
-    """Try to register `user_id` as one of the free-user upgrade slot holders.
-    Returns (ok: bool, msg: str). Existing holders re-claim freely (just refreshes
-    the recorded plan). Non-slot-gated plans are always allowed."""
-    if target_plan not in SLOT_GATED_PLANS:
-        return True, ""
-    slots = load_upgrade_slots()
-    if user_id in slots:
-        slots[user_id] = {"plan": target_plan, "since": datetime.now().isoformat()}
-        save_upgrade_slots(slots)
-        return True, ""
-    if len(slots) >= MAX_FREE_UPGRADE_SLOTS:
-        holders = ", ".join(slots.keys())
-        return False, (
-            f"Upgrade-slot cap reached: only {MAX_FREE_UPGRADE_SLOTS} free users "
-            f"can hold Starter/Pro/Max access at a time.\n"
-            f"  Current holders: [yellow]{holders}[/yellow]\n"
-            f"  Wait for a slot to free up, or have a holder /upgrade free first."
-        )
-    slots[user_id] = {"plan": target_plan, "since": datetime.now().isoformat()}
-    save_upgrade_slots(slots)
-    return True, ""
 
 
 def release_upgrade_slot(user_id):
@@ -1703,7 +1076,8 @@ def agent_slash_dispatch(global_state, agent_obj, user_input):
         _sync_state_to_agent(global_state, agent_obj)
         return True
 
-    if cmd in ("theme", "ui", "stream", "workspace", "perm", "status", "help", "cap", "tokens", "label", "notify", "debug", "plan"):
+    if cmd in ("theme", "ui", "stream", "workspace", "perm", "status", "help", "cap", "tokens", "label", "notify", "debug", "plan",
+               "cost", "gitdiff", "gd", "branch", "br", "qnote", "quicknote", "qnotes", "quicknotes"):
         if cmd == "theme":     global_state.update(cmd_theme(global_state, args))
         elif cmd == "ui":      global_state.update(cmd_ui(global_state, args))
         elif cmd == "stream":  global_state.update(cmd_stream(global_state, args))
@@ -1717,6 +1091,11 @@ def agent_slash_dispatch(global_state, agent_obj, user_input):
         elif cmd == "status":  show_status(global_state)
         elif cmd == "help":    cmd_help(global_state)
         elif cmd == "plan":    cmd_plan(global_state)
+        elif cmd == "cost":    cmd_cost(global_state, args)
+        elif cmd in ("gitdiff", "gd"):        cmd_gitdiff(global_state, args)
+        elif cmd in ("branch", "br"):         cmd_branch(global_state, args)
+        elif cmd in ("qnote", "quicknote"):   cmd_quicknote(global_state, args)
+        elif cmd in ("qnotes", "quicknotes"): cmd_quicknotes(global_state, args)
         _sync_state_to_agent(global_state, agent_obj)
         return True
 
@@ -1806,61 +1185,6 @@ def cmd_cache(state, args):
     else:
         console.print("[yellow]Usage: /cache clear | /cache history | /cache convos | /cache images[/yellow]")
 
-
-def save_theme(name):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    THEME_FILE.write_text(name.strip())
-
-def load_last_model():
-    if LAST_MODEL_FILE.exists():
-        val = LAST_MODEL_FILE.read_text().strip()
-        # Reject garbage values (must look like a real model ID)
-        if val and ("/" in val or val.startswith("gemini")):
-            return val
-    return None
-
-def save_last_model(model):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    LAST_MODEL_FILE.write_text(model.strip())
-
-# ── API KEY MANAGER ───────────────────────────────
-KEYS_FILE = CONFIG_DIR / "keys.json"
-
-SUPPORTED_PROVIDERS = {
-    "gemini":      {"name": "Google Gemini",        "url": "https://aistudio.google.com/app/apikey",          "env": "GEMINI_API_KEY",       "prefix": "AIza"},
-    "openrouter":  {"name": "OpenRouter",            "url": "https://openrouter.ai/keys",                      "env": "OPENROUTER_API_KEY",   "prefix": "sk-or-"},
-    "openai":      {"name": "OpenAI",                "url": "https://platform.openai.com/api-keys",            "env": "OPENAI_API_KEY",       "prefix": "sk-"},
-    "anthropic":   {"name": "Anthropic (Claude)",    "url": "https://console.anthropic.com/settings/keys",     "env": "ANTHROPIC_API_KEY",    "prefix": "sk-ant-"},
-    "hf":          {"name": "HuggingFace",           "url": "https://huggingface.co/settings/tokens",          "env": "HF_TOKEN",             "prefix": "hf_"},
-    "groq":        {"name": "Groq",                  "url": "https://console.groq.com/keys",                   "env": "GROQ_API_KEY",         "prefix": "gsk_"},
-    "mistral":     {"name": "Mistral AI",            "url": "https://console.mistral.ai/api-keys",             "env": "MISTRAL_API_KEY",      "prefix": ""},
-    "cohere":      {"name": "Cohere",                "url": "https://dashboard.cohere.com/api-keys",           "env": "COHERE_API_KEY",       "prefix": ""},
-    "stability":   {"name": "Stability AI",          "url": "https://platform.stability.ai/account/credits",   "env": "STABILITY_API_KEY",    "prefix": "sk-"},
-    "replicate":   {"name": "Replicate",             "url": "https://replicate.com/account/api-tokens",        "env": "REPLICATE_API_TOKEN",  "prefix": "r8_"},
-}
-
-def load_all_keys():
-    try:
-        return json.loads(KEYS_FILE.read_text()) if KEYS_FILE.exists() else {}
-    except Exception:
-        return {}
-
-def save_all_keys(keys):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    KEYS_FILE.write_text(json.dumps(keys, indent=2))
-
-def get_key(provider):
-    info = SUPPORTED_PROVIDERS.get(provider, {})
-    env  = info.get("env", "")
-    if env and os.environ.get(env):
-        return os.environ[env]
-    keys = load_all_keys()
-    return keys.get(provider)
-
-def mask_key(key):
-    if not key or len(key) < 8:
-        return "***"
-    return key[:8] + "·" * 6 + key[-4:]
 
 def cmd_keys(state, args):
     keys = load_all_keys()
@@ -2097,6 +1421,10 @@ ALL_COMMANDS = [
     "/pr-review","/git-suggest","/test-coverage","/safety-check",
     # v9.3
     "/search","/websearch","/research","/turbo","/credits","/computer-use","/extension",
+    # v9.5
+    "/recap","/gitdiff","/branch","/set","/qnote","/qnotes","/cost",
+    "/focus","/unfocus","/swap","/copy-code","/session","/clear-history",
+    "/last","/wipe-pins","/colors","/model-info",
 ]
 
 COMMAND_METADATA = {
@@ -2218,67 +1546,228 @@ COMMAND_METADATA = {
     "/git-suggest":    ("GIT",     "AI commit/branch strategy — squash, split, rebase recommendations"),
     "/test-coverage":  ("DEV",     "Run coverage, find gaps, generate targeted tests for uncovered branches"),
     "/safety-check":   ("DEV",     "OWASP security scan — secrets, injection, unsafe calls — with patch-ready fixes"),
+    # v9.5
+    "/recap":          ("AI",      "AI one-paragraph summary of the current session"),
+    "/gitdiff":        ("GIT",     "Show git working-tree diff in a syntax-highlighted panel"),
+    "/branch":         ("GIT",     "Show current git branch, recent commits, and working-tree status"),
+    "/set":            ("CFG",     "Inline setter: /set model <name>"),
+    "/export":         ("UTIL",    "Export conversation to HTML or Markdown"),
+    "/qnote":          ("UTIL",    "Save a quick text note: /qnote <text>"),
+    "/qnotes":         ("UTIL",    "List quick notes; /qnotes del <n> to remove"),
+    "/cost":           ("PLAN",    "Show running session cost estimate based on tokens used"),
+    "/focus":          ("AI",      "Set a sticky topic/goal that silently prefixes every prompt"),
+    "/unfocus":        ("AI",      "Clear the active focus"),
+    "/swap":           ("AI",      "Toggle between the current and previous model"),
+    "/copy-code":      ("UTIL",    "Copy the last code block from AI response to clipboard"),
+    "/session":        ("SYS",     "Show session dashboard: model, plan, messages, tokens, focus"),
+    "/clear-history":  ("SYS",     "Wipe conversation history without clearing the screen"),
+    "/last":           ("AI",      "Re-display the last AI response"),
+    "/wipe-pins":      ("UTIL",    "Delete all pinned notes"),
+    "/colors":         ("UI",      "Show the current theme's full color palette"),
+    "/model-info":     ("AI",      "Show context window, pricing, and provider for active model"),
 }
+
+
+# ── NEW FEATURES (v9.5) ───────────────────────────────────────────────────────
+
+def cmd_recap(state, args, history):
+    """AI one-paragraph summary of the current session."""
+    theme = state.get("theme", THEMES["default"])
+    if not history:
+        console.print("[yellow]Nothing to recap — conversation is empty.[/yellow]")
+        return history
+    turns = len([h for h in history if h["role"] == "user"])
+    summary_prompt = (
+        "You are a session summariser. Summarise the conversation so far in ONE clear paragraph "
+        "(3-5 sentences max). Focus on: what the user was working on, key decisions made, and "
+        "any open threads. Be concrete — name files, models, or features if they came up."
+    )
+    console.print(f"[dim]Summarising {turns} turn(s)...[/dim]")
+    result, _ = ai_respond(state, summary_prompt, history, silent=True)
+    if result:
+        console.print(Panel(
+            result.strip(),
+            title="[bold]Session Recap[/bold]",
+            border_style=theme["border"]
+        ))
+    return history
+
+
+def cmd_gitdiff(state, args):
+    """Show the current git working-tree diff in a syntax-highlighted panel."""
+    import subprocess
+    theme = state.get("theme", THEMES["default"])
+    cwd   = state.get("workspace_root") or "."
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--stat", "HEAD"] if (args or "").strip() == "stat" else ["git", "diff"],
+            capture_output=True, text=True, cwd=cwd, timeout=10
+        )
+        diff_text = result.stdout or result.stderr or ""
+        if not diff_text.strip():
+            console.print("[dim]No changes in working tree.[/dim]")
+            return
+        # Truncate very large diffs
+        if len(diff_text) > 8000:
+            diff_text = diff_text[:8000] + "\n[... truncated — use /gitdiff stat for summary ...]"
+        console.print(Panel(
+            Syntax(diff_text, "diff", theme="monokai", word_wrap=True),
+            title="[bold]Git Diff[/bold]",
+            border_style=theme["border"]
+        ))
+    except FileNotFoundError:
+        console.print("[red]git not found in PATH[/red]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def cmd_branch(state, args):
+    """Show current git branch, log, and status summary."""
+    import subprocess
+    theme = state.get("theme", THEMES["default"])
+    cwd   = state.get("workspace_root") or "."
+    try:
+        branch_r = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                                   capture_output=True, text=True, cwd=cwd, timeout=5)
+        log_r    = subprocess.run(["git", "log", "--oneline", "-7"],
+                                   capture_output=True, text=True, cwd=cwd, timeout=5)
+        stat_r   = subprocess.run(["git", "status", "--short"],
+                                   capture_output=True, text=True, cwd=cwd, timeout=5)
+        branch = branch_r.stdout.strip() or "unknown"
+        log    = log_r.stdout.strip()
+        status = stat_r.stdout.strip()
+        body = f"[bold]Branch:[/bold] [cyan]{branch}[/cyan]\n\n"
+        if log:
+            body += "[bold]Recent commits:[/bold]\n" + "\n".join(f"  [dim]{l}[/dim]" for l in log.splitlines()) + "\n"
+        if status:
+            body += "\n[bold]Working tree:[/bold]\n" + "\n".join(f"  {l}" for l in status.splitlines())
+        else:
+            body += "\n[dim]Working tree clean[/dim]"
+        console.print(Panel(body, title="[bold]Git Branch[/bold]", border_style=theme["border"]))
+    except FileNotFoundError:
+        console.print("[red]git not found in PATH[/red]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def cmd_setmodel(state, args):
+    """Inline model switch: /set model <name>  (alias for /model)."""
+    args = (args or "").strip()
+    if not args:
+        console.print(f"[bold]Current model:[/bold] {state.get('model','(none)')}\n[dim]Usage: /set model <model-id>[/dim]")
+        return state
+    # Reuse cmd_model dispatch
+    return cmd_model(state, args)
+
+
+def cmd_undo_exchange(state, args, history):
+    """Remove the last user+assistant exchange from history."""
+    theme = state.get("theme", THEMES["default"])
+    if len(history) < 2:
+        console.print("[yellow]Nothing to undo — history is empty or has only one turn.[/yellow]")
+        return history
+    # Walk back from end: remove last model entry, then the user entry before it
+    new_history = list(history)
+    if new_history and new_history[-1]["role"] == "model":
+        new_history.pop()
+    if new_history and new_history[-1]["role"] == "user":
+        new_history.pop()
+    removed = len(history) - len(new_history)
+    console.print(f"[{theme['success']}]✓ Undone last exchange ({removed} entr{'y' if removed==1 else 'ies'} removed). History: {len(new_history)} turns.[/{theme['success']}]")
+    return new_history
+
+
+def cmd_quicknote(state, args):
+    """Save a quick text note: /qnote <text>. View all with /qnotes."""
+    args = (args or "").strip()
+    theme = state.get("theme", THEMES["default"])
+    notes_file = CONFIG_DIR / "notes.json"
+    try:
+        notes = json.loads(notes_file.read_text()) if notes_file.exists() else []
+    except Exception:
+        notes = []
+    if not args:
+        if not notes:
+            console.print("[dim]No quick notes. Use: /qnote <text>[/dim]")
+        else:
+            lines = "\n".join(
+                f"[bold cyan]{i+1}.[/bold cyan]  {n['text']}  [dim]({time.strftime('%Y-%m-%d %H:%M', time.localtime(n['ts']))})[/dim]"
+                for i, n in enumerate(notes)
+            )
+            console.print(Panel(lines, title="[bold]Quick Notes[/bold]", border_style=theme["border"]))
+        return
+    notes.append({"text": args, "ts": int(time.time())})
+    try:
+        CONFIG_DIR.mkdir(exist_ok=True)
+        notes_file.write_text(json.dumps(notes))
+        console.print(f"[{theme['success']}]✓ Saved note: {args[:60]}[/{theme['success']}]")
+    except Exception as e:
+        console.print(f"[red]Failed to save note: {e}[/red]")
+
+
+def cmd_quicknotes(state, args):
+    """List all quick notes. /qnotes del <n> to delete."""
+    args = (args or "").strip()
+    theme = state.get("theme", THEMES["default"])
+    notes_file = CONFIG_DIR / "notes.json"
+    try:
+        notes = json.loads(notes_file.read_text()) if notes_file.exists() else []
+    except Exception:
+        notes = []
+    if args.startswith("del ") or args.startswith("delete "):
+        idx_str = args.split(None, 1)[1].strip()
+        try:
+            idx = int(idx_str) - 1
+            if 0 <= idx < len(notes):
+                removed = notes.pop(idx)
+                notes_file.write_text(json.dumps(notes))
+                console.print(f"[{theme['success']}]✓ Deleted note: {removed['text'][:50]}[/{theme['success']}]")
+            else:
+                console.print(f"[yellow]No note #{idx_str}[/yellow]")
+        except ValueError:
+            console.print("[yellow]Usage: /qnotes del <number>[/yellow]")
+        return
+    if not notes:
+        console.print("[dim]No quick notes. Use: /qnote <text>[/dim]")
+    else:
+        lines = "\n".join(
+            f"[bold cyan]{i+1}.[/bold cyan]  {n['text']}  [dim]({time.strftime('%Y-%m-%d %H:%M', time.localtime(n['ts']))})[/dim]"
+            for i, n in enumerate(notes)
+        )
+        console.print(Panel(
+            lines + "\n\n[dim]/qnotes del <n> to remove[/dim]",
+            title="[bold]Quick Notes[/bold]",
+            border_style=theme["border"]
+        ))
+
+
+def cmd_cost(state, args):
+    """Show running session cost estimate based on tokens used."""
+    theme   = state.get("theme", THEMES["default"])
+    usage   = load_usage()
+    total_in  = usage.get("total_in", 0)
+    total_out = usage.get("total_out", 0)
+    model   = state.get("model", "")
+    pricing = MODEL_PRICING.get(model, {})
+    price_in  = pricing.get("in",  DEFAULT_PRICE_PER_1K)
+    price_out = pricing.get("out", DEFAULT_PRICE_PER_1K)
+    cost_in   = price_in  * total_in  / 1_000_000
+    cost_out  = price_out * total_out / 1_000_000
+    total_cost = cost_in + cost_out
+
+    rows = (
+        f"[bold]Model:[/bold]        {model or '(none)'}\n"
+        f"[bold]Tokens in:[/bold]    {total_in:,}   @ ${price_in:.4f}/1M  = [cyan]${cost_in:.4f}[/cyan]\n"
+        f"[bold]Tokens out:[/bold]   {total_out:,}  @ ${price_out:.4f}/1M  = [cyan]${cost_out:.4f}[/cyan]\n"
+        f"[bold]Session total:[/bold] [bold yellow]${total_cost:.4f}[/bold yellow]\n\n"
+        f"[dim]Estimates only. Actual billing may differ.[/dim]"
+    )
+    console.print(Panel(rows, title="[bold]Session Cost[/bold]", border_style=theme["border"]))
 
 
 def cmd_local(state, model="llama3"):
     state["model"] = f"ollama/{model}"
-    console.print(f"[green]✓ Switched to Local Ollama model: {model}[/green]")
     return state
-
-
-# ── CONFIG ────────────────────────────────────────
-def load_api_key(user_id="default"):
-    """Load Gemini API key from profile directory."""
-    k = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    path = Path("profiles") / user_id / "gemini_key"
-    return k or (path.read_text().strip() if path.exists() else None)
-
-def save_api_key(user_id_or_key, k=None):
-    """Save Gemini API key to profile directory.
-
-    Supports two call signatures:
-      save_api_key(key)             -> saves under "default"
-      save_api_key("user_id", key)  -> saves under the given user_id
-    """
-    if k is None:
-        k = user_id_or_key
-        user_id = "default"
-    else:
-        user_id = user_id_or_key
-    path = Path("profiles") / user_id / "gemini_key"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(k.strip())
-
-def load_or_key(user_id="default"):
-    """Load OpenRouter API key from profile directory."""
-    k = os.environ.get("OPENROUTER_API_KEY")
-    path = Path("profiles") / user_id / "openrouter_key"
-    return k or (path.read_text().strip() if path.exists() else None)
-
-def save_or_key(user_id_or_key, k=None):
-    """Save OpenRouter API key to profile directory.
-
-    Supports two call signatures:
-      save_or_key(key)             -> saves under "default"
-      save_or_key("user_id", key)  -> saves under the given user_id
-    """
-    if k is None:
-        k = user_id_or_key
-        user_id = "default"
-    else:
-        user_id = user_id_or_key
-    path = Path("profiles") / user_id / "openrouter_key"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(k.strip())
-
-def load_hf_key():
-    k = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
-    return k or (HF_KEY_FILE.read_text().strip() if HF_KEY_FILE.exists() else None)
-
-def save_hf_key(k):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    HF_KEY_FILE.write_text(k.strip())
 
 
 def cmd_imagine(state, args):
@@ -2463,137 +1952,6 @@ def run_via_gemini_cli(prompt, system_prompt=None):
         except Exception: pass
 
 # ── GEMINI REST ───────────────────────────────────
-def call_gemini(api_key, model, history, prompt, system_prompt=None, _retry=0):
-    url      = f"{API_BASE}/{model}:generateContent"
-    contents = [{"role": m["role"], "parts":[{"text":m["text"]}]} for m in history]
-    contents.append({"role":"user","parts":[{"text":prompt}]})
-    body = {"contents": contents}
-    if system_prompt:
-        body["systemInstruction"] = {"parts":[{"text":system_prompt}]}
-    payload = json.dumps(body).encode()
-    req = request.Request(url, data=payload,
-        headers={"Content-Type":"application/json","X-goog-api-key":api_key}, method="POST")
-    try:
-        with request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode())
-        candidates = data.get("candidates") or []
-        if not candidates:
-            reason = (data.get("promptFeedback") or {}).get("blockReason", "unknown")
-            return None, f"Gemini blocked the response (reason: {reason}). Try rephrasing."
-        cand = candidates[0]
-        parts = (cand.get("content") or {}).get("parts") or []
-        if not parts:
-            finish = cand.get("finishReason", "unknown")
-            return None, f"Gemini returned an empty response (finishReason: {finish})."
-        return parts[0].get("text", ""), None
-    except urllib_error.HTTPError as e:
-        body2 = e.read().decode()
-        if e.code in (429, 503) and _retry < 3:
-            wait = 2 ** _retry
-            console.print(f"[dim yellow]⏳ Rate limited — retrying in {wait}s ({_retry+1}/3)…[/dim yellow]")
-            time.sleep(wait)
-            return call_gemini(api_key, model, history, prompt, system_prompt, _retry + 1)
-        if e.code in (401, 403):
-            return None, "Invalid or expired API key — run /setup to update it."
-        try: msg = json.loads(body2)["error"]["message"]
-        except Exception: msg = body2
-        return None, msg
-    except Exception as e: return None, str(e)
-
-# ── OPENROUTER REST ───────────────────────────────
-def _apply_openrouter_extras(body: dict, fast_mode: bool, thinking_budget: int) -> None:
-    if fast_mode:
-        body["max_tokens"] = 512
-    if thinking_budget > 0:
-        body["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
-
-def call_openrouter(api_key, model, history, prompt, system_prompt=None, _retry=0,
-                    fast_mode=False, thinking_budget=0):
-    messages = []
-    if system_prompt: messages.append({"role":"system","content":system_prompt})
-    for m in history:
-        messages.append({"role":"assistant" if m["role"]=="model" else m["role"],"content":m["text"]})
-    messages.append({"role":"user","content":prompt})
-    body = {"model": model, "messages": messages}
-    _apply_openrouter_extras(body, fast_mode, thinking_budget)
-    payload = json.dumps(body).encode()
-    req = request.Request(OPENROUTER_BASE, data=payload, headers={
-        "Content-Type":"application/json",
-        "Authorization":f"Bearer {api_key}",
-        "HTTP-Referer":"https://github.com/aistudio-cli",
-        "X-Title":"AI Studio CLI"
-    }, method="POST")
-    try:
-        with request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode())
-        return data["choices"][0]["message"]["content"], None
-    except urllib_error.HTTPError as e:
-        body = e.read().decode()
-        if e.code in (429, 503) and _retry < 3:
-            wait = 2 ** _retry
-            console.print(f"[dim yellow]⏳ Rate limited — retrying in {wait}s ({_retry+1}/3)…[/dim yellow]")
-            time.sleep(wait)
-            return call_openrouter(api_key, model, history, prompt, system_prompt, _retry + 1,
-                                   fast_mode=fast_mode, thinking_budget=thinking_budget)
-        try: msg = json.loads(body)["error"]["message"]
-        except Exception: msg = body
-        return None, msg
-    except Exception as e: return None, str(e)
-
-
-def call_openrouter_stream(api_key, model, history, prompt, system_prompt=None,
-                           fast_mode=False, thinking_budget=0):
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    for m in history:
-        messages.append({"role": "assistant" if m["role"] == "model" else m["role"], "content": m["text"]})
-    messages.append({"role": "user", "content": prompt})
-    body = {"model": model, "messages": messages, "stream": True}
-    _apply_openrouter_extras(body, fast_mode, thinking_budget)
-    payload = json.dumps(body).encode()
-    req = request.Request(
-        OPENROUTER_BASE, data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-            "HTTP-Referer": "https://github.com/aistudio-cli",
-            "X-Title": "AI Studio CLI",
-        },
-        method="POST",
-    )
-    try:
-        with request.urlopen(req, timeout=300) as resp:
-            for raw in resp:
-                line = raw.decode("utf-8", errors="replace").strip()
-                if not line or not line.startswith("data:"):
-                    continue
-                data = line[len("data:"):].strip()
-                if data == "[DONE]":
-                    break
-                try:
-                    obj = json.loads(data)
-                except Exception:
-                    continue
-                choice    = (obj.get("choices") or [{}])[0]
-                delta_obj = choice.get("delta") or {}
-                content   = delta_obj.get("content")
-                reasoning = delta_obj.get("reasoning") or delta_obj.get("reasoning_content")
-                if reasoning:
-                    yield None, None, reasoning
-                if content:
-                    yield content, None, None
-        yield None, None, None
-    except urllib_error.HTTPError as e:
-        body = e.read().decode()
-        try:
-            msg = json.loads(body).get("error", {}).get("message") or body
-        except Exception:
-            msg = body
-        yield None, msg, None
-    except Exception as e:
-        yield None, str(e), None
-
 # ── UNIFIED RESPOND ───────────────────────────────
 def build_system_prompt(state):
     # ── Free-plan nerf: override persona + inject restriction ────────────────
@@ -2769,25 +2127,6 @@ def sync_dev_changes():
     return False
 
 # ── RATE LIMITER & USAGE TRACKER ──────────────────
-USAGE_FILE = CONFIG_DIR / "usage.json"
-
-def load_usage():
-    try:
-        if USAGE_FILE.exists():
-            data = json.loads(USAGE_FILE.read_text())
-            # Clean up old entries (older than 5 hours)
-            now = time.time()
-            data["history"] = [entry for entry in data.get("history", []) if now - entry["ts"] < 18000]
-            return data
-    except Exception: pass
-    return {"history": [], "total_in": 0, "total_out": 0}
-
-def save_usage(usage):
-    try:
-        CONFIG_DIR.mkdir(exist_ok=True)
-        USAGE_FILE.write_text(json.dumps(usage))
-    except Exception: pass
-
 def check_rate_limit(state):
     usage = load_usage()
     tier  = get_plan(state).lower()
@@ -4554,6 +3893,11 @@ def cmd_usage(state):
     last_line = (f"in≈{lt['in']}t  out≈{lt['out']}t  {lt['sec']}s" if lt else "—")
 
     ok, rl_count = check_rate_limit(state)
+    _rl_caps    = {"free": 10, "pro": 200, "max": 500, "ultra": 1000, "enterprise": 9999}
+    _rl_windows = {"free": "1hr", "pro": "5hr", "max": "10hr", "ultra": "24hr", "enterprise": "24hr"}
+    rl_cap    = _rl_caps.get(plan_id, 10)
+    rl_window = _rl_windows.get(plan_id, "1hr")
+    model_access = "all models" if plan["models"] is None else plan["models"][0].split("/")[1]
 
     console.print(Panel(
         f"[bold]Plan:[/bold]         [{plan['color']}]{plan['badge']} {plan['name']}[/{plan['color']}]  [dim]{plan['price']}[/dim]{trial_line}\n\n"
@@ -4562,11 +3906,11 @@ def cmd_usage(state):
         f"[bold]Tokens out:[/bold]   {total_out:,}\n"
         f"[bold]Total tokens:[/bold] {total_in+total_out:,}\n"
         f"[bold]Last request:[/bold] {last_line}\n\n"
-        f"[bold]Rate window:[/bold]  {rl_count} requests  [dim](free cap: 10/hr)[/dim]\n"
+        f"[bold]Rate window:[/bold]  {rl_count} requests  [dim](cap: {rl_cap}/{rl_window})[/dim]\n"
         f"[bold]Image quota:[/bold]  {plan['img_per_3h']}/3h\n"
-        f"[bold]Model access:[/bold] {'all models' if plan['models'] is None else plan['models'][0].split('/')[1]}\n\n"
+        f"[bold]Model access:[/bold] {model_access}\n\n"
         f"  [dim]/trial pro   /upgrade pro   /plan   /usage[/dim]",
-        title=f"[bold]Usage & Plan Limits[/bold]",
+        title="[bold]Usage & Plan Limits[/bold]",
         border_style=theme["border"]
     ))
 
@@ -4791,23 +4135,6 @@ def cmd_balance(state):
         padding=(1, 2)
     ))
     console.print()
-
-def cmd_cost(state):
-    """Show real cost of the last interaction based on active model's pricing."""
-    lt = state.get("_last_tokens")
-    if not lt: return
-    model   = state.get("model") or DEFAULT_MODEL
-    rate    = model_price_per_1k(model)
-    total_t = lt["in"] + lt["out"]
-    cost    = (total_t / 1000) * rate
-    free_tag = " [dim](free tier — $0)[/dim]" if rate == 0.0 else f" [dim]@ ${rate:.5f}/1k[/dim]"
-    console.print(
-        f"[dim]Last turn:[/dim] [bold]{lt['in']}[/bold] in + [bold]{lt['out']}[/bold] out "
-        f"= [bold]{total_t:,}[/bold] tokens  "
-        f"[bold {'green' if rate == 0 else 'yellow'}]${cost:.6f}[/bold {'green' if rate == 0 else 'yellow'}]"
-        f"{free_tag}"
-    )
-
 
 # ═══════════════════════════════════════════════════════════════
 # ── v5.6 NEW FEATURES ─────────────────────────────────────────
@@ -10006,30 +9333,22 @@ def render_welcome(state):
 
     # ── NOVA ──────────────────────────────────────────────────────────────
     if ui == "nova":
-        nova_lines = [
-            "  ╔══════════════════════════════════════════════════╗",
-            "  ║  ⚡  N  O  V  A     S  T  U  D  I  O  ⚡  CLI  ║",
-            f"  ║  {'─'*48}  ║",
-            f"  ║   v{VERSION}                                          ║",
-            "  ╚══════════════════════════════════════════════════╝",
-        ]
-        _animate_banner(nova_lines, "bold magenta", delay=0.035)
-        console.print()
-        info = (
-            f"  [bold magenta]◆ Model[/bold magenta]    [cyan]{short}[/cyan]  [dim magenta]· {mode_str}[/dim magenta]\n"
+        nova_body = (
+            f"  [bold magenta]◆ Model[/bold magenta]    [cyan]{short}[/cyan]  [dim]· {mode_str}[/dim]\n"
             f"  [bold magenta]◆ Dir[/bold magenta]      [dim]{ws_short}[/dim]\n"
-            f"  [bold magenta]◆ Plan[/bold magenta]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]  "
-            f"[dim]{msg_str} msgs[/dim]\n"
-            f"  [bold magenta]◆ Stream[/bold magenta]   [dim]{stream_m}[/dim]\n"
+            f"  [bold magenta]◆ Plan[/bold magenta]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+            f"  [dim]{msg_str} msgs[/dim]\n"
+            f"  [bold magenta]◆ Stream[/bold magenta]   [dim]{stream_m}[/dim]\n\n"
+            f"  [dim magenta]/enter .   /models   /agent berry   /vibe   /arena   /help[/dim magenta]"
         )
         console.print(Panel(
-            info,
+            nova_body,
+            title=f"[bold magenta]⚡  NOVA  STUDIO  CLI  v{VERSION}[/bold magenta]",
+            subtitle=f"[dim magenta]{plan_cfg['badge']} {plan_cfg['name']}[/dim magenta]",
             border_style="magenta",
-            padding=(0, 1),
+            padding=(0, 2),
         ))
-        console.print(
-            "  [dim magenta]/enter .   /models   /agent berry   /vibe   /arena   /help[/dim magenta]\n"
-        )
+        console.print()
         return
 
     # ── FOXXIA ──────────────────────────────────────────────────────────────
@@ -10556,6 +9875,215 @@ def _sync_state_to_agent(global_state, agent_obj):
             agent_obj.state[k] = global_state[k]
 
 
+# ═══════════════════════════════════════════════════════════════
+# ── v9.5 QUALITY-OF-LIFE FEATURES ─────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+
+def cmd_focus(state, args):
+    """/focus [goal] — set a sticky topic/goal that silently prefixes every AI prompt."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    if not args:
+        focus = state.get("_focus")
+        if focus:
+            console.print(Panel(
+                f"  [bold]Active focus:[/bold]\n  {focus}\n\n  [dim]/unfocus to clear[/dim]",
+                title="Focus", border_style=acc, padding=(0, 2)
+            ))
+        else:
+            console.print("[dim]No focus set. Usage: /focus <goal or topic>[/dim]")
+        return state
+    state["_focus"] = args.strip()
+    console.print(f"  [{acc}]✓ Focus set:[/{acc}] {args.strip()}")
+    console.print("  [dim]All prompts will carry this context silently. /unfocus to clear.[/dim]")
+    return state
+
+
+def cmd_unfocus(state):
+    """/unfocus — clear the active focus."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    if state.pop("_focus", None):
+        console.print(f"  [{acc}]✓ Focus cleared.[/{acc}]")
+    else:
+        console.print("[dim]No focus was set.[/dim]")
+    return state
+
+
+def cmd_swap(state):
+    """/swap — toggle between the current and previous model."""
+    theme   = state.get("theme", THEMES["default"])
+    acc     = theme.get("accent", "cyan")
+    current = state.get("model", DEFAULT_MODEL)
+    prev    = state.get("_prev_model")
+    if not prev or prev == current:
+        console.print("[yellow]No previous model to swap to. Switch models with /model <name> first.[/yellow]")
+        return state
+    state["_prev_model"] = current
+    state["model"]       = prev
+    save_last_model(prev)
+    console.print(f"  [{acc}]⇄ Swapped:[/{acc}] {current} → {prev}")
+    return state
+
+
+def cmd_copy_code(state):
+    """/copy-code — extract and copy the last code block from the AI response."""
+    import re
+    last_r = state.get("_last_response", "")
+    theme  = state.get("theme", THEMES["default"])
+    if not last_r:
+        console.print("[yellow]No response yet.[/yellow]")
+        return
+    blocks = re.findall(r"```(?:\w+)?\n?(.*?)```", last_r, re.DOTALL)
+    if not blocks:
+        console.print("[yellow]No code block found in last response.[/yellow]")
+        return
+    code = blocks[-1].strip()
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["clip"], input=code.encode("utf-8"), check=True)
+        else:
+            subprocess.run(["xclip", "-selection", "clipboard"], input=code.encode(), check=True)
+        lines = code.count("\n") + 1
+        console.print(f"[{theme['success']}]✓ Copied code block ({lines} lines) to clipboard[/{theme['success']}]")
+    except Exception:
+        console.print("[yellow]Clipboard failed. Code block:[/yellow]")
+        console.print(Syntax(code[:2000], "text", theme="monokai"))
+
+
+def cmd_session_info(state, history):
+    """/session — live session dashboard: name, model, messages, tokens, focus."""
+    theme    = state.get("theme", THEMES["default"])
+    border   = theme.get("border", "cyan")
+    acc      = theme.get("accent", "cyan")
+    name     = state.get("session_name") or "[dim]unnamed[/dim]"
+    model    = state.get("model", DEFAULT_MODEL)
+    plan_id  = get_plan(state)
+    plan     = PLANS.get(plan_id, PLANS["free"])
+    ui       = state.get("ui_style") or "gemini"
+    stream   = state.get("stream_mode") or "auto"
+    focus    = state.get("_focus")
+    msgs     = len([h for h in history if h.get("role") == "user"])
+    ai_turns = len([h for h in history if h.get("role") == "model"])
+    lt       = state.get("_last_tokens") or {}
+    focus_line = f"\n  [bold]Focus:[/bold]       {focus[:60]}{'…' if focus and len(focus)>60 else ''}" if focus else ""
+    console.print(Panel(
+        f"  [bold]Session:[/bold]     {name}\n"
+        f"  [bold]Model:[/bold]       {model}\n"
+        f"  [bold]Plan:[/bold]        [{plan['color']}]{plan['badge']} {plan['name']}[/{plan['color']}]\n"
+        f"  [bold]UI / Stream:[/bold] {ui} / {stream}\n"
+        f"  [bold]Messages:[/bold]    {msgs} sent  ·  {ai_turns} AI responses\n"
+        f"  [bold]Last tokens:[/bold] {lt.get('in',0):,} in  ·  {lt.get('out',0):,} out"
+        f"{focus_line}",
+        title="[bold]Session Dashboard[/bold]",
+        border_style=border, padding=(0, 2)
+    ))
+
+
+def cmd_clear_history(state, history):
+    """/clear-history — wipe conversation history without clearing the screen."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    turns = len([h for h in history if h.get("role") == "user"])
+    reset_msg_counter(state)
+    console.print(f"  [{acc}]✓ Cleared {turns} conversation turn(s). Screen preserved.[/{acc}]")
+    return []
+
+
+def cmd_last(state):
+    """/last — re-display the last AI response."""
+    last_r = state.get("_last_response")
+    theme  = state.get("theme", THEMES["default"])
+    border = theme.get("border", "cyan")
+    if not last_r:
+        console.print("[yellow]No response yet.[/yellow]")
+        return
+    console.print(Panel(Markdown(last_r), title="[bold]Last Response[/bold]", border_style=border))
+
+
+def cmd_wipe_pins(state):
+    """/wipe-pins — delete all pinned notes."""
+    theme      = state.get("theme", THEMES["default"])
+    acc        = theme.get("accent", "cyan")
+    notes_file = CONFIG_DIR / "notes.json"
+    try:
+        count = 0
+        if notes_file.exists():
+            count = len(json.loads(notes_file.read_text(encoding="utf-8")))
+            notes_file.write_text(json.dumps([]), encoding="utf-8")
+        console.print(f"  [{acc}]✓ Wiped {count} pinned note(s).[/{acc}]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def cmd_colors(state):
+    """/colors — display the current theme's color palette."""
+    theme      = state.get("theme", THEMES["default"])
+    theme_name = state.get("theme_name", "default")
+    rows = []
+    for k, v in theme.items():
+        if not isinstance(v, str) or not v:
+            continue
+        try:
+            rows.append(f"  [{v}]███[/{v}]  [dim]{k:<20}[/dim] [bold]{v}[/bold]")
+        except Exception:
+            rows.append(f"  [dim]{k:<20}[/dim] {v}")
+    console.print(Panel(
+        "\n".join(rows),
+        title=f"[bold]Theme: {theme_name}[/bold]",
+        border_style=theme.get("border", "cyan"),
+        padding=(0, 1)
+    ))
+
+
+def cmd_model_info(state):
+    """/model-info — show context window, pricing, and provider for the active model."""
+    model  = state.get("model", DEFAULT_MODEL)
+    theme  = state.get("theme", THEMES["default"])
+    border = theme.get("border", "cyan")
+    # Provider
+    if state.get("use_ollama") or model.startswith("ollama/"):
+        provider = "Ollama (local)"
+    elif state.get("use_openrouter") or "/" in model:
+        provider = "OpenRouter"
+    elif state.get("use_cli"):
+        provider = "Gemini CLI (npx)"
+    else:
+        provider = "Google Gemini"
+    # Pricing
+    pricing   = MODEL_PRICING.get(model, {})
+    price_in  = pricing.get("in",  DEFAULT_PRICE_PER_1K)
+    price_out = pricing.get("out", DEFAULT_PRICE_PER_1K)
+    is_free   = price_in == 0.0
+    price_str = ("[green]FREE[/green]" if is_free
+                 else f"[yellow]${price_in:.4f}[/yellow] / [yellow]${price_out:.4f}[/yellow] per 1M (in/out)")
+    # Known context windows
+    _CTX = {
+        "gemini-2.5-pro":       "1 M tokens",
+        "gemini-2.0-flash":     "1 M tokens",
+        "gemini-1.5-pro":       "2 M tokens",
+        "gemini-1.5-flash":     "1 M tokens",
+        "claude-opus-4-7":      "200 K tokens",
+        "claude-sonnet-4-6":    "200 K tokens",
+        "claude-haiku-4-5":     "200 K tokens",
+        "gpt-4o":               "128 K tokens",
+        "gpt-4o-mini":          "128 K tokens",
+        "llama-3.3-70b":        "128 K tokens",
+        "gemma-3-27b":          "128 K tokens",
+        "qwen":                 "128 K tokens",
+        "deepseek":             "128 K tokens",
+    }
+    ctx = next((v for k, v in _CTX.items() if k in model), "unknown")
+    console.print(Panel(
+        f"  [bold]Model:[/bold]    {model}\n"
+        f"  [bold]Provider:[/bold] {provider}\n"
+        f"  [bold]Context:[/bold]  {ctx}\n"
+        f"  [bold]Pricing:[/bold]  {price_str}",
+        title="[bold]Model Info[/bold]",
+        border_style=border, padding=(0, 2)
+    ))
+
+
 # ── REPL ─────────────────────────────────────────
 def run_repl(state):
     HISTORY_FILE.parent.mkdir(exist_ok=True)
@@ -10780,7 +10308,7 @@ def run_repl(state):
                             console.print("[yellow]Copy failed (install clip/xclip)[/yellow]")
                             console.print(last_r)
 
-                elif cmd in ("shortcuts", "keys", "kb") and not args:
+                elif cmd in ("shortcuts", "kb") and not args:
                     theme2 = state.get("theme", THEMES["default"])
                     console.print(Panel(
                         "  [yellow]Ctrl+L[/yellow]        Clear screen & history\n"
@@ -11004,6 +10532,7 @@ def run_repl(state):
                 elif cmd == "compare": cmd_compare(state, args) if args else console.print("[yellow]Usage: /compare <prompt>[/yellow]")
                 elif cmd == "model":
                     if args:
+                        state["_prev_model"] = state.get("model")
                         state["model"] = args
                         save_last_model(args)
                         theme = state.get("theme", THEMES["default"])
@@ -11058,7 +10587,7 @@ def run_repl(state):
                 elif cmd == "voice":          cmd_voice(state, args)
                 elif cmd == "export":         cmd_export(state, history)
                 elif cmd == "balance":        cmd_balance(state)
-                elif cmd == "cost":           cmd_cost(state)
+                elif cmd == "cost":           cmd_cost(state, args)
                 elif cmd == "lint":           cmd_lint(state, args)
                 elif cmd == "fif":            history = cmd_fif(state, args, history)
                 elif cmd == "snippet":        cmd_snippet(state, args)
@@ -11135,7 +10664,7 @@ def run_repl(state):
                 elif cmd == "env":         cmd_env(state)
                 elif cmd == "count":       cmd_count(state, args) if args else console.print("[yellow]Usage: /count <pattern> <file>[/yellow]")
                 elif cmd == "timeit":      history = cmd_timeit(state, args, history) if args else (console.print("[yellow]Usage: /timeit <question>[/yellow]"), history)[1]
-                elif cmd in ("free-tips","tips"): cmd_free_tips(state)
+                elif cmd == "free-tips": cmd_free_tips(state)
 
                 # ── v5.6 new commands ─────────────────────────────────────────
                 elif cmd == "summarize":  history = cmd_summarize(state, history)
@@ -11187,7 +10716,7 @@ def run_repl(state):
                 # ── v9.0 (pro) ────────────────────────────────────────────────
                 elif cmd == "plugin":
                     cmd_plugin(state, args)
-                elif cmd in ("agent-mesh", "agentmesh", "mesh"):
+                elif cmd in ("agent-mesh", "agentmesh"):
                     history = cmd_agent_mesh(state, args, history)
                 elif cmd in ("vision-pro", "visionpro", "vpro"):
                     history = cmd_vision_pro(state, args, history)
@@ -11227,6 +10756,37 @@ def run_repl(state):
                     history = cmd_test_coverage(state, args, history)
                 elif cmd in ("safety-check", "safetycheck", "sec", "scan"):
                     history = cmd_safety_check(state, args, history)
+
+                # ── v9.5 features ──────────────────────────────────────────
+                elif cmd == "recap":
+                    history = cmd_recap(state, args, history)
+                elif cmd in ("gitdiff", "gd"):
+                    cmd_gitdiff(state, args)
+                elif cmd in ("branch", "br"):
+                    cmd_branch(state, args)
+                elif cmd == "set":
+                    # /set model <name>
+                    sub, _, rest2 = (args or "").partition(" ")
+                    if sub.strip().lower() == "model":
+                        state = cmd_setmodel(state, rest2.strip())
+                    else:
+                        console.print("[yellow]Usage: /set model <model-id>[/yellow]")
+                elif cmd in ("qnote", "quicknote"):
+                    cmd_quicknote(state, args)
+                elif cmd in ("qnotes", "quicknotes"):
+                    cmd_quicknotes(state, args)
+
+                # ── v9.5 QoL ─────────────────────────────────────────────
+                elif cmd == "focus":           state = cmd_focus(state, args)
+                elif cmd == "unfocus":         state = cmd_unfocus(state)
+                elif cmd == "swap":            state = cmd_swap(state)
+                elif cmd in ("copy-code", "copycode", "cc"): cmd_copy_code(state)
+                elif cmd in ("session", "sess"): cmd_session_info(state, history)
+                elif cmd in ("clear-history", "ch"): history = cmd_clear_history(state, history)
+                elif cmd == "last":            cmd_last(state)
+                elif cmd in ("wipe-pins", "wipepins"): cmd_wipe_pins(state)
+                elif cmd == "colors":          cmd_colors(state)
+                elif cmd in ("model-info", "modelinfo", "minfo"): cmd_model_info(state)
 
                 else:
                     # Check user-defined aliases first
@@ -11310,12 +10870,16 @@ def run_repl(state):
                                 border_style="red", padding=(1, 2)))
                             continue
                         state["_last_prompt"] = user_input
+                        # Apply sticky /focus prefix if set
+                        _focus = state.get("_focus")
+                        _effective = (f"[Context — stay focused on: {_focus}]\n\n{user_input}"
+                                      if _focus else user_input)
                         tmp_ctx = state.pop("_one_shot_ctx", None)
                         if isinstance(tmp_ctx, dict) and "error" not in tmp_ctx:
-                            prompt     = format_project_context(tmp_ctx, max_files=8) + "\n\n---\n\nQuestion: " + user_input
+                            prompt     = format_project_context(tmp_ctx, max_files=8) + "\n\n---\n\nQuestion: " + _effective
                             _, history = ai_respond(state, prompt, history)
                         else:
-                            _, history = ai_respond(state, user_input, history)
+                            _, history = ai_respond(state, _effective, history)
                         # Auto-save session after every exchange
                         _autosave_session(history)
 
@@ -11403,7 +10967,7 @@ def main():
         console.print("[dim italic]✦ Dev Sync: Pushed changes to AppData[/dim italic]")
 
     parser = argparse.ArgumentParser(
-        description="AI Studio CLI v5.8 — Advanced AI Terminal Interface",
+        description=f"AI Studio CLI v{VERSION} — Advanced AI Terminal Interface",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
     [bold cyan]Updates & Tiers:[/bold cyan]

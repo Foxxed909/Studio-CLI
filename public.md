@@ -1,5 +1,24 @@
 # AI Studio CLI — Public Changelog
 
+## v9.5 (second patch) — 2026-05-18
+
+### Bug Fixes
+- **`/usage` now shows plan-aware rate limit** — the rate window cap is now derived from your actual plan (`free: 10/hr`, `pro: 200/5hr`, `max: 500/10hr`) instead of always displaying "free cap: 10/hr" for all plans.
+- **`/tokens` now shows session totals** — instead of printing just "Usage: /tokens", the command now displays a proper panel with session token counts (in, out, total) and an estimated session cost based on the active model's pricing.
+- **Removed 5 blocks of duplicate function declarations** in `aistudio.py` that were silently shadowing correctly imported functions from `studio/session.py`. Affected: `load_profile`, `save_profile`, `load_trial`, `get_plan`, `check_msg_limit`, `load_usage`, `save_usage`, `load_api_key`, `load_or_key`, `load_hf_key`, and more. No behavioral regression — the shadowing copies were equivalent — but this was dead weight that masked the import-based architecture.
+
+### New Commands
+- **`/recap`** — ask the AI for a one-paragraph summary of the current session: what was worked on, key decisions, open threads.
+- **`/gitdiff`** — show the current git working-tree diff in a syntax-highlighted panel. Use `/gitdiff stat` for a summary view.
+- **`/branch`** — show the current git branch name, last 7 commits, and working-tree status in one panel.
+- **`/set model <name>`** — inline model switch without navigating to `/models`. Alias for `/model`.
+- **`/cost`** — improved session cost panel: shows token totals (in, out, combined), per-1M rate for the current model, and estimated session spend. Replaces the last-turn-only display.
+- **`/qnote <text>`** — save a quick text note to `~/.aistudio/notes.json`. Use `/qnotes` to list.
+- **`/qnotes`** — list all quick notes. `/qnotes del <n>` to remove.
+
+### UI
+- **Nova welcome screen redesigned** — removed the fixed-width ASCII art box that misaligned on narrow terminals. Now uses a `Panel()` with title/subtitle, matching the studio/foxxia/codex pattern.
+
 ## v9.6 — 2026-05-18
 
 ### Web UI — New Themes

@@ -20,7 +20,7 @@ web/node_modules/
 
 # IDE / tooling
 .playwright-mcp/
-.claude/settings.local.json
+.claude/
 *.log
 
 # Secrets / keys (never commit)

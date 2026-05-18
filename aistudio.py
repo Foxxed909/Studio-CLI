@@ -2090,7 +2090,7 @@ ALL_COMMANDS = [
     # v9.1
     "/alias","/multiline","/note","/regen","/context-bar","/resume",
     "/history-search","/hs","/compact","/clip","/tts",
-    "/diffpatch","/format","/rename","/outline","/comment",
+    "/diffpatch","/format","/rename","/name","/n","/handoff","/outline","/comment",
     "/hotswap","/pin","/template","/undo",
     # v9.2
     "/fast","/thinking","/time","/statusline","/effort",
@@ -2888,14 +2888,14 @@ def _clean_terminal_text(text):
 def _assistant_heading(state, provider_label, is_heavy=False, toks=0):
     ui      = state.get("ui_style") or "gemini"
     theme   = state.get("theme") or THEMES.get("default") or {}
-    accent  = theme.get("accent", "bold cyan")
+    accent  = theme.get("accent", "#22d3ee")
+    border  = theme.get("border", accent).replace("bold ", "")
     short   = _short_model(state.get("model") or "")
     bolt    = "⚡ " if is_heavy else ""
     t_str   = f"{toks}t" if toks else ""
     mode    = state.get("_chat_mode", "")
     mode_tag = f" [{mode.upper()}]" if mode and mode != "normal" else ""
 
-    # Pick the agent/persona label
     active_agent = state.get("active_agent")
     if active_agent and active_agent in AGENT_ROSTER:
         info    = AGENT_ROSTER[active_agent]
@@ -2906,25 +2906,27 @@ def _assistant_heading(state, provider_label, is_heavy=False, toks=0):
         color   = accent
 
     meta = f"[dim]{bolt}{short}  {t_str}{mode_tag}[/dim]" if short else ""
+    sep  = f"[dim {border}]{'─' * 48}[/dim {border}]"
 
     if ui == "studio":
-        return f"\n[{color}]{label}[/{color}]  {meta}\n"
+        return f"\n{sep}\n[{color}]{label}[/{color}]  {meta}\n"
     if ui == "claude":
-        return f"\n[bold white]▸[/bold white] [{color}]{label}[/{color}]  {meta}\n"
+        return f"\n{sep}\n[bold white]▸[/bold white] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "codex":
-        return f"\n[{color}]>[/{color}] [{color}]{label}[/{color}]  {meta}\n"
+        return f"\n{sep}\n[{color}]>[/{color}] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "ghost":
         dim_l = "◌" if not active_agent else label
         ghost_meta = f"[dim]│[/dim] [dim white]{bolt}{short}  {t_str}{mode_tag}[/dim white]" if short else ""
         return f"\n[dim]│[/dim] [dim white]{dim_l}[/dim white]  {ghost_meta}\n"
     if ui == "nova":
-        return f"\n[bold magenta]⚡[/bold magenta] [{color}]{label}[/{color}]  {meta}\n"
+        return f"\n{sep}\n[bold magenta]⚡[/bold magenta] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "foxxia":
-        return f"\n[bold yellow]🦊[/bold yellow] [{color}]{label}[/{color}]  {meta}\n"
+        return f"\n{sep}\n[bold #f97316]🦊[/bold #f97316] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "rain":
-        return f"\n[bold #00FF41]▓[/bold #00FF41] [#00FFFF]{label}[/#00FFFF]  {meta}\n"
-    # gemini default
-    return f"\n[{accent}]✦[/{accent}] [{color}]{label}[/{color}]  {meta}\n"
+        rain_sep = f"[dim #00ff41]{'·' * 48}[/dim #00ff41]"
+        return f"\n{rain_sep}\n[bold #00FF41]▓[/bold #00FF41] [#00FFFF]{label}[/#00FFFF]  {meta}\n"
+    # gemini / all other styles
+    return f"\n{sep}\n[{accent}]✦[/{accent}] [{color}]{label}[/{color}]  {meta}\n"
 
 def _stream_print(text, mode):
     if not text:
@@ -3380,6 +3382,108 @@ def cmd_format(state, args):
             console.print(f"[dim]No formatter for {ext} (install black/prettier). Skipping.[/dim]")
     except Exception as e:
         console.print(f"[red]{e}[/red]")
+
+
+# ── /name — rename the current session + terminal title ────────────────────
+def _set_terminal_title(title: str):
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetConsoleTitleW(title)
+    except Exception:
+        pass
+    # ANSI fallback (works in Windows Terminal / conhost with VT processing on)
+    import sys
+    sys.stdout.write(f"\033]0;{title}\007")
+    sys.stdout.flush()
+
+
+def _quick_ai(state, prompt: str, history=None) -> str | None:
+    """Single non-streamed AI call for internal use (naming, handoffs, etc.)."""
+    or_key = state.get("openrouter_key") or load_or_key()
+    gm_key = state.get("api_key") or load_api_key()
+    model  = state.get("model") or DEFAULT_MODEL
+    use_or = state.get("use_openrouter") or _is_openrouter_model(model)
+    h = history or []
+    if use_or and or_key:
+        text, err = call_openrouter(or_key, model, h, prompt)
+    elif gm_key:
+        text, err = call_gemini(gm_key, model, h, prompt)
+    else:
+        return None
+    return text.strip() if text else None
+
+
+def cmd_name(state, args, history=None):
+    theme = state.get("theme", THEMES["default"])
+    if not args:
+        # Auto-generate a name from chat history
+        h = history or []
+        if not h:
+            console.print("[dim]No chat history yet — try: /name <yourname>[/dim]")
+            return state
+        console.print("[dim]✦ Reading chat to generate a session name…[/dim]")
+        snippet = "\n".join(
+            f"{m['role'].upper()}: {m['text'][:300]}" for m in h[-20:]
+        )
+        prompt = (
+            "Based on this conversation, generate a short session name (2–4 words, "
+            "title-case, no punctuation) that captures what the user is working on. "
+            "Reply with ONLY the name, nothing else.\n\n" + snippet
+        )
+        name = _quick_ai(state, prompt)
+        if not name:
+            console.print("[yellow]Could not generate a name — try: /name <yourname>[/yellow]")
+            return state
+        name = name.strip().strip('"').strip("'")[:40]
+    else:
+        name = args.strip()
+    state["session_name"] = name
+    _set_terminal_title(f"Studio CLI — {name}")
+    console.print(f"[{theme['success']}]✓ Session → [bold]{name}[/bold][/{theme['success']}]")
+    return state
+
+
+# ── /handoff — AI-generated handoff prompt from current chat ────────────────
+def cmd_handoff(state, args, history):
+    theme = state.get("theme", THEMES["default"])
+    h = history or []
+    if not h:
+        console.print("[yellow]No chat history to generate a handoff from.[/yellow]")
+        return history
+    console.print("[dim]✦ Generating handoff prompt…[/dim]")
+    snippet = "\n".join(
+        f"{m['role'].upper()}: {m['text'][:400]}" for m in h
+    )
+    model   = state.get("model") or DEFAULT_MODEL
+    ws      = state.get("workspace_root") or str(Path.cwd().name)
+    sname   = state.get("session_name") or "this session"
+    prompt = (
+        f"You are summarizing a coding session called '{sname}' using model '{model}' "
+        f"in workspace '{ws}'.\n\n"
+        "Write a concise handoff prompt that a developer can paste into a NEW AI session "
+        "to continue exactly where this left off. Include:\n"
+        "• What was being built / worked on\n"
+        "• Key decisions or changes made\n"
+        "• Current state (what works, what's broken or pending)\n"
+        "• Clear next steps\n\n"
+        "Use plain text with section headers. Be specific — include file names, function "
+        "names, and error messages where relevant. Keep it under 400 words.\n\n"
+        "CONVERSATION:\n" + snippet
+    )
+    text = _quick_ai(state, prompt)
+    if not text:
+        console.print("[red]Could not generate handoff — check your API key.[/red]")
+        return history
+    border = theme.get("border", "cyan")
+    console.print(Panel(text, title="✦ Handoff Prompt", border_style=border, padding=(1, 2)))
+    # Copy to clipboard if pyperclip available
+    try:
+        import pyperclip
+        pyperclip.copy(text)
+        console.print(f"[{theme['success']}]✓ Copied to clipboard.[/{theme['success']}]")
+    except Exception:
+        console.print("[dim]Tip: install pyperclip to auto-copy handoffs.[/dim]")
+    return history
 
 
 # ── /rename — AI-powered smart file/symbol rename ─────────────────────────
@@ -9798,44 +9902,21 @@ def render_welcome(state):
 
     # ── STUDIO ──────────────────────────────────────────────────────────────
     if ui == "studio":
-        if plan_id in ("max", "ultra", "enterprise", "team"):
-            pro_tag = plan_cfg["name"].upper()
-            bc = plan_cfg["color"].replace("bold ", "")
-            console.print(Panel(
-                f"[{plan_cfg['color']}]AI  STUDIO  CLI — v{VERSION}  Pro  ✦  {pro_tag}[/{plan_cfg['color']}]\n"
-                f"[dim]{'─' * 48}[/dim]\n"
-                f"[dim]{username} · All models · Priority Queue[/dim]",
-                border_style=bc,
-                padding=(0, 2),
-            ))
-        elif plan_id in ("pro", "dev", "starter"):
-            bc = plan_cfg["color"].replace("bold ", "")
-            console.print(Panel(
-                f"[{plan_cfg['color']}]AI Studio CLI  v{VERSION}  ·  {plan_cfg['name']}[/{plan_cfg['color']}]",
-                border_style=bc,
-                padding=(0, 2),
-            ))
-        else:
-            console.print(f"\n  [{acc}]◆  AI Studio CLI  v{VERSION}[/{acc}]  {plan_badge}\n")
-
-        body = (
-            f"  [bold]◆ Model    [/bold]  [{theme['success']}]{short}[/{theme['success']}]"
-            f"  [dim]via {mode_str}[/dim]\n"
-            f"  [bold]◆ Dir      [/bold]  [cyan]{ws_short}[/cyan]  [dim]({perms})[/dim]\n"
-            f"  [bold]◆ Stream   [/bold]  [dim]{stream_m}[/dim]\n"
-            f"  [bold]◆ Messages [/bold]  [dim]{msg_str}[/dim]  "
-            f"  [bold]◆ Sessions [/bold]  [dim]{sess_n}[/dim]\n\n"
-            f"  [dim][{theme['warning']}]Agents[/{theme['warning']}]  "
-            "berry  savannah  silicon  cockroach  lucifer  wizzard[/dim]\n"
-            f"  [dim]/enter .   /models   /agent berry   /vibe   /help[/dim]"
-        )
+        lines = [
+            f"  [bold]{short}[/bold]  [dim]{mode_str}[/dim]",
+            f"  [dim]{ws_short}[/dim]",
+        ]
+        if mlimit < 99999:
+            lines.append(f"  [dim]{msg_str} messages[/dim]")
+        lines.append("")
+        lines.append(f"  [dim]/enter · /models · /vibe · /help[/dim]")
         console.print()
         console.print(Panel(
-            body,
-            title=f"[bold {border_c}]AI STUDIO CLI  v{VERSION}[/bold {border_c}]"
-                  f"  [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]",
+            "\n".join(lines),
+            title=f"[bold {border_c}]AI Studio CLI  v{VERSION}[/bold {border_c}]"
+                  f"  {plan_badge}",
             border_style=border_c,
-            padding=(1, 1),
+            padding=(1, 2),
         ))
         return
 
@@ -10342,7 +10423,7 @@ def _make_toolbar(state):
 
 def _prompt_box(theme, ui_style, state):
     """Multi-line boxed input prompt, styled per UI."""
-    pname  = theme["prompt_name"]
+    pname  = state.get("session_name") or theme["prompt_name"]
     pc     = _ptk_style_token(theme["prompt_user"])
     ac     = _ptk_style_token(theme["prompt_arrow"])
     active = state.get("active_agent")
@@ -10350,13 +10431,12 @@ def _prompt_box(theme, ui_style, state):
     model_short = _short_model(state.get("model") or "")
     chat_mode   = state.get("_chat_mode", "")
     mode_tag    = f" [{chat_mode.upper()}]" if chat_mode and chat_mode != "normal" else ""
-    v_tag  = f"v{VERSION}"
 
     if ui_style == "studio":
         fill  = max(2, 52 - len(label) - len(model_short) - len(mode_tag))
-        top   = f" ╔═ {label}{mode_tag} {'═'*fill} {model_short} ═╗\n"
-        mid   = " ║ "
-        arrow = "◆ "
+        top   = f" ╭─ {label}{mode_tag} {'─'*fill} {model_short} ─╮\n"
+        mid   = " │ "
+        arrow = "› "
         return FormattedText([
             (f"fg:{pc}", top),
             (f"fg:{pc}", mid),
@@ -10450,11 +10530,9 @@ def _prompt_box(theme, ui_style, state):
             ("fg:#00ffff bold",  "░ "),
         ])
     else:
-        fill   = max(2, 55 - len(label) - len(model_short))
-        top    = f" ╭─ {label} ─{'─'*fill} {model_short} ─╮\n"
-        mid    = " │ "
-        v_fill = max(2, 58 - len(v_tag))
-        bot    = f"\n ╰{'─'*v_fill} {v_tag} ─╯"
+        fill  = max(2, 55 - len(label) - len(model_short))
+        top   = f" ╭─ {label} ─{'─'*fill} {model_short} ─╮\n"
+        mid   = " │ "
         if ui_style == "codex":
             arrow = "$ "
         elif ui_style == "claude":
@@ -10465,7 +10543,6 @@ def _prompt_box(theme, ui_style, state):
             (f"fg:{pc}", top),
             (f"fg:{pc}", mid),
             (f"fg:{ac} bold", arrow),
-            (f"fg:{pc}", bot),
         ])
 
 
@@ -11039,6 +11116,8 @@ def run_repl(state):
                 # ── New commands ──────────────────────────────────────────────
                 elif cmd == "diffpatch":   history = cmd_diffpatch(state, args, history) if args else (console.print("[yellow]Usage: /diffpatch <file> [instruction][/yellow]"), history)[1]
                 elif cmd == "format":      cmd_format(state, args) if args else console.print("[yellow]Usage: /format <file>[/yellow]")
+                elif cmd in ("name", "n"): state = cmd_name(state, args, history)
+                elif cmd == "handoff":     history = cmd_handoff(state, args, history)
                 elif cmd == "rename":      history = cmd_rename(state, args, history) if args else (console.print("[yellow]Usage: /rename <old> <new>[/yellow]"), history)[1]
                 elif cmd == "outline":     history = cmd_outline(state, args, history) if args else (console.print("[yellow]Usage: /outline <file>[/yellow]"), history)[1]
                 elif cmd == "comment":     history = cmd_comment(state, args, history) if args else (console.print("[yellow]Usage: /comment <file>[/yellow]"), history)[1]

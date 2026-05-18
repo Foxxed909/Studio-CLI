@@ -163,7 +163,12 @@ def save_stream_mode(mode):
 
 # ── PERSONA / WORKSPACE / MEMORY ──────────────────────────────────────────────
 def load_persona():
-    return PERSONA_FILE.read_text(encoding="utf-8").strip() if PERSONA_FILE.exists() else ""
+    if not PERSONA_FILE.exists():
+        return ""
+    try:
+        return PERSONA_FILE.read_text(encoding="utf-8").strip()
+    except UnicodeDecodeError:
+        return PERSONA_FILE.read_text(encoding="utf-8", errors="replace").strip()
 
 
 def save_persona(text):

@@ -1,0 +1,11 @@
+{
+  "name": "studio-mcp",
+  "version": "1.0.0",
+  "description": "StudioCLI MCP server — exposes AI tools to Claude and other MCP clients",
+  "main": "index.js",
+  "bin": { "studio-mcp": "./index.js" },
+  "scripts": { "start": "node index.js" },
+  "dependencies": { "@modelcontextprotocol/sdk": "^1.0.0" },
+  "keywords": ["mcp", "ai", "studio", "cli"],
+  "license": "MIT"
+}

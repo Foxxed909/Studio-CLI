@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const https = require("https");
 const http = require("http");
@@ -7,6 +8,34 @@ const os = require("os");
 const querystring = require("querystring");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const Stripe = require("stripe");
+
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY || "");
+
+const STRIPE_PRICES = {
+  starter: process.env.STRIPE_PRICE_STARTER,
+  pro:     process.env.STRIPE_PRICE_PRO,
+  dev:     process.env.STRIPE_PRICE_DEV,
+  max:     process.env.STRIPE_PRICE_MAX,
+  ultra:   process.env.STRIPE_PRICE_ULTRA,
+};
+
+// ── Subscription storage (profiles/<email>/subscription.json) ────────────────
+function _subDir(email) {
+  const safe = email.toLowerCase().replace(/[^a-z0-9._@-]/g, "_");
+  const dir = path.join(__dirname, "..", "profiles", safe);
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+function saveSub(email, data) {
+  const p = path.join(_subDir(email), "subscription.json");
+  fs.writeFileSync(p, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }, null, 2));
+}
+function loadSub(email) {
+  const p = path.join(_subDir(email), "subscription.json");
+  if (!fs.existsSync(p)) return null;
+  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3456;
@@ -27,17 +56,13 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: false,
-  permissionsPolicy: {
-    features: {
-      camera:        [],
-      microphone:    [],
-      geolocation:   [],
-      payment:       [],
-      usb:           [],
-      fullscreen:    ["'self'"],
-    },
-  },
 }));
+
+// Permissions-Policy — helmet's permissionsPolicy config is unreliable across versions
+app.use((_req, res, next) => {
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)");
+  next();
+});
 
 // ── High-load detection — sliding window of rate-limit hits ──────────────────
 const _rlHits = [];   // timestamps of every 429 issued
@@ -80,6 +105,53 @@ const globalLimit = rateLimit({
     const hasOwnLimit = ["/api/chat","/api/research","/api/health","/api/stats"].some(p => req.path.startsWith(p));
     return isLocal || hasOwnLimit;
   },
+});
+
+// Stripe webhook — must use raw body BEFORE express.json()
+app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), (req, res) => {
+  const sig    = req.headers["stripe-signature"];
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret || secret === "whsec_placeholder") {
+    return res.status(500).json({ error: "Webhook secret not configured" });
+  }
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, secret);
+  } catch (err) {
+    return res.status(400).json({ error: `Webhook Error: ${err.message}` });
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    const { plan, email } = session.metadata || {};
+    if (email && plan) {
+      saveSub(email, {
+        plan,
+        stripeCustomerId:     session.customer,
+        stripeSubscriptionId: session.subscription,
+      });
+    }
+  }
+
+  if (event.type === "customer.subscription.deleted") {
+    const sub = event.data.object;
+    const profilesDir = path.join(__dirname, "..", "profiles");
+    if (fs.existsSync(profilesDir)) {
+      for (const dir of fs.readdirSync(profilesDir)) {
+        const subPath = path.join(profilesDir, dir, "subscription.json");
+        if (!fs.existsSync(subPath)) continue;
+        try {
+          const data = JSON.parse(fs.readFileSync(subPath, "utf8"));
+          if (data.stripeSubscriptionId === sub.id) {
+            saveSub(dir.replace(/_/g, "@"), { ...data, plan: "free", stripeSubscriptionId: null });
+            break;
+          }
+        } catch {}
+      }
+    }
+  }
+
+  res.json({ received: true });
 });
 
 app.use(express.json({ limit: "2mb" }));
@@ -628,6 +700,38 @@ app.post("/api/community/message", _cmLimit, express.json({ limit: "4kb" }), (re
   if (_cmMessages.length > 60) _cmMessages.splice(0, _cmMessages.length - 60);
   _cmBroadcast(msg);
   res.json({ ok: true });
+});
+
+// ── Stripe Checkout ──────────────────────────────────────────────────────────
+app.post("/api/stripe/create-checkout", async (req, res) => {
+  const { plan, email } = req.body || {};
+  if (!plan || !email) return res.status(400).json({ error: "plan and email required" });
+  const priceId = STRIPE_PRICES[plan];
+  if (!priceId) return res.status(400).json({ error: "Unknown plan" });
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: "Stripe not configured" });
+
+  try {
+    const host = `${req.protocol}://${req.get("host")}`;
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode:                 "subscription",
+      customer_email:       email,
+      line_items:           [{ price: priceId, quantity: 1 }],
+      success_url:          `${host}/pricing.html?success=1&plan=${plan}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:           `${host}/pricing.html?canceled=1`,
+      metadata:             { plan, email },
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/stripe/plan", (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: "email required" });
+  const sub = loadSub(email);
+  res.json({ plan: sub?.plan || "free", sub: sub || null });
 });
 
 // Export for Vercel serverless

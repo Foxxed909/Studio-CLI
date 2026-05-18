@@ -97,6 +97,16 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   text-align:left;font-family:inherit}
 .sf-link:hover{background:rgba(255,255,255,.05);color:var(--text)}
 .sf-link svg{width:15px;height:15px;flex-shrink:0}
+.sf-upgrade{display:flex;align-items:center;justify-content:space-between;
+  margin:4px 7px 2px;padding:9px 11px;border-radius:var(--r-sm);
+  background:linear-gradient(135deg,rgba(25,195,125,.12),rgba(14,165,233,.08));
+  border:1px solid rgba(25,195,125,.22);text-decoration:none;cursor:pointer;
+  transition:border-color .15s,background .15s}
+.sf-upgrade:hover{border-color:rgba(25,195,125,.45);background:linear-gradient(135deg,rgba(25,195,125,.18),rgba(14,165,233,.12))}
+.sf-upgrade-left{display:flex;flex-direction:column;gap:1px}
+.sf-upgrade-plan{font-size:11px;font-weight:700;color:#19c37d;text-transform:uppercase;letter-spacing:.06em}
+.sf-upgrade-label{font-size:12px;color:var(--text2);font-weight:500}
+.sf-upgrade-arrow{font-size:14px;color:rgba(25,195,125,.7)}
 
 /* ── Mobile ─────────────────────────────────────────────────────────────────── */
 .mob-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:19}
@@ -719,6 +729,13 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Ro
   </div>
   <div class="convo-list" id="convoList"></div>
   <div class="sidebar-footer">
+    <a class="sf-upgrade" href="/pricing.html" id="sfUpgrade">
+      <div class="sf-upgrade-left">
+        <span class="sf-upgrade-plan" id="sfPlanName">Free</span>
+        <span class="sf-upgrade-label">Upgrade plan →</span>
+      </div>
+      <span class="sf-upgrade-arrow">⚡</span>
+    </a>
     <button class="sf-link" onclick="openSettings()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="3"/>
@@ -1809,6 +1826,30 @@ function _checkPlanUpdates(){
   }
 }
 document.addEventListener("DOMContentLoaded", _checkPlanUpdates);
+
+// ── Sidebar upgrade pill ──────────────────────────────────────────────────────
+(function _initUpgradePill(){
+  const planNames = {free:"Free",starter:"Starter",pro:"Pro",dev:"Dev",max:"Max",ultra:"Ultra"};
+  function _setPill(plan){
+    const el = document.getElementById("sfPlanName");
+    if(!el) return;
+    el.textContent = (planNames[plan] || plan).toUpperCase();
+    const wrap = document.getElementById("sfUpgrade");
+    if(plan !== "free"){
+      wrap.querySelector(".sf-upgrade-label").textContent = "Manage plan →";
+    }
+  }
+  const plan = localStorage.getItem("studioPlan") || "free";
+  _setPill(plan);
+  // Sync from server if email saved
+  const email = localStorage.getItem("studioEmail");
+  if(email){
+    fetch("/api/stripe/plan?email=" + encodeURIComponent(email))
+      .then(r => r.json())
+      .then(d => { if(d.plan){ localStorage.setItem("studioPlan", d.plan); _setPill(d.plan); } })
+      .catch(()=>{});
+  }
+})();
 
 // ── Live Code Preview ─────────────────────────────────────────────────────────
 function _extractCodeBlocks(text){

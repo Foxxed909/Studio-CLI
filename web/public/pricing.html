@@ -190,7 +190,7 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
         <li class="dim">StudioTesting</li>
         <li class="dim">Computer Use</li>
       </ul>
-      <button class="plan-cta soon" id="cta-starter" disabled>Coming soon</button>
+      <button class="plan-cta upgrade" id="cta-starter" data-plan="starter">Upgrade →</button>
     </div>
 
     <!-- Pro -->
@@ -209,7 +209,7 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
         <li class="dim">StudioTesting</li>
         <li class="dim">Computer Use</li>
       </ul>
-      <button class="plan-cta soon" id="cta-pro" disabled>Coming soon</button>
+      <button class="plan-cta upgrade" id="cta-pro" data-plan="pro">Upgrade →</button>
     </div>
 
     <!-- Dev -->
@@ -227,7 +227,7 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
         <li>Code Review mode</li>
         <li class="dim">Computer Use</li>
       </ul>
-      <button class="plan-cta soon" id="cta-dev" disabled>Coming soon</button>
+      <button class="plan-cta upgrade" id="cta-dev" data-plan="dev">Upgrade →</button>
     </div>
 
     <!-- Max -->
@@ -244,7 +244,7 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
         <li>Extended context (128k)</li>
         <li>Priority support</li>
       </ul>
-      <button class="plan-cta upgrade-hi soon" id="cta-max" disabled>Coming soon</button>
+      <button class="plan-cta upgrade-hi" id="cta-max" data-plan="max">Upgrade →</button>
     </div>
 
     <!-- Ultra -->
@@ -261,7 +261,7 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
         <li>Early access features</li>
         <li>Team collaboration (soon)</li>
       </ul>
-      <button class="plan-cta upgrade-hi soon" id="cta-ultra" disabled>Coming soon</button>
+      <button class="plan-cta upgrade-hi" id="cta-ultra" data-plan="ultra">Upgrade →</button>
     </div>
 
   </div>
@@ -330,39 +330,148 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
   </nav>
 </footer>
 
+<style>
+/* ── Email modal ─────────────────────────────────────────────────────────── */
+#emailModal{display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.72);
+  backdrop-filter:blur(6px);align-items:center;justify-content:center}
+#emailModal.open{display:flex}
+.modal-box{background:#161616;border:1px solid rgba(255,255,255,.1);border-radius:20px;
+  padding:32px 28px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.modal-title{font-size:17px;font-weight:700;margin-bottom:6px;letter-spacing:-.02em}
+.modal-sub{font-size:13px;color:rgba(255,255,255,.45);margin-bottom:22px;line-height:1.55}
+.modal-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+  border-radius:10px;padding:11px 14px;font-size:14px;color:#ececec;outline:none;font-family:inherit;
+  transition:border-color .15s}
+.modal-input:focus{border-color:rgba(25,195,125,.5)}
+.modal-actions{display:flex;gap:10px;margin-top:16px}
+.modal-cancel{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:rgba(255,255,255,.5);
+  cursor:pointer;font-family:inherit;transition:background .15s}
+.modal-cancel:hover{background:rgba(255,255,255,.09)}
+.modal-confirm{flex:2;background:linear-gradient(135deg,#19c37d,#17a86b);border:none;
+  border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:#fff;
+  cursor:pointer;font-family:inherit;transition:opacity .15s}
+.modal-confirm:hover{opacity:.88}
+.modal-confirm:disabled{opacity:.5;cursor:not-allowed}
+/* ── Toast ───────────────────────────────────────────────────────────────── */
+#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);
+  background:#19c37d;color:#fff;font-size:13px;font-weight:600;padding:11px 22px;
+  border-radius:12px;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;z-index:600}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.error{background:#ef4444}
+</style>
+
+<!-- Email modal -->
+<div id="emailModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">Enter your email</div>
+    <div class="modal-sub" id="modalSub">We'll link your subscription to this address. Use the same email each time you upgrade.</div>
+    <input class="modal-input" id="emailInput" type="email" placeholder="you@example.com" autocomplete="email"/>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="modalCancel">Cancel</button>
+      <button class="modal-confirm" id="modalConfirm">Continue to checkout →</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
 <script>
-(function init(){
-  // Show gate banner if redirected from studiotesting
-  if(new URLSearchParams(location.search).get('from') === 'testing'){
-    document.getElementById('gateBanner').style.display = 'block';
+(function(){
+  const planNames = {free:'Free',starter:'Starter',pro:'Pro',dev:'Dev',max:'Max',ultra:'Ultra'};
+  const params    = new URLSearchParams(location.search);
+
+  // ── Gate banner ────────────────────────────────────────────────────────────
+  if(params.get('from') === 'testing') document.getElementById('gateBanner').style.display = 'block';
+
+  // ── Toast helper ───────────────────────────────────────────────────────────
+  function toast(msg, isError){
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'show' + (isError ? ' error' : '');
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.className = ''; }, 3500);
   }
 
-  // Show current plan
-  const plan = localStorage.getItem('studioPlan') || 'free';
-  const planNames = {free:'Free',starter:'Starter',pro:'Pro',dev:'Dev',max:'Max',ultra:'Ultra',team:'Team',enterprise:'Enterprise'};
-  const pill = document.getElementById('curPlanPill');
-  const name = document.getElementById('curPlanName');
-  name.textContent = planNames[plan] || plan;
-  pill.style.display = 'inline-flex';
-
-  // Highlight active plan card
-  const card = document.getElementById('card-' + plan);
-  if(card){
-    card.style.borderColor = 'rgba(25,195,125,.45)';
-    card.style.boxShadow = '0 0 0 1px rgba(25,195,125,.2)';
+  // ── Sync plan from server if email known ───────────────────────────────────
+  const savedEmail = localStorage.getItem('studioEmail');
+  if(savedEmail){
+    fetch('/api/stripe/plan?email=' + encodeURIComponent(savedEmail))
+      .then(r => r.json())
+      .then(d => { if(d.plan && d.plan !== 'free') { localStorage.setItem('studioPlan', d.plan); renderPlan(d.plan); } })
+      .catch(() => {});
   }
 
-  // Mark current plan CTA
-  const allCtaIds = ['free','starter','pro','dev','max','ultra'];
-  allCtaIds.forEach(p => {
-    const btn = document.getElementById('cta-' + p);
-    if(!btn) return;
-    if(p === plan){
-      btn.textContent = 'Current plan';
-      btn.className = 'plan-cta active-plan';
-      btn.disabled = true;
-    }
+  // ── Render current plan state ──────────────────────────────────────────────
+  function renderPlan(plan){
+    plan = plan || localStorage.getItem('studioPlan') || 'free';
+    document.getElementById('curPlanName').textContent = planNames[plan] || plan;
+    document.getElementById('curPlanPill').style.display = 'inline-flex';
+
+    const card = document.getElementById('card-' + plan);
+    if(card){ card.style.borderColor = 'rgba(25,195,125,.45)'; card.style.boxShadow = '0 0 0 1px rgba(25,195,125,.2)'; }
+
+    ['free','starter','pro','dev','max','ultra'].forEach(p => {
+      const btn = document.getElementById('cta-' + p);
+      if(!btn) return;
+      if(p === plan){ btn.textContent = 'Current plan'; btn.className = 'plan-cta active-plan'; btn.disabled = true; }
+    });
+  }
+  renderPlan();
+
+  // ── Success / cancel redirect handling ────────────────────────────────────
+  if(params.get('success') === '1'){
+    const plan = params.get('plan');
+    if(plan){ localStorage.setItem('studioPlan', plan); renderPlan(plan); }
+    toast('Payment successful! Welcome to ' + (planNames[plan] || plan) + ' 🎉');
+    history.replaceState({}, '', '/pricing.html');
+  }
+  if(params.get('canceled') === '1'){
+    toast('Checkout canceled — no charge made.', true);
+    history.replaceState({}, '', '/pricing.html');
+  }
+
+  // ── Upgrade button click → open modal ────────────────────────────────────
+  let _pendingPlan = null;
+  document.querySelectorAll('[data-plan]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _pendingPlan = btn.dataset.plan;
+      const modal = document.getElementById('emailModal');
+      const input = document.getElementById('emailInput');
+      input.value = localStorage.getItem('studioEmail') || '';
+      modal.classList.add('open');
+      setTimeout(() => input.focus(), 80);
+    });
   });
+
+  // ── Modal confirm ─────────────────────────────────────────────────────────
+  document.getElementById('modalConfirm').addEventListener('click', startCheckout);
+  document.getElementById('emailInput').addEventListener('keydown', e => { if(e.key === 'Enter') startCheckout(); });
+  document.getElementById('modalCancel').addEventListener('click', closeModal);
+  document.getElementById('emailModal').addEventListener('click', e => { if(e.target === e.currentTarget) closeModal(); });
+
+  function closeModal(){ document.getElementById('emailModal').classList.remove('open'); }
+
+  async function startCheckout(){
+    const email = document.getElementById('emailInput').value.trim();
+    if(!email || !email.includes('@')){ toast('Enter a valid email first.', true); return; }
+    const btn = document.getElementById('modalConfirm');
+    btn.disabled = true; btn.textContent = 'Redirecting…';
+    localStorage.setItem('studioEmail', email);
+    try {
+      const res  = await fetch('/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: _pendingPlan, email }),
+      });
+      const data = await res.json();
+      if(data.url){ window.location.href = data.url; }
+      else { toast(data.error || 'Checkout failed.', true); btn.disabled = false; btn.textContent = 'Continue to checkout →'; }
+    } catch(err) {
+      toast('Network error — try again.', true);
+      btn.disabled = false; btn.textContent = 'Continue to checkout →';
+    }
+  }
 })();
 </script>
 </body>

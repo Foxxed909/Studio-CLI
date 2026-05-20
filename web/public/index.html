@@ -345,9 +345,14 @@ button,input,textarea,select{font-family:inherit}
 .suggest-desc{font-size:11.5px;color:var(--text3);line-height:1.45;display:block}
 
 /* ── Input area ──────────────────────────────────────────────────────────────── */
-.inp-area{padding:6px 24px 18px;flex-shrink:0;
-  background:linear-gradient(to top,var(--bg) 60%,transparent)}
-.inp-wrap{max-width:760px;margin:0 auto}
+.inp-area{padding:6px max(24px,calc(50% - 400px)) 20px;flex-shrink:0;
+  background:linear-gradient(to top,var(--bg) 65%,transparent)}
+.inp-wrap{
+  max-width:800px;margin:0 auto;
+  background:var(--surface);border:1px solid var(--border2);
+  border-radius:20px;
+  box-shadow:0 2px 16px rgba(0,0,0,.25);
+  transition:box-shadow .2s,border-color .2s}
 .banner{display:none;align-items:center;gap:8px;margin:0 0 9px;
   background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.16);
   border-radius:var(--r-sm);padding:8px 13px;font-size:12.5px;color:var(--text2)}
@@ -960,13 +965,8 @@ body.gm-ui-active .header{
 .gm-model-trigger svg{width:14px;height:14px;transition:transform .15s}
 .gm-model-trigger.open svg{transform:rotate(180deg)}
 
-/* hide old header elements in beta mode */
-body.gm-ui-active .header-title,
-body.gm-ui-active .rename-input,
-body.gm-ui-active .model-sel,
-body.gm-ui-active .ver-badge,
-body.gm-ui-active .new-btn,
-body.gm-ui-active .mob-toggle{display:none!important}
+/* replaced legacy elements — always hidden (new header controls replace these) */
+.header-title,.rename-input,.model-sel,.ver-badge,.new-btn,.mob-toggle{display:none!important}
 
 /* header actions (right side) */
 .gm-header-right{margin-left:auto;display:flex;align-items:center;gap:6px}
@@ -1019,22 +1019,25 @@ body.gm-ui-active .chat-wrap{
   width:52px;height:52px;margin-bottom:20px;filter:drop-shadow(0 0 18px rgba(66,133,244,.35))}
 .empty-mark{display:none} /* replaced by sparkle SVG */
 .empty-greet{
-  font-size:clamp(28px,4vw,40px);font-weight:400;color:#ffffff;
-  letter-spacing:-.03em;margin-bottom:16px;line-height:1.2}
-.empty-sub{font-size:14px;color:#9aa0a6;margin-bottom:32px}
+  font-size:clamp(26px,4vw,38px);font-weight:500;color:var(--text);
+  letter-spacing:-.025em;margin-bottom:12px;line-height:1.2}
+.empty-sub{font-size:14px;color:var(--text2);margin-bottom:28px}
 .suggest-grid{
   display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
   gap:10px;max-width:680px;width:100%}
 .suggest{
-  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);
+  background:var(--surface);border:1px solid var(--border);
   border-radius:16px;padding:14px 16px;text-align:left;cursor:pointer;
-  font-family:inherit;transition:all .18s;display:flex;align-items:flex-start;gap:12px}
-.suggest:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.16);transform:translateY(-1px)}
-.suggest-icon{color:rgba(232,234,237,.45);flex-shrink:0;margin-top:1px}
+  font-family:inherit;transition:all .2s cubic-bezier(.16,1,.3,1);
+  display:flex;align-items:flex-start;gap:12px}
+.suggest:hover{background:var(--surface2);border-color:var(--border2);transform:translateY(-2px);
+  box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.suggest:active{transform:translateY(0) scale(.98)}
+.suggest-icon{color:var(--acc);flex-shrink:0;margin-top:1px}
 .suggest-icon svg{width:16px;height:16px}
 .suggest-body{display:flex;flex-direction:column;gap:2px}
-.suggest-title{font-size:13.5px;font-weight:600;color:#e8eaed}
-.suggest-desc{font-size:12px;color:#9aa0a6}
+.suggest-title{font-size:13.5px;font-weight:600;color:var(--text)}
+.suggest-desc{font-size:12px;color:var(--text2)}
 
 /* temp chat hero */
 .gm-temp-hero{display:none;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;padding:40px 20px}
@@ -1070,14 +1073,14 @@ body.gm-ui-active.gm-temp-mode .gm-temp-hero{display:flex}
 
 /* ── Input bar — pill ── */
 body.gm-ui-active .inp-area{
-  padding:0 max(16px,calc(50% - 460px)) 20px;
+  padding:0 max(16px,calc(50% - 460px)) 24px;
   background:transparent;position:relative}
 body.gm-ui-active .inp-wrap{
-  background:#303134;border-radius:28px;
+  background:#2d2d2d;border:1px solid rgba(255,255,255,.07);border-radius:28px;
   box-shadow:0 4px 24px rgba(0,0,0,.5),0 1px 4px rgba(0,0,0,.3);
-  overflow:visible;transition:border-radius .2s cubic-bezier(.16,1,.3,1),box-shadow .2s}
+  overflow:visible;transition:border-radius .2s cubic-bezier(.16,1,.3,1),box-shadow .2s,border-color .2s}
 body.gm-ui-active .inp-wrap:focus-within{
-  border-radius:20px;
+  border-radius:22px;border-color:rgba(255,255,255,.12);
   box-shadow:0 6px 32px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06)}
 
 /* hide old inner rows in beta (replaced by pill bar) */
@@ -1091,16 +1094,18 @@ body.gm-ui-active .inp-foot-row{display:none}
 .img-pre.on,.file-pre.on{display:flex}
 .img-pre img{width:40px;height:40px;border-radius:8px;object-fit:cover}
 
-/* pill center — textarea */
+/* pill center — textarea (explicit resets so original .inp-box bg/border don't bleed) */
 .inp-box{
-  display:flex;align-items:flex-end;gap:0;padding:14px 14px 0}
+  display:flex;align-items:flex-end;gap:0;padding:14px 14px 0;
+  background:none!important;border:none!important;border-radius:0!important;
+  flex-direction:row!important}
 #cin{
   flex:1;background:transparent;border:none;outline:none;
-  color:#e8eaed;font-size:16px;line-height:1.55;resize:none;
+  color:var(--text);font-size:var(--chat-fs);line-height:1.55;resize:none;
   min-height:24px;max-height:160px;overflow-y:auto;
-  font-family:'Google Sans',var(--font-ui);padding:0;
+  font-family:var(--font-ui);padding:0;
   scrollbar-width:none}
-#cin::placeholder{color:#9aa0a6}
+#cin::placeholder{color:var(--text3)}
 #cin::-webkit-scrollbar{display:none}
 
 /* pill bottom row */
@@ -3626,15 +3631,27 @@ window.toggleComputer    = function(){ _origToggleCU?.(); _syncChips(); };
 // ── v10 Beta toggle ─────────────────────────────────────────────────────────────
 function toggleBeta() {
   const on = localStorage.getItem("studioBeta") !== "1";
+  if(on) {
+    // Snapshot current UI state before entering beta
+    localStorage.setItem("studioPreBetaTheme", document.documentElement.getAttribute("data-theme") || "dark");
+    localStorage.setItem("studioPreBetaSidebar", document.getElementById("sidebar")?.classList.contains("gm-open") ? "1" : "0");
+  } else {
+    // Restore pre-beta UI
+    const prevTheme = localStorage.getItem("studioPreBetaTheme");
+    if(prevTheme && prevTheme !== document.documentElement.getAttribute("data-theme")) {
+      if(typeof setTheme === "function") setTheme(prevTheme);
+      else document.documentElement.setAttribute("data-theme", prevTheme);
+    }
+  }
   localStorage.setItem("studioBeta", on ? "1" : "0");
   _gmApplyBetaClass(on);
   const badge = document.getElementById("gmV10Badge");
   badge.classList.toggle("gm-beta-on", on);
   badge.textContent = on ? "v10 β" : "v10";
   if(on) {
-    showToast("v10 Beta enabled — Gemini UI + extended thinking active ✦", "ok");
+    showToast("v10 Beta enabled — extended thinking + gradient UI active ✦", "ok");
   } else {
-    showToast("v10 Beta disabled — classic UI restored", "info");
+    showToast("v10 Beta disabled — previous UI restored", "info");
   }
 }
 

@@ -833,24 +833,24 @@ button,input,textarea,select{font-family:inherit}
    GEMINI v10 UI — complete layout + interaction overhaul
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* ── Background ── */
+/* ── Background (beta only) ── */
 html,body{height:100%;overflow:hidden}
-body{
+body.gm-ui-active{
   background:radial-gradient(ellipse 140% 80% at 50% 110%, #0d1b4b 0%, #030712 55%, #000000 100%);
-  transition:background .3s ease}
-body.gm-temp-mode{background:#212121!important}
+  transition:background .5s cubic-bezier(.16,1,.3,1)}
+body.gm-ui-active.gm-temp-mode{background:#212121!important}
 
 /* ── Layout shell ── */
 .app{display:flex;height:100vh;overflow:hidden;position:relative}
 
-/* ── Sidebar — overlay, slide from left ── */
-.sidebar{
+/* ── Sidebar — overlay, slide from left (beta) ── */
+body.gm-ui-active .sidebar{
   position:fixed;top:0;left:0;bottom:0;z-index:200;
   width:300px;background:#1c1c1c;
-  transform:translateX(-100%);transition:transform .25s cubic-bezier(.16,1,.3,1);
+  transform:translateX(-100%);transition:transform .28s cubic-bezier(.16,1,.3,1);
   display:flex;flex-direction:column;overflow:hidden;
   border-right:1px solid rgba(255,255,255,.08)}
-.sidebar.gm-open{transform:translateX(0)}
+body.gm-ui-active .sidebar.gm-open{transform:translateX(0)}
 
 /* sidebar header */
 .sidebar-header{
@@ -926,13 +926,13 @@ body.gm-temp-mode{background:#212121!important}
 .mob-overlay{position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.5);display:none;backdrop-filter:blur(2px)}
 .mob-overlay.on{display:block}
 
-/* ── Main area — full screen, no sidebar offset ── */
-.main{
+/* ── Main area — full screen (beta) ── */
+body.gm-ui-active .main{
   flex:1;display:flex;flex-direction:column;height:100vh;
   position:relative;overflow:hidden}
 
-/* ── Top Nav — transparent overlay ── */
-.header{
+/* ── Top Nav — transparent overlay (beta) ── */
+body.gm-ui-active .header{
   position:absolute;top:0;left:0;right:0;z-index:50;
   height:56px;display:flex;align-items:center;gap:0;
   padding:0 12px 0 8px;background:transparent;
@@ -960,8 +960,13 @@ body.gm-temp-mode{background:#212121!important}
 .gm-model-trigger svg{width:14px;height:14px;transition:transform .15s}
 .gm-model-trigger.open svg{transform:rotate(180deg)}
 
-/* hide old header elements we replace */
-.header-title,.rename-input,.model-sel,.ver-badge,.new-btn,.mob-toggle{display:none!important}
+/* hide old header elements in beta mode */
+body.gm-ui-active .header-title,
+body.gm-ui-active .rename-input,
+body.gm-ui-active .model-sel,
+body.gm-ui-active .ver-badge,
+body.gm-ui-active .new-btn,
+body.gm-ui-active .mob-toggle{display:none!important}
 
 /* header actions (right side) */
 .gm-header-right{margin-left:auto;display:flex;align-items:center;gap:6px}
@@ -998,8 +1003,8 @@ body.gm-temp-mode{background:#212121!important}
 .pill-name{font-size:12px;font-weight:500}
 .pill-caret{width:10px;height:10px;opacity:.5}
 
-/* ── Chat area ── */
-.chat-wrap{
+/* ── Chat area (beta adds top padding for transparent header) ── */
+body.gm-ui-active .chat-wrap{
   flex:1;display:flex;flex-direction:column;padding-top:56px;
   padding-bottom:0;overflow:hidden;position:relative}
 .chat{flex:1;overflow-y:auto;padding:0 max(16px,calc(50% - 420px));padding-bottom:4px}
@@ -1037,8 +1042,8 @@ body.gm-temp-mode{background:#212121!important}
   width:52px;height:52px;border-radius:50%;border:2px dashed rgba(255,255,255,.38);
   display:flex;align-items:center;justify-content:center;color:#e8eaed;
   margin-bottom:20px;font-size:20px}
-body.gm-temp-mode .empty{display:none}
-body.gm-temp-mode .gm-temp-hero{display:flex}
+body.gm-ui-active.gm-temp-mode .empty{display:none}
+body.gm-ui-active.gm-temp-mode .gm-temp-hero{display:flex}
 .gm-temp-heading{font-size:clamp(28px,4vw,36px);font-weight:400;color:#fff;letter-spacing:-.03em;margin-bottom:12px}
 .gm-temp-sub{font-size:13px;color:#9aa0a6;line-height:1.7;max-width:420px}
 .gm-temp-sub u{cursor:pointer;text-underline-offset:2px}
@@ -1064,19 +1069,21 @@ body.gm-temp-mode .gm-temp-hero{display:flex}
 @keyframes td{0%,100%{opacity:.3;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
 
 /* ── Input bar — pill ── */
-.inp-area{
+body.gm-ui-active .inp-area{
   padding:0 max(16px,calc(50% - 460px)) 20px;
   background:transparent;position:relative}
-.inp-wrap{
+body.gm-ui-active .inp-wrap{
   background:#303134;border-radius:28px;
-  box-shadow:0 2px 20px rgba(0,0,0,.4);
-  overflow:visible;transition:border-radius .15s}
-.inp-wrap:focus-within{border-radius:22px}
+  box-shadow:0 4px 24px rgba(0,0,0,.5),0 1px 4px rgba(0,0,0,.3);
+  overflow:visible;transition:border-radius .2s cubic-bezier(.16,1,.3,1),box-shadow .2s}
+body.gm-ui-active .inp-wrap:focus-within{
+  border-radius:20px;
+  box-shadow:0 6px 32px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06)}
 
-/* hide old inner rows, replaced */
-.banner{display:none}
-.feat-bar{display:none}
-.inp-foot-row{display:none}
+/* hide old inner rows in beta (replaced by pill bar) */
+body.gm-ui-active .banner{display:none}
+body.gm-ui-active .feat-bar{display:none}
+body.gm-ui-active .inp-foot-row{display:none}
 
 /* pill top section — image/file previews */
 .img-pre,.file-pre{
@@ -1103,11 +1110,28 @@ body.gm-temp-mode .gm-temp-hero{display:flex}
 /* + attach button — pill style */
 #attachBtn{
   width:36px;height:36px;border-radius:50%;
-  background:rgba(255,255,255,.1);border:none;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12);
   color:#e8eaed;cursor:pointer;display:flex;align-items:center;justify-content:center;
-  font-size:20px;line-height:1;flex-shrink:0;transition:background .15s;font-weight:300}
-#attachBtn:hover{background:rgba(255,255,255,.16)}
-#attachBtn svg{display:none} /* replaced by + text */
+  font-size:20px;line-height:1;flex-shrink:0;
+  transition:all .2s cubic-bezier(.16,1,.3,1);font-weight:300}
+#attachBtn:hover{background:rgba(255,255,255,.2);transform:scale(1.06);border-color:rgba(255,255,255,.22)}
+#attachBtn:active{transform:scale(.93)}
+#attachBtn svg{display:none}
+
+/* model chip inside input bottom row */
+.gm-inp-model-chip{
+  display:flex;align-items:center;gap:5px;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);
+  border-radius:20px;padding:5px 10px 5px 7px;
+  font-size:12.5px;font-weight:500;color:rgba(232,234,237,.75);
+  cursor:pointer;font-family:inherit;
+  transition:all .2s cubic-bezier(.16,1,.3,1);
+  flex-shrink:0;white-space:nowrap;max-width:150px}
+.gm-inp-model-chip:hover{background:rgba(255,255,255,.15);color:#e8eaed;border-color:rgba(255,255,255,.22);transform:translateY(-1px)}
+.gm-inp-model-chip:active{transform:translateY(0) scale(.96)}
+.gm-inp-model-chip .gm-chip-caret{transition:transform .2s cubic-bezier(.16,1,.3,1);opacity:.6}
+.gm-inp-model-chip.open .gm-chip-caret{transform:rotate(180deg)}
+.gm-inp-model-chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:90px}
 
 /* feature chips inside input bar */
 .gm-active-chips{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 6px}
@@ -1121,27 +1145,33 @@ body.gm-temp-mode .gm-temp-hero{display:flex}
 /* send + stop buttons */
 #send{
   width:36px;height:36px;border-radius:50%;
-  background:rgba(255,255,255,.12);border:none;
-  color:rgba(232,234,237,.4);cursor:not-allowed;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
-#send:not([disabled]){background:#e8eaed;color:#131211;cursor:pointer}
-#send:not([disabled]):hover{background:#fff;transform:scale(1.06)}
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.08);
+  color:rgba(232,234,237,.3);cursor:not-allowed;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:all .2s cubic-bezier(.16,1,.3,1)}
+#send:not([disabled]){background:#e8eaed;color:#131211;cursor:pointer;border-color:transparent}
+#send:not([disabled]):hover{background:#fff;transform:scale(1.07)}
+#send:not([disabled]):active{transform:scale(.93)}
 #send svg{width:16px;height:16px}
 #stop{
   width:36px;height:36px;border-radius:50%;
-  background:rgba(255,255,255,.12);border:none;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.1);
   color:#e8eaed;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
-#stop:hover{background:rgba(255,255,255,.18)}
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:all .2s cubic-bezier(.16,1,.3,1)}
+#stop:hover{background:rgba(255,255,255,.2);transform:scale(1.06)}
+#stop:active{transform:scale(.93)}
 #stop svg{width:16px;height:16px}
 #cinHint{display:none}
 
 /* mic button */
 .gm-mic{
   width:36px;height:36px;border-radius:50%;background:none;border:none;
-  color:rgba(232,234,237,.55);cursor:pointer;display:flex;
-  align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
-.gm-mic:hover{background:rgba(255,255,255,.08);color:#e8eaed}
+  color:rgba(232,234,237,.5);cursor:pointer;display:flex;
+  align-items:center;justify-content:center;flex-shrink:0;
+  transition:all .2s cubic-bezier(.16,1,.3,1)}
+.gm-mic:hover{background:rgba(255,255,255,.1);color:#e8eaed;transform:scale(1.06)}
+.gm-mic:active{transform:scale(.93)}
 
 /* ── Model Dropdown ── */
 .gm-model-dd{
@@ -1554,9 +1584,14 @@ body.gm-temp-mode .gm-temp-hero{display:flex}
         <input type="file" id="imgInput" accept="image/*,.py,.js,.ts,.jsx,.tsx,.md,.txt,.json,.yaml,.yml,.toml,.csv,.html,.css,.sh,.env,.gitignore" style="display:none" onchange="handleImg(this)"/>
         <textarea id="cin" placeholder="Ask StudioCLI" rows="1"></textarea>
       </div>
-      <!-- Bottom row: + | spacer | stop | mic | send -->
+      <!-- Bottom row: + | model chip | spacer | stop | mic | send -->
       <div class="inp-box-row">
         <button id="attachBtn" onclick="openToolsSheet()" title="Tools &amp; attachments">+</button>
+        <button class="gm-inp-model-chip" id="gmInpModelChip" onclick="toggleModelDD('gmInpModelChip')" title="Change model">
+          <svg viewBox="0 0 56 56" width="13" height="13" style="flex-shrink:0"><defs><linearGradient id="spkG2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4285f4"/><stop offset="40%" stop-color="#0f9d58"/><stop offset="70%" stop-color="#fbbc04"/><stop offset="100%" stop-color="#ea4335"/></linearGradient></defs><path d="M28 2 C28 15,41 15,54 28 C41 28,41 41,28 54 C28 41,15 41,2 28 C15 28,15 15,28 2Z" fill="url(#spkG2)"/></svg>
+          <span class="gm-inp-model-chip-name" id="gmInpModelName">Flash-Lite</span>
+          <svg class="gm-chip-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
         <div style="flex:1"></div>
         <span id="cinHint" style="display:none">↵ send</span>
         <button class="action-btn" id="stop" onclick="stopStream()" style="display:none">
@@ -3136,6 +3171,9 @@ async function saveSettings(){
   saveSettingsStore(ns);
   const betaOn=document.getElementById("betaToggle").checked;
   localStorage.setItem("studioBeta",betaOn?"1":"0");
+  _gmApplyBetaClass(betaOn);
+  const gmBadge=document.getElementById("gmV10Badge");
+  if(gmBadge){gmBadge.classList.toggle("gm-beta-on",betaOn);gmBadge.textContent=betaOn?"v10 β":"v10";}
   updateBadge(!!key,betaOn);updatePill(ns.persona);buildPD();
   if(!key){closeSettings();}else{setTimeout(closeSettings,1400);}
 }
@@ -3459,43 +3497,60 @@ function openSearchChats() {
 
 // ── Model Dropdown ──────────────────────────────────────────────────────────────
 let _gmDDOpen = false;
-function toggleModelDD() {
+function toggleModelDD(anchorId) {
   _gmDDOpen = !_gmDDOpen;
   const dd = document.getElementById("gmModelDD");
-  const btn = document.getElementById("gmModelTrigger");
+  const headerBtn = document.getElementById("gmModelTrigger");
+  const inpChip = document.getElementById("gmInpModelChip");
   dd.classList.toggle("open", _gmDDOpen);
-  btn.classList.toggle("open", _gmDDOpen);
+  headerBtn.classList.toggle("open", _gmDDOpen);
+  if(inpChip) inpChip.classList.toggle("open", _gmDDOpen);
   if(_gmDDOpen) {
-    // position dropdown below brand area
-    const br = btn.getBoundingClientRect();
-    dd.style.left = br.left + "px";
-    dd.style.top  = (br.bottom + 6) + "px";
+    const anchor = document.getElementById(anchorId || "gmModelTrigger") || headerBtn;
+    const br = anchor.getBoundingClientRect();
+    const ddW = 360;
+    // Position above if near bottom of screen
+    const spaceBelow = window.innerHeight - br.bottom;
+    if(spaceBelow < 330) {
+      dd.style.top = Math.max(8, br.top - 322) + "px";
+      dd.style.transformOrigin = "bottom left";
+    } else {
+      dd.style.top = (br.bottom + 8) + "px";
+      dd.style.transformOrigin = "top left";
+    }
+    dd.style.left = Math.min(br.left, window.innerWidth - ddW - 8) + "px";
     setTimeout(()=>document.addEventListener("click", _ddOutside, {once:true}), 0);
   }
 }
 function _ddOutside(e) {
-  if(!document.getElementById("gmModelDD").contains(e.target)) {
+  const dd = document.getElementById("gmModelDD");
+  if(!dd.contains(e.target)) {
     _gmDDOpen = false;
-    document.getElementById("gmModelDD").classList.remove("open");
+    dd.classList.remove("open");
     document.getElementById("gmModelTrigger").classList.remove("open");
+    document.getElementById("gmInpModelChip")?.classList.remove("open");
   }
 }
 function gmSelectModel(modelId, label) {
-  // Update the native model selector (existing JS uses it)
   const msel = document.getElementById("msel");
   if(msel) {
     for(let i=0;i<msel.options.length;i++) {
       if(msel.options[i].value === modelId) { msel.selectedIndex = i; msel.dispatchEvent(new Event("change")); break; }
     }
   }
-  // Update display
-  document.getElementById("gmModelName").textContent = label;
+  // Update header display
+  const nm = document.getElementById("gmModelName");
+  if(nm) nm.textContent = label;
+  // Update input chip
+  const ic = document.getElementById("gmInpModelName");
+  if(ic) ic.textContent = label.length > 14 ? label.slice(0,12)+"…" : label;
   // Update checkmarks
   document.querySelectorAll(".gm-dd-check").forEach(c=>{ c.style.visibility="hidden"; });
   // Close dropdown
   _gmDDOpen = false;
   document.getElementById("gmModelDD").classList.remove("open");
   document.getElementById("gmModelTrigger").classList.remove("open");
+  document.getElementById("gmInpModelChip")?.classList.remove("open");
 }
 
 // ── Temp Chat mode ──────────────────────────────────────────────────────────────
@@ -3572,14 +3627,14 @@ window.toggleComputer    = function(){ _origToggleCU?.(); _syncChips(); };
 function toggleBeta() {
   const on = localStorage.getItem("studioBeta") !== "1";
   localStorage.setItem("studioBeta", on ? "1" : "0");
+  _gmApplyBetaClass(on);
   const badge = document.getElementById("gmV10Badge");
   badge.classList.toggle("gm-beta-on", on);
   badge.textContent = on ? "v10 β" : "v10";
-  // v10 beta enables: extended thinking budget + canvas preview hint
   if(on) {
-    showToast("v10 Beta enabled — extended thinking + canvas active", "ok");
+    showToast("v10 Beta enabled — Gemini UI + extended thinking active ✦", "ok");
   } else {
-    showToast("v10 Beta disabled", "info");
+    showToast("v10 Beta disabled — classic UI restored", "info");
   }
 }
 
@@ -3606,25 +3661,34 @@ function _gmUpdateUser() {
 }
 
 // ── Init ────────────────────────────────────────────────────────────────────────
+function _gmApplyBetaClass(on) {
+  document.body.classList.toggle("gm-ui-active", !!on);
+}
+
 function _gmInit() {
   _gmUpdateGreeting();
   _gmUpdateUser();
-  // Init v10 badge state
+  // Gate the Gemini UI behind beta
   const betaOn = localStorage.getItem("studioBeta") === "1";
+  _gmApplyBetaClass(betaOn);
+  // Init v10 badge state
   const badge = document.getElementById("gmV10Badge");
   if(badge) { badge.classList.toggle("gm-beta-on", betaOn); badge.textContent = betaOn ? "v10 β" : "v10"; }
-  // Close model dropdown on outside click
+  // Close model dropdown on outside click / escape
   document.addEventListener("keydown", e => {
     if(e.key === "Escape") { if(_gmDDOpen) toggleModelDD(); closeToolsSheet(); }
   });
-  // Sync model display with native selector
+  // Sync model display chip + header with native selector
   const msel = document.getElementById("msel");
   if(msel) msel.addEventListener("change", () => {
     const opt = msel.options[msel.selectedIndex];
     if(opt) {
       const short = opt.text.replace(/ \(Free\)| PRO| MAX/gi,"").trim();
+      const label = short.length > 18 ? short.slice(0,16)+"…" : short;
       const nm = document.getElementById("gmModelName");
-      if(nm) nm.textContent = short.length > 18 ? short.slice(0,16)+"…" : short;
+      if(nm) nm.textContent = label;
+      const ic = document.getElementById("gmInpModelName");
+      if(ic) ic.textContent = short.length > 14 ? short.slice(0,12)+"…" : short;
     }
   });
 }

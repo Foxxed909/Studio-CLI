@@ -828,6 +828,440 @@ button,input,textarea,select{font-family:inherit}
 [data-theme="purple"] .header{background:rgba(15,10,30,.95)}
 [data-theme="purple"] .modal,[data-theme="purple"] .sc-modal,[data-theme="purple"] .toast,[data-theme="purple"] .gc-modal{background:var(--surface)}
 [data-theme="purple"] .model-sel option,[data-theme="purple"] .model-sel optgroup,[data-theme="purple"] .field select option{background:#17102e}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GEMINI v10 UI — complete layout + interaction overhaul
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Background ── */
+html,body{height:100%;overflow:hidden}
+body{
+  background:radial-gradient(ellipse 140% 80% at 50% 110%, #0d1b4b 0%, #030712 55%, #000000 100%);
+  transition:background .3s ease}
+body.gm-temp-mode{background:#212121!important}
+
+/* ── Layout shell ── */
+.app{display:flex;height:100vh;overflow:hidden;position:relative}
+
+/* ── Sidebar — overlay, slide from left ── */
+.sidebar{
+  position:fixed;top:0;left:0;bottom:0;z-index:200;
+  width:300px;background:#1c1c1c;
+  transform:translateX(-100%);transition:transform .25s cubic-bezier(.16,1,.3,1);
+  display:flex;flex-direction:column;overflow:hidden;
+  border-right:1px solid rgba(255,255,255,.08)}
+.sidebar.gm-open{transform:translateX(0)}
+
+/* sidebar header */
+.sidebar-header{
+  padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid rgba(255,255,255,.06)}
+.sidebar-logo{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:600;color:#e8eaed}
+.logo-gem{width:24px;height:24px;display:flex;align-items:center;justify-content:center}
+.logo-gem svg{width:20px;height:20px;color:#4285f4}
+
+/* sidebar collapse button */
+.gm-sb-collapse{background:none;border:none;cursor:pointer;color:rgba(232,234,237,.5);padding:6px;border-radius:8px;transition:all .15s}
+.gm-sb-collapse:hover{background:rgba(255,255,255,.08);color:#e8eaed}
+
+/* sidebar nav items */
+.sidebar-search{padding:10px 12px}
+.sidebar-search input{
+  width:100%;background:rgba(255,255,255,.06);border:none;border-radius:24px;
+  padding:9px 14px;color:#e8eaed;font-size:13px;outline:none;font-family:inherit;
+  transition:background .15s}
+.sidebar-search input:focus{background:rgba(255,255,255,.1)}
+.sidebar-search input::placeholder{color:#9aa0a6}
+
+.convo-list{flex:1;overflow-y:auto;padding:6px 8px}
+.convo-list::-webkit-scrollbar{width:3px}
+.convo-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px}
+
+.convo-item{
+  display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:12px;
+  cursor:pointer;color:#e8eaed;font-size:13.5px;letter-spacing:-.01em;
+  transition:background .12s;white-space:nowrap;overflow:hidden}
+.convo-item:hover{background:rgba(255,255,255,.08)}
+.convo-item.active{background:rgba(255,255,255,.12)}
+.convo-item-text{flex:1;overflow:hidden;text-overflow:ellipsis}
+.convo-item-del{opacity:0;background:none;border:none;color:rgba(232,234,237,.4);cursor:pointer;padding:2px 5px;border-radius:5px;font-size:14px;flex-shrink:0;transition:all .1s}
+.convo-item:hover .convo-item-del{opacity:1}
+.convo-item-del:hover{color:#ef6b5d;background:rgba(239,107,93,.12)}
+
+/* sidebar section headers */
+.sb-section-hdr{
+  font-size:11px;font-weight:700;color:#9aa0a6;
+  text-transform:uppercase;letter-spacing:.1em;
+  padding:12px 10px 5px;display:flex;align-items:center;justify-content:space-between}
+.sb-new-chat{
+  display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:12px;
+  cursor:pointer;color:#e8eaed;font-size:13.5px;font-weight:500;
+  transition:background .12s;background:none;border:none;font-family:inherit;width:100%;text-align:left}
+.sb-new-chat:hover{background:rgba(255,255,255,.08)}
+.sb-new-chat.sb-active{background:rgba(255,255,255,.12)}
+
+/* sidebar footer */
+.sidebar-footer{
+  border-top:1px solid rgba(255,255,255,.06);padding:12px;
+  display:flex;flex-direction:column;gap:4px}
+.sf-upgrade{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;
+  background:#1e4d3e;border:none;color:#4db87a;font-size:13px;font-weight:600;
+  cursor:pointer;text-decoration:none;transition:background .15s;font-family:inherit}
+.sf-upgrade:hover{background:#245c49}
+.sf-upgrade-left{display:flex;flex-direction:column;gap:1px;flex:1}
+.sf-upgrade-plan{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;opacity:.7}
+.sf-upgrade-label{font-size:13px}
+.sf-upgrade-arrow{font-size:16px}
+.sf-user-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;cursor:pointer;transition:background .12s}
+.sf-user-row:hover{background:rgba(255,255,255,.06)}
+.sf-avatar{width:32px;height:32px;border-radius:50%;background:#2e6b3e;color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sf-user-name{flex:1;font-size:13px;color:#e8eaed;font-weight:500}
+.sf-gear{color:rgba(232,234,237,.4);background:none;border:none;cursor:pointer;padding:4px;border-radius:6px;transition:all .15s;position:relative}
+.sf-gear:hover{color:#e8eaed;background:rgba(255,255,255,.08)}
+.sf-gear-dot{position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:#4285f4;border:1.5px solid #1c1c1c}
+.sf-link{display:none} /* hide old sidebar links, replaced by new layout */
+
+/* sidebar backdrop */
+.mob-overlay{position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.5);display:none;backdrop-filter:blur(2px)}
+.mob-overlay.on{display:block}
+
+/* ── Main area — full screen, no sidebar offset ── */
+.main{
+  flex:1;display:flex;flex-direction:column;height:100vh;
+  position:relative;overflow:hidden}
+
+/* ── Top Nav — transparent overlay ── */
+.header{
+  position:absolute;top:0;left:0;right:0;z-index:50;
+  height:56px;display:flex;align-items:center;gap:0;
+  padding:0 12px 0 8px;background:transparent;
+  border-bottom:none}
+
+/* hamburger */
+.gm-hamburger{
+  background:none;border:none;cursor:pointer;color:#e8eaed;
+  padding:8px;border-radius:50%;width:40px;height:40px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s;flex-shrink:0;position:relative}
+.gm-hamburger:hover{background:rgba(255,255,255,.08)}
+.gm-notif-dot{position:absolute;top:8px;left:8px;width:7px;height:7px;
+  border-radius:50%;background:#4285f4;border:1.5px solid transparent}
+
+/* wordmark + model picker */
+.gm-brand{display:flex;align-items:center;gap:0;margin-left:4px;flex-shrink:0}
+.gm-wordmark{font-size:18px;font-weight:700;color:#ffffff;font-family:inherit;letter-spacing:-.02em}
+.gm-model-trigger{
+  display:flex;align-items:center;gap:4px;padding:4px 8px;
+  background:none;border:none;cursor:pointer;font-family:inherit;
+  color:#aaaaaa;font-size:15px;font-weight:400;border-radius:8px;
+  transition:background .15s}
+.gm-model-trigger:hover{background:rgba(255,255,255,.07)}
+.gm-model-trigger svg{width:14px;height:14px;transition:transform .15s}
+.gm-model-trigger.open svg{transform:rotate(180deg)}
+
+/* hide old header elements we replace */
+.header-title,.rename-input,.model-sel,.ver-badge,.new-btn,.mob-toggle{display:none!important}
+
+/* header actions (right side) */
+.gm-header-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+
+/* temp chat button — dotted circle */
+.gm-temp-btn{
+  width:40px;height:40px;border-radius:50%;background:transparent;
+  border:2px dashed rgba(255,255,255,.38);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:#e8eaed;transition:all .2s;flex-shrink:0}
+.gm-temp-btn:hover{border-color:rgba(255,255,255,.65);background:rgba(255,255,255,.06)}
+.gm-temp-btn.gm-active{border-color:rgba(255,255,255,.75)}
+
+/* keep these header buttons but restyle */
+#themeToggle,.ib:not(.mob-toggle){
+  background:none;border:none;cursor:pointer;color:rgba(232,234,237,.6);
+  padding:7px;border-radius:50%;width:36px;height:36px;
+  display:flex;align-items:center;justify-content:center;transition:all .15s}
+#themeToggle:hover,.ib:not(.mob-toggle):hover{background:rgba(255,255,255,.08);color:#e8eaed}
+.credits-badge{
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+  border-radius:20px;padding:5px 11px;font-size:11px;color:rgba(232,234,237,.6);cursor:pointer;
+  display:flex;align-items:center;gap:4px;transition:all .15s}
+.credits-badge:hover{background:rgba(255,255,255,.11);color:#e8eaed}
+
+/* persona pill restyle */
+.persona-pill{
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+  border-radius:20px;padding:5px 11px 5px 8px;font-size:12px;
+  color:rgba(232,234,237,.7);cursor:pointer;display:flex;align-items:center;gap:5px;
+  transition:all .15s;font-family:inherit}
+.persona-pill:hover{background:rgba(255,255,255,.11);color:#e8eaed;border-color:rgba(255,255,255,.2)}
+.pill-icon{font-size:12px}
+.pill-name{font-size:12px;font-weight:500}
+.pill-caret{width:10px;height:10px;opacity:.5}
+
+/* ── Chat area ── */
+.chat-wrap{
+  flex:1;display:flex;flex-direction:column;padding-top:56px;
+  padding-bottom:0;overflow:hidden;position:relative}
+.chat{flex:1;overflow-y:auto;padding:0 max(16px,calc(50% - 420px));padding-bottom:4px}
+.chat::-webkit-scrollbar{width:4px}
+.chat::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:2px}
+
+/* ── Hero / Empty state ── */
+.empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;padding:40px 20px 20px;text-align:center;min-height:300px}
+.gm-sparkle{
+  width:52px;height:52px;margin-bottom:20px;filter:drop-shadow(0 0 18px rgba(66,133,244,.35))}
+.empty-mark{display:none} /* replaced by sparkle SVG */
+.empty-greet{
+  font-size:clamp(28px,4vw,40px);font-weight:400;color:#ffffff;
+  letter-spacing:-.03em;margin-bottom:16px;line-height:1.2}
+.empty-sub{font-size:14px;color:#9aa0a6;margin-bottom:32px}
+.suggest-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:10px;max-width:680px;width:100%}
+.suggest{
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);
+  border-radius:16px;padding:14px 16px;text-align:left;cursor:pointer;
+  font-family:inherit;transition:all .18s;display:flex;align-items:flex-start;gap:12px}
+.suggest:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.16);transform:translateY(-1px)}
+.suggest-icon{color:rgba(232,234,237,.45);flex-shrink:0;margin-top:1px}
+.suggest-icon svg{width:16px;height:16px}
+.suggest-body{display:flex;flex-direction:column;gap:2px}
+.suggest-title{font-size:13.5px;font-weight:600;color:#e8eaed}
+.suggest-desc{font-size:12px;color:#9aa0a6}
+
+/* temp chat hero */
+.gm-temp-hero{display:none;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;padding:40px 20px}
+.gm-temp-hero .gm-temp-icon{
+  width:52px;height:52px;border-radius:50%;border:2px dashed rgba(255,255,255,.38);
+  display:flex;align-items:center;justify-content:center;color:#e8eaed;
+  margin-bottom:20px;font-size:20px}
+body.gm-temp-mode .empty{display:none}
+body.gm-temp-mode .gm-temp-hero{display:flex}
+.gm-temp-heading{font-size:clamp(28px,4vw,36px);font-weight:400;color:#fff;letter-spacing:-.03em;margin-bottom:12px}
+.gm-temp-sub{font-size:13px;color:#9aa0a6;line-height:1.7;max-width:420px}
+.gm-temp-sub u{cursor:pointer;text-underline-offset:2px}
+
+/* ── Message bubbles (Gemini-style) ── */
+.msg{max-width:820px;margin:0 auto;padding:0;animation:msgFadeIn .2s ease}
+@keyframes msgFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{display:flex;justify-content:flex-end;padding:12px 0}
+.msg.user .msg-content{
+  background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.1);
+  border-radius:20px 20px 4px 20px;padding:12px 18px;
+  max-width:72%;color:#e8eaed;font-size:var(--chat-fs,15px);line-height:1.6}
+.msg.assistant{display:flex;gap:14px;align-items:flex-start;padding:16px 0}
+.msg-avatar{
+  width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#4285f4,#34a853,#fbbc04);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;font-size:13px}
+.msg.assistant .msg-content{flex:1;color:#e8eaed;font-size:var(--chat-fs,15px);line-height:1.7;padding:0}
+.thinking-row{display:flex;align-items:center;gap:6px;color:#9aa0a6;font-size:12px;padding:6px 0;margin-bottom:4px}
+.thinking-dots{display:flex;gap:3px}
+.thinking-dots span{width:5px;height:5px;border-radius:50%;background:#9aa0a6;animation:td .9s infinite}
+.thinking-dots span:nth-child(2){animation-delay:.15s}
+.thinking-dots span:nth-child(3){animation-delay:.3s}
+@keyframes td{0%,100%{opacity:.3;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+
+/* ── Input bar — pill ── */
+.inp-area{
+  padding:0 max(16px,calc(50% - 460px)) 20px;
+  background:transparent;position:relative}
+.inp-wrap{
+  background:#303134;border-radius:28px;
+  box-shadow:0 2px 20px rgba(0,0,0,.4);
+  overflow:visible;transition:border-radius .15s}
+.inp-wrap:focus-within{border-radius:22px}
+
+/* hide old inner rows, replaced */
+.banner{display:none}
+.feat-bar{display:none}
+.inp-foot-row{display:none}
+
+/* pill top section — image/file previews */
+.img-pre,.file-pre{
+  padding:10px 14px 0;display:none;align-items:center;gap:8px}
+.img-pre.on,.file-pre.on{display:flex}
+.img-pre img{width:40px;height:40px;border-radius:8px;object-fit:cover}
+
+/* pill center — textarea */
+.inp-box{
+  display:flex;align-items:flex-end;gap:0;padding:14px 14px 0}
+#cin{
+  flex:1;background:transparent;border:none;outline:none;
+  color:#e8eaed;font-size:16px;line-height:1.55;resize:none;
+  min-height:24px;max-height:160px;overflow-y:auto;
+  font-family:'Google Sans',var(--font-ui);padding:0;
+  scrollbar-width:none}
+#cin::placeholder{color:#9aa0a6}
+#cin::-webkit-scrollbar{display:none}
+
+/* pill bottom row */
+.inp-box-row{
+  display:flex;align-items:center;gap:6px;padding:8px 8px 10px}
+
+/* + attach button — pill style */
+#attachBtn{
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(255,255,255,.1);border:none;
+  color:#e8eaed;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:20px;line-height:1;flex-shrink:0;transition:background .15s;font-weight:300}
+#attachBtn:hover{background:rgba(255,255,255,.16)}
+#attachBtn svg{display:none} /* replaced by + text */
+
+/* feature chips inside input bar */
+.gm-active-chips{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 6px}
+.gm-chip{
+  display:flex;align-items:center;gap:5px;background:rgba(66,133,244,.15);
+  border:1px solid rgba(66,133,244,.3);border-radius:20px;
+  padding:4px 10px;font-size:12px;color:#8ab4f8;cursor:pointer}
+.gm-chip:hover{background:rgba(66,133,244,.2)}
+.gm-chip-x{color:rgba(138,180,248,.6);margin-left:2px}
+
+/* send + stop buttons */
+#send{
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(255,255,255,.12);border:none;
+  color:rgba(232,234,237,.4);cursor:not-allowed;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+#send:not([disabled]){background:#e8eaed;color:#131211;cursor:pointer}
+#send:not([disabled]):hover{background:#fff;transform:scale(1.06)}
+#send svg{width:16px;height:16px}
+#stop{
+  width:36px;height:36px;border-radius:50%;
+  background:rgba(255,255,255,.12);border:none;
+  color:#e8eaed;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+#stop:hover{background:rgba(255,255,255,.18)}
+#stop svg{width:16px;height:16px}
+#cinHint{display:none}
+
+/* mic button */
+.gm-mic{
+  width:36px;height:36px;border-radius:50%;background:none;border:none;
+  color:rgba(232,234,237,.55);cursor:pointer;display:flex;
+  align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.gm-mic:hover{background:rgba(255,255,255,.08);color:#e8eaed}
+
+/* ── Model Dropdown ── */
+.gm-model-dd{
+  position:fixed;top:58px;left:50px;z-index:300;
+  width:360px;background:#2d2d2d;border-radius:12px;
+  box-shadow:0 8px 32px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);
+  overflow:hidden;display:none;
+  animation:ddIn .15s cubic-bezier(.16,1,.3,1)}
+.gm-model-dd.open{display:block}
+@keyframes ddIn{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
+.gm-dd-item{
+  display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;
+  transition:background .12s;color:#e8eaed}
+.gm-dd-item:hover{background:rgba(255,255,255,.07)}
+.gm-dd-check{width:20px;color:#8ab4f8;flex-shrink:0;font-size:16px}
+.gm-dd-info{flex:1}
+.gm-dd-name{font-size:14px;font-weight:500}
+.gm-dd-desc{font-size:12px;color:#9aa0a6;margin-top:1px}
+.gm-dd-badge{font-size:10px;font-weight:700;background:rgba(255,255,255,.1);
+  color:#aaa;border-radius:10px;padding:2px 7px;letter-spacing:.04em}
+.gm-dd-divider{height:1px;background:rgba(255,255,255,.08);margin:4px 0}
+.gm-dd-section{padding:10px 16px 6px;font-size:11px;font-weight:700;color:#9aa0a6;
+  text-transform:uppercase;letter-spacing:.1em}
+.gm-dd-thinking{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;cursor:pointer;transition:background .12s}
+.gm-dd-thinking:hover{background:rgba(255,255,255,.07)}
+.gm-dd-thinking-left{display:flex;flex-direction:column;gap:2px}
+.gm-dd-thinking-title{font-size:14px;color:#e8eaed;font-weight:500}
+.gm-dd-thinking-sub{font-size:12px;color:#9aa0a6}
+
+/* ── Bottom Sheet (Tools) ── */
+.gm-sheet-backdrop{
+  position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.4);
+  display:none;backdrop-filter:blur(2px)}
+.gm-sheet-backdrop.on{display:block;animation:sheetBdIn .2s ease}
+@keyframes sheetBdIn{from{opacity:0}to{opacity:1}}
+.gm-sheet{
+  position:fixed;bottom:0;left:0;right:0;z-index:251;
+  background:#1f1f1f;border-radius:20px 20px 0 0;
+  max-height:70vh;overflow-y:auto;
+  transform:translateY(100%);transition:transform .3s cubic-bezier(.16,1,.3,1)}
+.gm-sheet.open{transform:translateY(0)}
+.gm-sheet::-webkit-scrollbar{width:3px}
+.gm-sheet::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px}
+.gm-sheet-handle{
+  width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,.2);
+  margin:10px auto 16px;cursor:grab}
+.gm-sheet-icon-row{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:10px;
+  padding:0 16px 20px}
+.gm-sheet-icon-btn{
+  background:#2a2a2a;border:none;border-radius:16px;padding:18px 10px 14px;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;
+  transition:background .15s;font-family:inherit}
+.gm-sheet-icon-btn:hover{background:#333}
+.gm-sheet-icon-btn.active-tool{background:#1e3a2e;border:1px solid rgba(66,133,244,.3)}
+.gm-sheet-icon-emoji{font-size:26px}
+.gm-sheet-icon-label{font-size:12px;color:#9aa0a6;font-weight:500}
+.gm-sheet-list{padding:0 8px 24px}
+.gm-sheet-item{
+  display:flex;align-items:center;gap:14px;padding:13px 12px;
+  border-radius:12px;cursor:pointer;transition:background .12s}
+.gm-sheet-item:hover{background:rgba(255,255,255,.05)}
+.gm-sheet-item.active-tool{background:rgba(66,133,244,.08)}
+.gm-sheet-item.disabled{opacity:.4;cursor:default}
+.gm-sheet-item.disabled:hover{background:none}
+.gm-sheet-icon{font-size:20px;flex-shrink:0;width:28px;text-align:center}
+.gm-sheet-item-body{flex:1}
+.gm-sheet-item-title{font-size:15px;font-weight:600;color:#e8eaed}
+.gm-sheet-item-sub{font-size:12px;color:#9aa0a6;margin-top:2px}
+.gm-sheet-item-badge{
+  font-size:10px;background:rgba(255,255,255,.08);color:#9aa0a6;
+  border-radius:10px;padding:2px 8px;font-weight:600;flex-shrink:0}
+
+/* ── Message action buttons ── */
+.msg-actions{
+  display:flex;gap:2px;margin-top:8px;opacity:0;transition:opacity .15s}
+.msg.assistant:hover .msg-actions{opacity:1}
+.msg-act-btn{
+  background:none;border:none;cursor:pointer;color:rgba(232,234,237,.45);
+  padding:5px 7px;border-radius:8px;font-size:11px;transition:all .12s;
+  display:flex;align-items:center;gap:4px;font-family:inherit}
+.msg-act-btn:hover{background:rgba(255,255,255,.08);color:#e8eaed}
+.msg-act-btn svg{width:13px;height:13px}
+
+/* ── Scroll fab ── */
+.scroll-fab{
+  position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+  background:#303134;border:1px solid rgba(255,255,255,.12);color:#e8eaed;
+  border-radius:20px;padding:7px 16px;font-size:12px;cursor:pointer;
+  display:none;align-items:center;gap:5px;font-family:inherit;transition:all .15s}
+.scroll-fab.on{display:flex}
+.scroll-fab:hover{background:#3c3c3c}
+
+/* ── v10 Beta badge ── */
+.gm-v10-badge{
+  font-size:10px;font-weight:700;background:linear-gradient(135deg,rgba(66,133,244,.2),rgba(52,168,83,.2));
+  color:#8ab4f8;border:1px solid rgba(66,133,244,.3);border-radius:10px;
+  padding:2px 7px;letter-spacing:.05em;cursor:pointer;transition:all .15s}
+.gm-v10-badge:hover{background:linear-gradient(135deg,rgba(66,133,244,.3),rgba(52,168,83,.3))}
+.gm-v10-badge.gm-beta-on{background:linear-gradient(135deg,rgba(251,188,4,.15),rgba(234,67,53,.15));color:#fbbf24;border-color:rgba(251,188,4,.3)}
+
+/* ── Code blocks in messages ── */
+.msg .code-block-wrap{border-radius:12px;overflow:hidden;margin:10px 0;border:1px solid rgba(255,255,255,.08)}
+.msg .code-block-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,.05);padding:8px 14px;font-size:11px;color:#9aa0a6}
+.msg pre{margin:0;background:rgba(0,0,0,.3)!important;padding:14px!important;border-radius:0!important}
+
+/* ── Responsive ── */
+@media(max-width:640px){
+  .gm-model-dd{left:12px;right:12px;width:auto}
+  .suggest-grid{grid-template-columns:1fr 1fr}
+  .gm-sheet-icon-row{grid-template-columns:repeat(4,1fr);gap:6px}
+}
+
+/* ── Keep existing modals working ── */
+.overlay .settings-page{background:#161514}
+.sc-overlay,.lcp-overlay,.gc-overlay{backdrop-filter:blur(8px)}
 </style>
 </head>
 <body data-theme="dark">
@@ -858,20 +1292,44 @@ button,input,textarea,select{font-family:inherit}
   <div class="sidebar-header">
     <span class="sidebar-logo">
       <span class="logo-gem">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-          <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/>
+        <svg viewBox="0 0 24 24" fill="none" style="width:22px;height:22px">
+          <defs><linearGradient id="sbGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#4285f4"/><stop offset="50%" stop-color="#34a853"/><stop offset="100%" stop-color="#fbbc04"/></linearGradient></defs>
+          <path d="M12 1 C12 7, 17 7, 23 12 C17 12, 17 17, 12 23 C12 17, 7 17, 1 12 C7 12, 7 7, 12 1Z" fill="url(#sbGrad)"/>
         </svg>
       </span>
       StudioCLI
     </span>
-    <button class="new-btn" onclick="newConversation()" title="New chat (Ctrl+K)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>New
+    <button class="gm-sb-collapse" onclick="toggleSidebar()" title="Close sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <line x1="9" y1="3" x2="9" y2="21"/>
+      </svg>
+    </button>
+  </div>
+  <div style="padding:10px 8px 4px">
+    <button class="sb-new-chat sb-active" onclick="newConversation();toggleSidebar()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:16px;height:16px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New chat
+    </button>
+    <button class="sb-new-chat" onclick="openSearchChats()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Search chats
+    </button>
+    <a class="sb-new-chat" href="/dashboard.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Library
+    </a>
+    <button class="sb-new-chat" onclick="openCommunity()" id="communityBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Community
+      <span class="sf-badge" id="cmOnlineBadge" style="display:none;margin-left:auto">0</span>
     </button>
   </div>
   <div class="sidebar-search">
     <input id="convoSearch" placeholder="Search chats…" oninput="filterConvos(this.value)"/>
+  </div>
+  <div class="sb-section-hdr">
+    <span>Recents</span>
   </div>
   <div class="convo-list" id="convoList"></div>
   <div class="sidebar-footer">
@@ -880,35 +1338,16 @@ button,input,textarea,select{font-family:inherit}
         <span class="sf-upgrade-plan" id="sfPlanName">Free</span>
         <span class="sf-upgrade-label">Upgrade plan →</span>
       </div>
-      <span class="sf-upgrade-arrow">⚡</span>
+      <span class="sf-upgrade-arrow">✦</span>
     </a>
-    <button class="sf-link" onclick="openSettings()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="3"/>
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-      </svg>Settings
-    </button>
-    <a class="sf-link" href="/dashboard.html">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-      </svg>Dashboard
-    </a>
-    <a class="sf-link" href="/landing.html" target="_blank">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-        <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-      </svg>About
-    </a>
-    <button class="sf-link" onclick="openCommunity()" id="communityBtn">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-        <circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-      </svg>Community
-      <span class="sf-badge" id="cmOnlineBadge" style="display:none">0</span>
-    </button>
+    <div class="sf-user-row" onclick="openSettings()">
+      <div class="sf-avatar" id="sfAvatar">N</div>
+      <span class="sf-user-name" id="sfUserName">Nifemi Foxx</span>
+      <button class="sf-gear" onclick="event.stopPropagation();openSettings()" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="sf-gear-dot"></span>
+      </button>
+    </div>
   </div>
 </div>
 <div class="mob-overlay" id="mobOverlay" onclick="closeSidebarMobile()"></div>
@@ -918,13 +1357,24 @@ button,input,textarea,select{font-family:inherit}
 <!-- ── Main ──────────────────────────────────────────────────────────────────── -->
 <div class="main">
   <div class="header">
-    <button class="mob-toggle ib" onclick="toggleSidebar()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <!-- Hamburger -->
+    <button class="gm-hamburger" onclick="toggleSidebar()" title="Menu">
+      <span class="gm-notif-dot"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:20px;height:20px">
         <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
       </svg>
     </button>
-    <div class="header-title" id="chatTitle" title="Double-click to rename" ondblclick="renameConvo()">New conversation</div>
-    <input id="renameInput" type="text" maxlength="80" onblur="commitRename()" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value='';this.blur();}"/>
+    <!-- Brand + model picker -->
+    <div class="gm-brand">
+      <span class="gm-wordmark">StudioCLI</span>
+      <button class="gm-model-trigger" id="gmModelTrigger" onclick="toggleModelDD()">
+        <span id="gmModelName">Flash-Lite</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+    </div>
+    <!-- Hidden legacy elements still needed by JS -->
+    <div class="header-title" id="chatTitle" style="display:none" ondblclick="renameConvo()">New conversation</div>
+    <input id="renameInput" type="text" maxlength="80" style="display:none" onblur="commitRename()" onkeydown="if(event.key==='Enter')this.blur();if(event.key==='Escape'){this.value='';this.blur();}"/>
 
     <button class="persona-pill" id="personaPill" onclick="togglePD(event)">
       <span class="pill-icon" id="pillIcon">✦</span>
@@ -960,30 +1410,90 @@ button,input,textarea,select{font-family:inherit}
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
     </button>
-    <button class="credits-badge" id="creditsBadge" onclick="openSettings()" title="Credits balance">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span id="creditsText">Credits</span>
-    </button>
-    <button class="ib" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark mode (T)">
-      <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-      </svg>
-      <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none">
-        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
-        <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
-        <line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-      </svg>
-    </button>
+    <!-- right side actions -->
+    <div class="gm-header-right">
+      <button class="credits-badge" id="creditsBadge" onclick="openSettings()" title="Credits balance" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="creditsText">Credits</span>
+      </button>
+      <button class="gm-v10-badge" id="gmV10Badge" onclick="toggleBeta()" title="v10 Beta features">v10</button>
+      <button class="ib" id="themeToggle" onclick="toggleTheme()" title="Toggle light/dark (T)">
+        <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;width:16px;height:16px"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+      <!-- Temp chat button — dotted circle -->
+      <button class="gm-temp-btn" id="gmTempBtn" onclick="toggleTempChat()" title="Temporary chat">
+        <svg id="gmTempIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:17px;height:17px">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14l4-4h14a2 2 0 0 0 2-2V9"/>
+          <path d="M18 2l4 4-10 10H8v-4L18 2z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Model Dropdown -->
+  <div class="gm-model-dd" id="gmModelDD">
+    <div class="gm-dd-section">Model</div>
+    <div class="gm-dd-item" onclick="gmSelectModel('meta-llama/llama-3.3-70b-instruct:free','Flash-Lite')">
+      <span class="gm-dd-check" id="gmCheck-free">✓</span>
+      <div class="gm-dd-info"><div class="gm-dd-name">Flash-Lite (Free)</div><div class="gm-dd-desc">Fastest answers, no key needed</div></div>
+    </div>
+    <div class="gm-dd-item" onclick="gmSelectModel('openai/gpt-4o-mini','4o Mini')">
+      <span class="gm-dd-check" id="gmCheck-4omini" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info"><div class="gm-dd-name">GPT-4o Mini</div><div class="gm-dd-desc">Fast, smart everyday tasks</div></div>
+      <span class="gm-dd-badge">PRO</span>
+    </div>
+    <div class="gm-dd-item" onclick="gmSelectModel('anthropic/claude-sonnet-4-6','Sonnet 4.6')">
+      <span class="gm-dd-check" id="gmCheck-sonnet" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info"><div class="gm-dd-name">Claude Sonnet 4.6</div><div class="gm-dd-desc">Advanced reasoning + code</div></div>
+      <span class="gm-dd-badge">PRO</span>
+    </div>
+    <div class="gm-dd-item" onclick="gmSelectModel('google/gemini-2.5-pro','Gemini 2.5 Pro')">
+      <span class="gm-dd-check" id="gmCheck-gemini" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info"><div class="gm-dd-name">Gemini 2.5 Pro</div><div class="gm-dd-desc">Google's frontier model</div></div>
+      <span class="gm-dd-badge">PRO</span>
+    </div>
+    <div class="gm-dd-item" onclick="gmSelectModel('anthropic/claude-opus-4-7','Opus 4.7')">
+      <span class="gm-dd-check" id="gmCheck-opus" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info"><div class="gm-dd-name">Claude Opus 4.7</div><div class="gm-dd-desc">Most powerful, complex tasks</div></div>
+      <span class="gm-dd-badge">MAX</span>
+    </div>
+    <div class="gm-dd-divider"></div>
+    <div class="gm-dd-thinking" onclick="toggleDeepResearch()">
+      <div class="gm-dd-thinking-left">
+        <div class="gm-dd-thinking-title">Deep Research</div>
+        <div class="gm-dd-thinking-sub" id="gmResearchLabel">Off</div>
+      </div>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#9aa0a6"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
   </div>
 
   <div class="chat-wrap">
     <div class="chat" id="chat">
     <div class="chat-inner" id="chatInner">
       <div class="empty" id="empty">
-        <div class="empty-mark">S</div>
-        <div class="empty-greet">What can I help with?</div>
+        <!-- Gemini 4-pointed sparkle logo -->
+        <svg class="gm-sparkle" viewBox="0 0 56 56" fill="none">
+          <defs>
+            <linearGradient id="spkGrad" x1="0" y1="0" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+              <stop offset="0%"   stop-color="#4285f4"/>
+              <stop offset="30%"  stop-color="#34a853"/>
+              <stop offset="60%"  stop-color="#fbbc04"/>
+              <stop offset="80%"  stop-color="#ea4335"/>
+              <stop offset="100%" stop-color="#a020f0"/>
+            </linearGradient>
+          </defs>
+          <path d="M28 2 C28 15, 41 15, 54 28 C41 28, 41 41, 28 54 C28 41, 15 41, 2 28 C15 28, 15 15, 28 2Z" fill="url(#spkGrad)"/>
+        </svg>
+        <!-- temp chat hero (shown only in temp mode) -->
+        <div class="gm-temp-hero" id="gmTempHero">
+          <div class="gm-temp-icon">✏</div>
+          <div class="gm-temp-heading">Welcome, stranger</div>
+          <div class="gm-temp-sub">
+            <u onclick="openSettings()">Temporary chats</u> don't appear in <u>recent chats</u> and aren't used to improve StudioCLI AI. Stored for 72 hours for safety.
+          </div>
+        </div>
+        <div class="empty-greet" id="gmGreeting">What can I help with?</div>
         <div class="empty-sub">Free models · no signup · streaming</div>
         <div class="suggest-grid">
           <button class="suggest" onclick="fillChip('Write a function to ')">
@@ -998,9 +1508,9 @@ button,input,textarea,select{font-family:inherit}
             <div class="suggest-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><circle cx="12" cy="17" r=".5" fill="currentColor"/></svg></div>
             <div class="suggest-body"><span class="suggest-title">Explain a concept</span><span class="suggest-desc">Get a clear breakdown</span></div>
           </button>
-          <button class="suggest" onclick="fillChip('Review this code:\n\n')">
-            <div class="suggest-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-            <div class="suggest-body"><span class="suggest-title">Review code</span><span class="suggest-desc">Feedback and improvements</span></div>
+          <button class="suggest" onclick="fillChip('Research: ')">
+            <div class="suggest-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+            <div class="suggest-body"><span class="suggest-title">Deep research</span><span class="suggest-desc">Multi-step web synthesis</span></div>
           </button>
         </div>
       </div>
@@ -1014,70 +1524,133 @@ button,input,textarea,select{font-family:inherit}
     </button>
   </div>
 
+  <!-- ── Gemini-style pill input bar ── -->
   <div class="inp-area">
     <div class="inp-wrap">
-      <div class="banner" id="banner">
-        No API key — free models still work.&nbsp;<a onclick="openSettings()">Add key for Pro models →</a>
+      <!-- Active feature chips (Web/Research/Turbo/Preview/Computer) -->
+      <div class="gm-active-chips" id="gmChips"></div>
+      <!-- Hidden legacy feat-bar (JS still toggles these, chips replicate them visually) -->
+      <div style="display:none">
+        <button id="webSearchBtn" onclick="toggleWebSearch()"></button>
+        <button id="deepResearchBtn" onclick="toggleDeepResearch()"></button>
+        <button id="turboBtn" onclick="toggleTurbo()"></button>
+        <button id="liveCodeBtn" onclick="toggleLiveCode()"></button>
+        <button id="computerBtn" onclick="toggleComputer()"></button>
       </div>
+      <!-- Image/file previews -->
       <div class="img-pre" id="imgPre">
-        <img id="imgThumb" src="" alt=""/>
+        <img id="imgThumb" src="" alt="" style="width:44px;height:44px;border-radius:8px;object-fit:cover"/>
         <span class="img-pre-name" id="imgName">image.png</span>
         <button class="img-pre-rm" onclick="removeImage()">×</button>
       </div>
       <div class="file-pre" id="filePre">
-        <svg class="file-pre-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <svg class="file-pre-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;color:#9aa0a6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         <span class="file-pre-name" id="fileName">file.py</span>
         <span class="file-pre-size" id="fileSize"></span>
         <button class="img-pre-rm" onclick="removeFile()">×</button>
       </div>
-      <!-- Feature Toolbar -->
-      <div class="feat-bar" id="featBar">
-        <button class="feat-btn" id="webSearchBtn" onclick="toggleWebSearch()" title="Web Search — use Perplexity Sonar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          Web
-        </button>
-        <button class="feat-btn" id="deepResearchBtn" onclick="toggleDeepResearch()" title="Deep Research — multi-step web synthesis">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-          Research
-        </button>
-        <button class="feat-btn" id="turboBtn" onclick="toggleTurbo()" title="Turbo Mode — 2x faster, 2.5x credits">
-          ⚡ Turbo
-        </button>
-        <button class="feat-btn" id="liveCodeBtn" onclick="toggleLiveCode()" title="Live Code Preview — preview HTML/CSS/JS">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-          Preview
-        </button>
-        <button class="feat-btn" id="computerBtn" onclick="toggleComputer()" title="Computer Use — AI desktop automation (Max+)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          Computer
-        </button>
-      </div>
+      <!-- Textarea row -->
       <div class="inp-box">
         <input type="file" id="imgInput" accept="image/*,.py,.js,.ts,.jsx,.tsx,.md,.txt,.json,.yaml,.yml,.toml,.csv,.html,.css,.sh,.env,.gitignore" style="display:none" onchange="handleImg(this)"/>
-        <textarea id="cin" placeholder="Send a message…" rows="1" style="width:100%;background:transparent;border:0;outline:0;color:var(--text);font-size:14px;line-height:1.55;resize:none;min-height:24px;max-height:160px;overflow-y:auto;padding:0;font-family:inherit"></textarea>
-        <div class="inp-box-row">
-          <button class="action-btn" id="attachBtn" onclick="triggerAttach()" title="Attach file or image" style="background:var(--surface2);color:var(--text2);border:1px solid var(--border)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-            </svg>
-          </button>
-          <div style="flex:1"></div>
-          <span style="font-size:10.5px;color:var(--text3);margin-right:4px" id="cinHint">↵ send</span>
-          <button class="action-btn" id="stop" onclick="stopStream()">
-            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-          </button>
-          <button class="action-btn" id="send" disabled>
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-          </button>
-        </div>
+        <textarea id="cin" placeholder="Ask StudioCLI" rows="1"></textarea>
       </div>
-      <div class="inp-foot-row">
-        <div class="inp-hint">AI can make mistakes · verify critical info</div>
-        <div class="tok-count" id="tokCount"></div>
+      <!-- Bottom row: + | spacer | stop | mic | send -->
+      <div class="inp-box-row">
+        <button id="attachBtn" onclick="openToolsSheet()" title="Tools &amp; attachments">+</button>
+        <div style="flex:1"></div>
+        <span id="cinHint" style="display:none">↵ send</span>
+        <button class="action-btn" id="stop" onclick="stopStream()" style="display:none">
+          <svg viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </button>
+        <button class="gm-mic" id="gmMic" title="Voice input (coming soon)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+            <path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+            <path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="17" x2="12" y2="21"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+          </svg>
+        </button>
+        <button id="send" disabled>
+          <svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
       </div>
+      <!-- Banner (hidden, kept for JS compat) -->
+      <div class="banner" id="banner" style="display:none">No API key — free models still work.</div>
+      <div style="display:none"><div class="inp-hint">AI can make mistakes</div><div class="tok-count" id="tokCount"></div></div>
     </div>
   </div>
-</div>
+</div><!-- /main -->
+</div><!-- /app -->
+
+<!-- ── Tools Bottom Sheet ─────────────────────────────────────────────────────── -->
+<div class="gm-sheet-backdrop" id="gmSheetBd" onclick="closeToolsSheet()"></div>
+<div class="gm-sheet" id="gmSheet">
+  <div class="gm-sheet-handle"></div>
+  <div class="gm-sheet-icon-row">
+    <button class="gm-sheet-icon-btn" onclick="triggerAttach();closeToolsSheet()" title="Attach files">
+      <span class="gm-sheet-icon-emoji">📎</span>
+      <span class="gm-sheet-icon-label">Files</span>
+    </button>
+    <button class="gm-sheet-icon-btn" onclick="triggerAttach();closeToolsSheet()" title="Photos">
+      <span class="gm-sheet-icon-emoji">🖼️</span>
+      <span class="gm-sheet-icon-label">Photos</span>
+    </button>
+    <button class="gm-sheet-icon-btn" onclick="toggleLiveCode();closeToolsSheet()" title="Canvas / Live Preview">
+      <span class="gm-sheet-icon-emoji">✿</span>
+      <span class="gm-sheet-icon-label">Canvas</span>
+    </button>
+    <button class="gm-sheet-icon-btn" onclick="openSettings();closeToolsSheet()" title="Notebooks / Settings">
+      <span class="gm-sheet-icon-emoji">📓</span>
+      <span class="gm-sheet-icon-label">Settings</span>
+    </button>
+  </div>
+  <div class="gm-sheet-list">
+    <div class="gm-sheet-item" id="sheetImgCreate" onclick="closeToolsSheet();fillChip('Generate an image of: ')">
+      <span class="gm-sheet-icon">🖼</span>
+      <div class="gm-sheet-item-body">
+        <div class="gm-sheet-item-title">Create image</div>
+        <div class="gm-sheet-item-sub">Create and edit visuals</div>
+      </div>
+    </div>
+    <div class="gm-sheet-item" id="sheetResearch" onclick="toggleDeepResearch();closeToolsSheet()">
+      <span class="gm-sheet-icon">🔬</span>
+      <div class="gm-sheet-item-body">
+        <div class="gm-sheet-item-title">Deep Research</div>
+        <div class="gm-sheet-item-sub">Multi-step web synthesis</div>
+      </div>
+      <span class="gm-sheet-item-badge" id="sheetResearchBadge">Off</span>
+    </div>
+    <div class="gm-sheet-item" id="sheetCanvas" onclick="toggleLiveCode();closeToolsSheet()">
+      <span class="gm-sheet-icon">⊞</span>
+      <div class="gm-sheet-item-body">
+        <div class="gm-sheet-item-title">Canvas</div>
+        <div class="gm-sheet-item-sub">Write or build live code</div>
+      </div>
+    </div>
+    <div class="gm-sheet-item" id="sheetWebSearch" onclick="toggleWebSearch();closeToolsSheet()">
+      <span class="gm-sheet-icon">🌐</span>
+      <div class="gm-sheet-item-body">
+        <div class="gm-sheet-item-title">Web Search</div>
+        <div class="gm-sheet-item-sub">Search the web in real-time</div>
+      </div>
+      <span class="gm-sheet-item-badge" id="sheetWebBadge">Off</span>
+    </div>
+    <div class="gm-sheet-item" onclick="toggleTurbo();closeToolsSheet()" id="sheetTurbo">
+      <span class="gm-sheet-icon">⚡</span>
+      <div class="gm-sheet-item-body">
+        <div class="gm-sheet-item-title">Turbo Mode</div>
+        <div class="gm-sheet-item-sub">2× faster · 2.5× credits</div>
+      </div>
+      <span class="gm-sheet-item-badge" id="sheetTurboBadge">Off</span>
+    </div>
+    <div class="gm-sheet-item" onclick="toggleComputer();closeToolsSheet()">
+      <span class="gm-sheet-icon">🖥</span>
+      <div class="gm-sheet-item-body">
+        <div class="gm-sheet-item-title">Computer Use</div>
+        <div class="gm-sheet-item-sub">AI desktop automation</div>
+      </div>
+      <span class="gm-sheet-item-badge">Max+</span>
+    </div>
+  </div>
 </div>
 
 <!-- ── Live Code Preview modal ────────────────────────────────────────────────── -->
@@ -2292,7 +2865,7 @@ function _checkPlanUpdates(){
     setTimeout(() => toast.remove(), 10000);
   }
 }
-document.addEventListener("DOMContentLoaded", ()=>{ _checkPlanUpdates(); _restoreCustomization(); });
+document.addEventListener("DOMContentLoaded", ()=>{ _checkPlanUpdates(); _restoreCustomization(); _gmInit(); });
 
 // ── Sidebar upgrade pill ──────────────────────────────────────────────────────
 const _PLAN_NAMES = {free:"Free",starter:"Starter",pro:"Pro",dev:"Dev",max:"Max",ultra:"Ultra",team:"Team",enterprise:"Enterprise",creator:"Creator"};
@@ -2859,6 +3432,202 @@ function _handle429(resp) {
   }
   setTimeout(check, 30_000); // first check after 30 s
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GEMINI v10 UI — interactions
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Sidebar (overlay mode) ──────────────────────────────────────────────────────
+let _sbOpen = false;
+function toggleSidebar() {
+  _sbOpen = !_sbOpen;
+  const sb = document.getElementById("sidebar");
+  const ov = document.getElementById("mobOverlay");
+  sb.classList.toggle("gm-open", _sbOpen);
+  ov.classList.toggle("on", _sbOpen);
+}
+function closeSidebarMobile() {
+  _sbOpen = false;
+  document.getElementById("sidebar").classList.remove("gm-open");
+  document.getElementById("mobOverlay").classList.remove("on");
+}
+function openSearchChats() {
+  closeSidebarMobile();
+  const s = document.getElementById("convoSearch");
+  if(s){ s.focus(); }
+}
+
+// ── Model Dropdown ──────────────────────────────────────────────────────────────
+let _gmDDOpen = false;
+function toggleModelDD() {
+  _gmDDOpen = !_gmDDOpen;
+  const dd = document.getElementById("gmModelDD");
+  const btn = document.getElementById("gmModelTrigger");
+  dd.classList.toggle("open", _gmDDOpen);
+  btn.classList.toggle("open", _gmDDOpen);
+  if(_gmDDOpen) {
+    // position dropdown below brand area
+    const br = btn.getBoundingClientRect();
+    dd.style.left = br.left + "px";
+    dd.style.top  = (br.bottom + 6) + "px";
+    setTimeout(()=>document.addEventListener("click", _ddOutside, {once:true}), 0);
+  }
+}
+function _ddOutside(e) {
+  if(!document.getElementById("gmModelDD").contains(e.target)) {
+    _gmDDOpen = false;
+    document.getElementById("gmModelDD").classList.remove("open");
+    document.getElementById("gmModelTrigger").classList.remove("open");
+  }
+}
+function gmSelectModel(modelId, label) {
+  // Update the native model selector (existing JS uses it)
+  const msel = document.getElementById("msel");
+  if(msel) {
+    for(let i=0;i<msel.options.length;i++) {
+      if(msel.options[i].value === modelId) { msel.selectedIndex = i; msel.dispatchEvent(new Event("change")); break; }
+    }
+  }
+  // Update display
+  document.getElementById("gmModelName").textContent = label;
+  // Update checkmarks
+  document.querySelectorAll(".gm-dd-check").forEach(c=>{ c.style.visibility="hidden"; });
+  // Close dropdown
+  _gmDDOpen = false;
+  document.getElementById("gmModelDD").classList.remove("open");
+  document.getElementById("gmModelTrigger").classList.remove("open");
+}
+
+// ── Temp Chat mode ──────────────────────────────────────────────────────────────
+let _tempMode = false;
+function toggleTempChat() {
+  _tempMode = !_tempMode;
+  document.body.classList.toggle("gm-temp-mode", _tempMode);
+  const btn = document.getElementById("gmTempBtn");
+  const icon = document.getElementById("gmTempIcon");
+  btn.classList.toggle("gm-active", _tempMode);
+  if(_tempMode) {
+    icon.innerHTML = '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>';
+    icon.setAttribute("viewBox","0 0 24 24");
+    document.getElementById("cin").placeholder = "Ask anything — this chat is temporary";
+  } else {
+    icon.innerHTML = '<path d="M11 4H4a2 2 0 0 0-2 2v14l4-4h14a2 2 0 0 0 2-2V9"/><path d="M18 2l4 4-10 10H8v-4L18 2z"/>';
+    document.getElementById("cin").placeholder = "Ask StudioCLI";
+  }
+}
+
+// ── Bottom Sheet (Tools) ────────────────────────────────────────────────────────
+function openToolsSheet() {
+  document.getElementById("gmSheetBd").classList.add("on");
+  const sheet = document.getElementById("gmSheet");
+  sheet.classList.add("open");
+  _syncSheetBadges();
+}
+function closeToolsSheet() {
+  document.getElementById("gmSheetBd").classList.remove("on");
+  document.getElementById("gmSheet").classList.remove("open");
+}
+function _syncSheetBadges() {
+  const r = document.getElementById("sheetResearchBadge");
+  const w = document.getElementById("sheetWebBadge");
+  const t = document.getElementById("sheetTurboBadge");
+  if(r) r.textContent = window._deepResearch ? "On" : "Off";
+  if(w) w.textContent = window._webSearch ? "On" : "Off";
+  if(t) t.textContent = window._turboMode ? "On" : "Off";
+  const rl = document.getElementById("gmResearchLabel");
+  if(rl) rl.textContent = window._deepResearch ? "On" : "Off";
+}
+
+// ── Active feature chips in input bar ──────────────────────────────────────────
+function _syncChips() {
+  const chips = document.getElementById("gmChips");
+  if(!chips) return;
+  const active = [];
+  if(window._webSearch) active.push({id:"web",label:"🌐 Web Search",off:()=>{toggleWebSearch();}});
+  if(window._deepResearch) active.push({id:"research",label:"🔬 Deep Research",off:()=>{toggleDeepResearch();}});
+  if(window._turboMode) active.push({id:"turbo",label:"⚡ Turbo",off:()=>{toggleTurbo();}});
+  if(window._liveCode) active.push({id:"canvas",label:"✿ Canvas",off:()=>{toggleLiveCode();}});
+  if(window._computerMode) active.push({id:"computer",label:"🖥 Computer",off:()=>{toggleComputer();}});
+  chips.innerHTML = active.map(c =>
+    `<div class="gm-chip" onclick="${c.id}_chip_off()">${c.label}<span class="gm-chip-x">×</span></div>`
+  ).join("");
+  // register off handlers dynamically
+  active.forEach(c => { window[c.id+"_chip_off"] = ()=>{ c.off(); _syncChips(); _syncSheetBadges(); }; });
+  _syncSheetBadges();
+}
+
+// Patch existing toggle functions to also update chips
+const _origToggleWS  = window.toggleWebSearch;
+const _origToggleDR  = window.toggleDeepResearch;
+const _origToggleTB  = window.toggleTurbo;
+const _origToggleLC  = window.toggleLiveCode;
+const _origToggleCU  = window.toggleComputer;
+window.toggleWebSearch   = function(){ _origToggleWS?.(); _syncChips(); };
+window.toggleDeepResearch= function(){ _origToggleDR?.(); _syncChips(); };
+window.toggleTurbo       = function(){ _origToggleTB?.(); _syncChips(); };
+window.toggleLiveCode    = function(){ _origToggleLC?.(); _syncChips(); };
+window.toggleComputer    = function(){ _origToggleCU?.(); _syncChips(); };
+
+// ── v10 Beta toggle ─────────────────────────────────────────────────────────────
+function toggleBeta() {
+  const on = localStorage.getItem("studioBeta") !== "1";
+  localStorage.setItem("studioBeta", on ? "1" : "0");
+  const badge = document.getElementById("gmV10Badge");
+  badge.classList.toggle("gm-beta-on", on);
+  badge.textContent = on ? "v10 β" : "v10";
+  // v10 beta enables: extended thinking budget + canvas preview hint
+  if(on) {
+    showToast("v10 Beta enabled — extended thinking + canvas active", "ok");
+  } else {
+    showToast("v10 Beta disabled", "info");
+  }
+}
+
+// ── Greeting personalisation ────────────────────────────────────────────────────
+function _gmUpdateGreeting() {
+  const email = localStorage.getItem("studioEmail") || "";
+  const firstName = email.split("@")[0]?.split(".")[0]?.replace(/[^a-zA-Z]/g,"") || "";
+  const greet = document.getElementById("gmGreeting");
+  if(greet && firstName) {
+    const cap = firstName.charAt(0).toUpperCase() + firstName.slice(1);
+    greet.textContent = `What can I help with, ${cap}?`;
+  }
+}
+
+// ── User avatar init ──────────────────────────────────────────────────────────
+function _gmUpdateUser() {
+  const email = localStorage.getItem("studioEmail") || "";
+  const name  = email ? email.split("@")[0].replace(/\./g," ") : "Nifemi Foxx";
+  const initial = (email || "N").charAt(0).toUpperCase();
+  const av = document.getElementById("sfAvatar");
+  const un = document.getElementById("sfUserName");
+  if(av) av.textContent = initial;
+  if(un) un.textContent = name.split(" ").map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────────
+function _gmInit() {
+  _gmUpdateGreeting();
+  _gmUpdateUser();
+  // Init v10 badge state
+  const betaOn = localStorage.getItem("studioBeta") === "1";
+  const badge = document.getElementById("gmV10Badge");
+  if(badge) { badge.classList.toggle("gm-beta-on", betaOn); badge.textContent = betaOn ? "v10 β" : "v10"; }
+  // Close model dropdown on outside click
+  document.addEventListener("keydown", e => {
+    if(e.key === "Escape") { if(_gmDDOpen) toggleModelDD(); closeToolsSheet(); }
+  });
+  // Sync model display with native selector
+  const msel = document.getElementById("msel");
+  if(msel) msel.addEventListener("change", () => {
+    const opt = msel.options[msel.selectedIndex];
+    if(opt) {
+      const short = opt.text.replace(/ \(Free\)| PRO| MAX/gi,"").trim();
+      const nm = document.getElementById("gmModelName");
+      if(nm) nm.textContent = short.length > 18 ? short.slice(0,16)+"…" : short;
+    }
+  });
+}
 </script>
 </body>
 </html>

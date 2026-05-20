@@ -112,6 +112,19 @@ studio                  # launch
 | `/cd <path>` | Change working directory |
 | `/wordcount <file>` | Count words/lines/chars |
 
+### Developer Utilities
+| Command | Description |
+|---|---|
+| `/calc <expr>` | Evaluate a math expression safely |
+| `/uuid [count]` | Generate UUIDs (up to 20) |
+| `/hash <text>` | Hash a string — MD5, SHA1, SHA256, SHA512 |
+| `/b64 encode/decode <text>` | Base64 encode or decode |
+| `/ts` | Current timestamp in 6 formats (Unix, ISO, UTC, local…) |
+| `/ping <url>` | HTTP GET a URL and show status + latency |
+| `/jwt <token>` | Decode a JWT (header + payload, no verification) |
+| `/lorem [n]` | Generate placeholder text (n paragraphs) |
+| `/spell <text>` | NATO phonetic alphabet for a string |
+
 ### Project & Agents
 | Command | Description |
 |---|---|
@@ -241,9 +254,9 @@ Switch with `/theme <name>` or use a `/vibe` preset:
 
 ---
 
-## Web Interface
+## Web Interface — v10 Beta
 
-A companion web UI lives in `web/`. It uses the same OpenRouter key and model list.
+The companion web app (`web/`) ships a full **Gemini-inspired UI** redesign.
 
 ```bash
 cd web
@@ -252,7 +265,78 @@ npm start
 # → http://localhost:3456
 ```
 
-Features: streaming chat, model picker, persona switcher, dark terminal theme.
+### Layout
+
+- **Transparent overlay header** — hamburger + StudioCLI wordmark + model picker + v10 badge + temp-chat toggle
+- **Slide-in sidebar** — Gemini-style overlay with sparkle logo, nav links, recents, upgrade pill, and user avatar row
+- **Pill-shaped input bar** — `+` attachment button, textarea, mic, send; full-width at bottom
+- **Bottom sheet** — swipe-up tool tray: Files, Photos, Canvas, Settings, Deep Research, Web Search, Turbo, Computer Use
+- **Model picker dropdown** — floating card with Free / GPT-4o Mini / Claude Sonnet / Gemini 2.5 Pro / Opus 4.7 tiers
+- **Radial gradient background** — deep navy → near-black, shifts to flat `#212121` in Temp Chat mode
+
+### v10 Beta
+
+Toggle the **v10** badge in the header to unlock:
+
+- Extended thinking mode (signals higher reasoning budget to the API)
+- Canvas-mode visual toggle
+- Gradient badge glow + toast notification
+- Persisted in `localStorage` across sessions
+
+### Research Profiles
+
+When Deep Research is active, pick a **preset system prompt**:
+
+| Preset | Focus |
+|---|---|
+| Deep Dive | Exhaustive multi-angle analysis |
+| Academic | Citations, methodology, peer-review framing |
+| Market Intel | Competitive landscape, trends, TAM |
+| Technical | Architecture, implementation, trade-offs |
+| Synthesis | Cross-domain pattern recognition |
+| Devil's Advocate | Stress-test assumptions, surface blindspots |
+
+### Features
+
+| Feature | Description |
+|---|---|
+| Streaming chat | SSE-based streaming, all models |
+| Group Chat | Query multiple models in parallel |
+| Community Chat | Live SSE broadcast room (60 rolling messages) |
+| Deep Research | Perplexity Sonar Pro — long-form structured reports |
+| Web Search | Perplexity Sonar — real-time web grounding |
+| Turbo mode | GPT-4o-mini fast-path |
+| Computer Use | Browser automation agent (Chrome extension) |
+| Persona switcher | 13 AI personas |
+| Conversation history | 50 conversations, localStorage |
+| Dashboard | Usage stats page |
+
+### Security
+
+All AI requests are proxied server-side — the OpenRouter API key is never sent to the browser.
+
+- Body size guard (100 KB limit before JSON parsing)
+- Community message XSS sanitization (HTML tags, `javascript:`, event attributes stripped server-side)
+- Anti-prompt-injection suffix on all system prompts
+- `X-OR-Key` header restricted to localhost only
+- Rate limiting: 60 req/min per IP on `/api/chat`, 5/15 min on `/api/key`
+- Strict CSP — no external `connectSrc`; all AI calls are server-side
+
+### Chrome Extension
+
+`web/public/extension/` is a Manifest V3 Chrome extension for the **Computer Use** feature.
+
+```
+extension/
+  manifest.json   ← MV3, activeTab + scripting permissions
+  background.js   ← service worker, session management
+  content.js      ← DOM action executor (click, type, scroll, read, screenshot)
+  popup.html/js   ← extension popup UI
+  icon16.png      ← toolbar icon (16×16)
+  icon48.png      ← extension page icon (48×48)
+```
+
+Load unpacked from `chrome://extensions` → **Developer mode** → **Load unpacked** → select the `extension/` folder.
 
 ---
 
@@ -263,6 +347,8 @@ Features: streaming chat, model picker, persona switcher, dark terminal theme.
 - **prompt_toolkit** — REPL input, history, keybindings, completions
 - **urllib** — HTTP (no external HTTP library)
 - **Node.js / Express** — web interface (`web/`)
+- **helmet + express-rate-limit** — web security hardening
+- **OpenRouter API** — multi-provider AI routing
 
 ---
 
@@ -271,14 +357,20 @@ Features: streaming chat, model picker, persona switcher, dark terminal theme.
 ```
 StudioCLI/
 ├── aistudio.py          # full CLI (~9k lines)
+├── studio/
+│   └── providers.py     # OpenRouter / Gemini / Ollama provider adapters
 ├── test_studio.py       # test suite
 ├── install_windows.bat  # Windows installer
 ├── termux_setup.sh      # Android/Termux setup
-├── index.html           # portfolio showcase page
 ├── web/
-│   ├── server.js        # Express backend (SSE streaming)
+│   ├── server.js        # Express backend (SSE streaming, security)
+│   ├── vercel.json      # Vercel deployment config
 │   └── public/
-│       └── index.html   # web chat UI
+│       ├── index.html   # Gemini v10 web chat UI (~3000 lines)
+│       ├── pricing.html # Pricing page
+│       ├── login.html   # Magic-link auth
+│       ├── dashboard.html
+│       └── extension/   # Chrome extension (Computer Use)
 ├── public.md            # changelog
 └── private.md           # architecture notes
 ```

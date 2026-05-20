@@ -1394,9 +1394,9 @@ ALL_COMMANDS = [
     "/upgrade","/plan","/feedback","/complain","/inbox",
     "/permissions","/beta",
     "/usage","/trial","/update","/studio-update",
-    "/todo","/bench","/voice","/export","/stats","/balance","/cost","/lint",
+    "/todo","/bench","/voice","/export","/balance","/lint",
     "/sidebar",
-    "/arena","/local","/mesh","/broadcast","/live-fif","/thinking","/cursor","/audit","/search","/summarize","/docs","/test","/fix-self",
+    "/arena","/local","/mesh","/broadcast","/live-fif","/cursor","/audit","/summarize","/docs","/test","/fix-self",
     # v5.6
     "/autonomous","/creator","/creator-analytics","/analytics",
     # v5.7
@@ -1425,6 +1425,9 @@ ALL_COMMANDS = [
     "/recap","/gitdiff","/branch","/set","/qnote","/qnotes","/cost",
     "/focus","/unfocus","/swap","/copy-code","/session","/clear-history",
     "/last","/wipe-pins","/colors","/model-info",
+    # v9.6 — utility commands
+    "/calc","/math","/uuid","/guid","/hash","/b64","/base64",
+    "/ts","/timestamp","/now","/ping","/jwt","/lorem","/spell",
 ]
 
 COMMAND_METADATA = {
@@ -1439,11 +1442,9 @@ COMMAND_METADATA = {
     "/analyze":        ("AI",      "Scan project/dir for bugs and issues"),
     "/lint":           ("AI",      "Quick AI lint review of a file (Ultra/Max)"),
     "/arena":          ("AI",      "Battle of the Models — side-by-side comparison"),
-    "/cost":           ("AI",      "Show session token cost analysis"),
     "/balance":        ("AI",      "Show remaining account balance"),
     "/effort":         ("AI",      "Set reasoning effort: low to mxh"),
     "/thinking":       ("AI",      "Toggle internal reasoning display (DeepSeek/R1)"),
-    "/search":         ("WEB",     "Web search query or toggle web search mode"),
     "/research":       ("WEB",     "Deep multi-step AI research (Pro+)"),
     "/turbo":          ("AI",      "2x fast mode — 2.5x credit cost (Pro+)"),
     "/credits":        ("PLAN",    "Show credit balance and monthly quota"),
@@ -1484,7 +1485,6 @@ COMMAND_METADATA = {
     "/todo":           ("DEV",     "Scan workspace for TODO/FIXME comments"),
     "/bench":          ("DEV",     "Benchmark model speed"),
     "/voice":          ("BETA",    "Voice-to-text input mode (ultra, requires speech_recognition)"),
-    "/export":         ("DEV",     "Export chat to HTML or Markdown"),
     "/sidebar":        ("UI",      "Show project sidebar panel"),
     "/history":        ("AI",      "Pretty-print session conversation turns"),
     "/models":         ("AI",      "List all available models with routing info"),
@@ -1565,6 +1565,16 @@ COMMAND_METADATA = {
     "/wipe-pins":      ("UTIL",    "Delete all pinned notes"),
     "/colors":         ("UI",      "Show the current theme's full color palette"),
     "/model-info":     ("AI",      "Show context window, pricing, and provider for active model"),
+    # v9.6 — utility commands
+    "/calc":           ("UTIL",    "Evaluate a math expression safely: /calc 2**32 / 1024"),
+    "/uuid":           ("UTIL",    "Generate UUIDs: /uuid [count 1-20]"),
+    "/hash":           ("UTIL",    "Hash a string — MD5, SHA1, SHA256, SHA512"),
+    "/b64":            ("UTIL",    "Base64 encode/decode: /b64 encode <text> | /b64 decode <text>"),
+    "/ts":             ("UTIL",    "Show current timestamp in 6 formats"),
+    "/ping":           ("UTIL",    "HTTP GET a URL and show status + latency"),
+    "/jwt":            ("UTIL",    "Decode a JWT token (header + payload, no verification)"),
+    "/lorem":          ("UTIL",    "Generate placeholder text: /lorem [paragraphs]"),
+    "/spell":          ("UTIL",    "NATO phonetic alphabet for a string: /spell hello"),
 }
 
 
@@ -2530,6 +2540,7 @@ def ai_respond(state, prompt, history, silent=False):
             old_model = state.get("model")
             state["model"] = fallback
             result, history = ai_respond(state, prompt, history, silent=silent)
+            state.pop("_fallback_tried", None)  # always clear after recursion
             if result:
                 return result, history
             state["model"] = old_model  # restore if fallback also failed
@@ -8240,6 +8251,23 @@ def cmd_compact(state, args, history):
     return new_history
 
 
+def _clipboard_copy(data: bytes) -> bool:
+    """Copy bytes to system clipboard. Returns True on success."""
+    if sys.platform == "win32":
+        cmds = [["clip"]]
+    elif sys.platform == "darwin":
+        cmds = [["pbcopy"]]
+    else:
+        cmds = [["xclip", "-selection", "clipboard"], ["xdotool", "type", "--clearmodifiers", "--"], ["wl-copy"]]
+    for cmd in cmds:
+        try:
+            subprocess.run(cmd, input=data, check=True, capture_output=True)
+            return True
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            continue
+    return False
+
+
 # ── /clip — copy last AI response to clipboard (alias for /copy) ──────────
 def cmd_clip(state, args=""):
     """/clip — copy last AI response to clipboard."""
@@ -8247,15 +8275,207 @@ def cmd_clip(state, args=""):
     if not last_r:
         console.print("[yellow]Nothing to copy — send a message first.[/yellow]")
         return
-    try:
-        if sys.platform == "win32":
-            subprocess.run(["clip"], input=last_r.encode("utf-8"), check=True)
-        else:
-            subprocess.run(["xclip", "-selection", "clipboard"], input=last_r.encode(), check=True)
+    if _clipboard_copy(last_r.encode("utf-8")):
         console.print("[green]✓ Copied to clipboard[/green]")
-    except Exception:
-        console.print("[yellow]Copy failed (install clip/xclip). Printing instead:[/yellow]")
+    else:
+        console.print("[yellow]Clipboard not available. Response:[/yellow]")
         console.print(last_r)
+
+
+# ── v9.4 UTILITY COMMANDS ─────────────────────────────────────────────────
+
+def cmd_calc(state, args):
+    """/calc <expr> — evaluate a Python expression safely."""
+    if not args:
+        console.print("[dim]Usage: /calc 2**32 | /calc 1024*1024*4 | /calc hex(255)[/dim]")
+        return
+    import ast, math, operator
+    _safe_names = {
+        "abs":abs,"round":round,"min":min,"max":max,"sum":sum,"len":len,
+        "int":int,"float":float,"str":str,"hex":hex,"oct":oct,"bin":bin,
+        "pow":pow,"divmod":divmod,"bool":bool,
+        **{k: getattr(math, k) for k in dir(math) if not k.startswith("_")},
+    }
+    try:
+        tree = ast.parse(args.strip(), mode="eval")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id not in _safe_names:
+                    raise ValueError(f"Function not allowed: {node.func.id}")
+        result = eval(compile(tree, "<calc>", "eval"), {"__builtins__": {}}, _safe_names)
+        theme = state.get("theme", THEMES["default"])
+        console.print(f"[{theme['accent']}]= {result}[/{theme['accent']}]")
+    except ZeroDivisionError:
+        console.print("[red]Division by zero[/red]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def cmd_uuid(state, args):
+    """/uuid — generate a random UUID."""
+    import uuid
+    theme = state.get("theme", THEMES["default"])
+    n = 1
+    try: n = max(1, min(20, int(args.strip()))) if args.strip() else 1
+    except Exception: pass
+    for _ in range(n):
+        u = str(uuid.uuid4())
+        console.print(f"[{theme['accent']}]{u}[/{theme['accent']}]")
+        if _clipboard_copy(u.encode("utf-8")) and n == 1:
+            console.print("[dim]Copied to clipboard[/dim]")
+
+
+def cmd_hash(state, args):
+    """/hash <text> — show md5/sha1/sha256 of text."""
+    if not args:
+        console.print("[dim]Usage: /hash <text>[/dim]")
+        return
+    theme = state.get("theme", THEMES["default"])
+    data = args.encode("utf-8")
+    tbl = Table(box=box.SIMPLE, border_style=theme["border"])
+    tbl.add_column("Algorithm", style="bold cyan", no_wrap=True)
+    tbl.add_column("Digest", style="dim")
+    for algo in ("md5", "sha1", "sha256", "sha512"):
+        tbl.add_row(algo.upper(), hashlib.new(algo, data).hexdigest())
+    console.print(tbl)
+
+
+def cmd_b64(state, args):
+    """/b64 encode|decode <text> — base64 encode/decode."""
+    import base64
+    if not args:
+        console.print("[dim]Usage: /b64 encode <text> | /b64 decode <b64string>[/dim]")
+        return
+    parts = args.split(" ", 1)
+    sub   = parts[0].strip().lower()
+    data  = parts[1].strip() if len(parts) > 1 else ""
+    theme = state.get("theme", THEMES["default"])
+    try:
+        if sub in ("encode", "enc", "e"):
+            result = base64.b64encode(data.encode("utf-8")).decode("ascii")
+        elif sub in ("decode", "dec", "d"):
+            result = base64.b64decode(data.encode("ascii")).decode("utf-8", errors="replace")
+        else:
+            console.print("[yellow]Usage: /b64 encode <text> | /b64 decode <text>[/yellow]")
+            return
+        console.print(f"[{theme['accent']}]{result}[/{theme['accent']}]")
+        _clipboard_copy(result.encode("utf-8"))
+        console.print("[dim]Copied to clipboard[/dim]")
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+
+
+def cmd_ts(state, args):
+    """/ts — show current timestamps in multiple formats."""
+    from datetime import timezone
+    theme = state.get("theme", THEMES["default"])
+    now   = datetime.now()
+    utc   = datetime.now(timezone.utc)
+    epoch = int(now.timestamp())
+    tbl = Table(box=box.SIMPLE, border_style=theme["border"])
+    tbl.add_column("Format", style="bold cyan")
+    tbl.add_column("Value",  style="dim")
+    tbl.add_row("Local",     now.strftime("%Y-%m-%d %H:%M:%S"))
+    tbl.add_row("UTC",       utc.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    tbl.add_row("ISO 8601",  utc.strftime("%Y-%m-%dT%H:%M:%S.") + f"{utc.microsecond//1000:03d}Z")
+    tbl.add_row("Unix (s)",  str(epoch))
+    tbl.add_row("Unix (ms)", str(epoch * 1000))
+    tbl.add_row("Day",       now.strftime("%A, %B %d %Y"))
+    console.print(tbl)
+
+
+def cmd_ping(state, args):
+    """/ping <url> — HTTP GET and show status + latency."""
+    if not args:
+        console.print("[dim]Usage: /ping https://example.com[/dim]")
+        return
+    url = args.strip()
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    theme = state.get("theme", THEMES["default"])
+    import time as _t
+    try:
+        t0 = _t.time()
+        req_obj = request.Request(url, headers={"User-Agent": "StudioCLI/ping"})
+        with request.urlopen(req_obj, timeout=8) as resp:
+            ms = round((_t.time() - t0) * 1000)
+            console.print(
+                f"[{theme['success']}]✓ {resp.status} {resp.reason}[/{theme['success']}]  "
+                f"[dim]{ms}ms — {url}[/dim]"
+            )
+    except urllib_error.HTTPError as e:
+        ms = round((_t.time() - t0) * 1000)
+        console.print(f"[yellow]HTTP {e.code} {e.reason}[/yellow]  [dim]{ms}ms — {url}[/dim]")
+    except Exception as e:
+        console.print(f"[red]✗ {e}[/red]  [dim]{url}[/dim]")
+
+
+def cmd_jwt(state, args):
+    """/jwt <token> — decode and display a JWT payload without verifying signature."""
+    import base64, json as _json
+    if not args:
+        console.print("[dim]Usage: /jwt <token>[/dim]")
+        return
+    token = args.strip()
+    parts = token.split(".")
+    if len(parts) != 3:
+        console.print("[red]Not a valid JWT (expected 3 dot-separated parts)[/red]")
+        return
+    theme = state.get("theme", THEMES["default"])
+    for label, part in (("Header", parts[0]), ("Payload", parts[1])):
+        pad = part + "=" * (-len(part) % 4)
+        try:
+            decoded = _json.loads(base64.urlsafe_b64decode(pad).decode("utf-8"))
+            console.print(Panel(
+                _json.dumps(decoded, indent=2),
+                title=f"[bold]{label}[/bold]", border_style=theme["border"]
+            ))
+        except Exception as e:
+            console.print(f"[red]{label} decode error: {e}[/red]")
+    console.print("[dim italic]⚠ Signature not verified — do not trust claims without verification[/dim italic]")
+
+
+def cmd_lorem(state, args):
+    """/lorem [n] — generate n sentences of placeholder text."""
+    _LOREM = (
+        "Lorem ipsum dolor sit amet consectetur adipiscing elit. "
+        "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. "
+        "Ut enim ad minim veniam quis nostrud exercitation ullamco laboris. "
+        "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum. "
+        "Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia. "
+        "Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit. "
+        "Neque porro quisquam est qui dolorem ipsum quia dolor sit amet. "
+        "Ut labore et dolore magnam aliquam quaerat voluptatem. "
+    ).split(". ")
+    n = 5
+    try: n = max(1, min(50, int(args.strip()))) if args.strip() else 5
+    except Exception: pass
+    import random as _r
+    sentences = [_LOREM[i % len(_LOREM)].strip() for i in range(n)]
+    result = " ".join(sentences) + "."
+    theme  = state.get("theme", THEMES["default"])
+    console.print(f"[{theme['accent']}]{result}[/{theme['accent']}]")
+    _clipboard_copy(result.encode("utf-8"))
+    console.print("[dim]Copied to clipboard[/dim]")
+
+
+def cmd_spell(state, args):
+    """/spell <word> — NATO phonetic alphabet spelling."""
+    NATO = {
+        'a':'Alpha','b':'Bravo','c':'Charlie','d':'Delta','e':'Echo','f':'Foxtrot',
+        'g':'Golf','h':'Hotel','i':'India','j':'Juliet','k':'Kilo','l':'Lima',
+        'm':'Mike','n':'November','o':'Oscar','p':'Papa','q':'Quebec','r':'Romeo',
+        's':'Sierra','t':'Tango','u':'Uniform','v':'Victor','w':'Whiskey',
+        'x':'X-ray','y':'Yankee','z':'Zulu',
+        '0':'Zero','1':'One','2':'Two','3':'Three','4':'Four',
+        '5':'Five','6':'Six','7':'Seven','8':'Eight','9':'Nine',
+    }
+    if not args:
+        console.print("[dim]Usage: /spell <word>[/dim]")
+        return
+    theme = state.get("theme", THEMES["default"])
+    parts = [NATO.get(ch.lower(), ch.upper()) for ch in args.strip()]
+    console.print(f"[{theme['accent']}]{' · '.join(parts)}[/{theme['accent']}]")
 
 
 # ── END v9.1 NEW FEATURES ──────────────────────────────────────────────────
@@ -9939,14 +10159,10 @@ def cmd_copy_code(state):
         console.print("[yellow]No code block found in last response.[/yellow]")
         return
     code = blocks[-1].strip()
-    try:
-        if sys.platform == "win32":
-            subprocess.run(["clip"], input=code.encode("utf-8"), check=True)
-        else:
-            subprocess.run(["xclip", "-selection", "clipboard"], input=code.encode(), check=True)
-        lines = code.count("\n") + 1
+    lines = code.count("\n") + 1
+    if _clipboard_copy(code.encode("utf-8")):
         console.print(f"[{theme['success']}]✓ Copied code block ({lines} lines) to clipboard[/{theme['success']}]")
-    except Exception:
+    else:
         console.print("[yellow]Clipboard failed. Code block:[/yellow]")
         console.print(Syntax(code[:2000], "text", theme="monokai"))
 
@@ -10298,14 +10514,10 @@ def run_repl(state):
                     if not last_r:
                         console.print("[yellow]Nothing to copy[/yellow]")
                     else:
-                        try:
-                            if sys.platform == "win32":
-                                subprocess.run(["clip"], input=last_r.encode("utf-8"), check=True)
-                            else:
-                                subprocess.run(["xclip","-selection","clipboard"], input=last_r.encode(), check=True)
+                        if _clipboard_copy(last_r.encode("utf-8")):
                             console.print("[green]✓ Copied to clipboard[/green]")
-                        except Exception:
-                            console.print("[yellow]Copy failed (install clip/xclip)[/yellow]")
+                        else:
+                            console.print("[yellow]Clipboard not available on this system[/yellow]")
                             console.print(last_r)
 
                 elif cmd in ("shortcuts", "kb") and not args:
@@ -10603,7 +10815,7 @@ def run_repl(state):
                 elif cmd == "statusline": state = cmd_statusline(state, args)
                 elif cmd == "arena":      history = cmd_arena(state, args, history)
                 elif cmd == "broadcast":  cmd_broadcast(state, args)
-                elif cmd == "local":      state = cmd_local(state, args)
+                elif cmd == "local":      state = cmd_local(state, args or "llama3")
                 elif cmd == "mesh":
                     console.print(Panel(json.dumps(BLACKBOARD, indent=2), title="Agent Mesh Blackboard", border_style="magenta"))
                 elif cmd == "live-fif":
@@ -10787,6 +10999,17 @@ def run_repl(state):
                 elif cmd in ("wipe-pins", "wipepins"): cmd_wipe_pins(state)
                 elif cmd == "colors":          cmd_colors(state)
                 elif cmd in ("model-info", "modelinfo", "minfo"): cmd_model_info(state)
+
+                # ── v9.4 Utility commands ──────────────────────────────────────
+                elif cmd in ("calc", "math"):   cmd_calc(state, args)
+                elif cmd in ("uuid", "guid"):   cmd_uuid(state, args)
+                elif cmd == "hash":             cmd_hash(state, args)
+                elif cmd in ("b64", "base64"):  cmd_b64(state, args)
+                elif cmd in ("ts", "timestamp", "now"): cmd_ts(state, args)
+                elif cmd == "ping":             cmd_ping(state, args)
+                elif cmd == "jwt":              cmd_jwt(state, args)
+                elif cmd == "lorem":            cmd_lorem(state, args)
+                elif cmd == "spell":            cmd_spell(state, args)
 
                 else:
                     # Check user-defined aliases first

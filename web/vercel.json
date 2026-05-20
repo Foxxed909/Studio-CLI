@@ -5,5 +5,14 @@
   ],
   "routes": [
     { "src": "/(.*)", "dest": "/server.js" }
-  ]
+  ],
+  "functions": {
+    "server.js": {
+      "maxDuration": 60,
+      "memory": 512
+    }
+  },
+  "env": {
+    "NODE_ENV": "production"
+  }
 }

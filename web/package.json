@@ -8,6 +8,7 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.106.0",
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
     "express-rate-limit": "^8.5.2",

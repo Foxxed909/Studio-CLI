@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>StudioCLI Companion Extension</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#131211;color:#f0ede8;min-height:100vh;display:flex;
+  align-items:center;justify-content:center;padding:32px 20px}
+.card{max-width:520px;width:100%;background:#1a1816;border:1px solid rgba(240,232,220,.1);
+  border-radius:16px;padding:36px 32px}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:28px}
+.logo-mark{width:32px;height:32px;border-radius:9px;background:#f0ede8;color:#131211;
+  display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;
+  position:relative;flex-shrink:0}
+.logo-mark::after{content:"";position:absolute;inset:0;border-radius:9px;
+  background:linear-gradient(135deg,transparent 55%,#d97757 55%);mix-blend-mode:screen;opacity:.85}
+.logo-name{font-size:16px;font-weight:600}
+h1{font-size:22px;font-weight:700;margin-bottom:8px}
+.sub{font-size:14px;color:rgba(240,237,232,.55);margin-bottom:28px;line-height:1.5}
+.steps{display:flex;flex-direction:column;gap:14px;margin-bottom:28px}
+.step{display:flex;align-items:flex-start;gap:12px}
+.step-num{width:26px;height:26px;border-radius:50%;background:#d97757;color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+  flex-shrink:0;margin-top:1px}
+.step-body{flex:1}
+.step-title{font-size:14px;font-weight:600;margin-bottom:2px}
+.step-desc{font-size:12.5px;color:rgba(240,237,232,.5);line-height:1.45}
+code{font-family:monospace;background:rgba(240,232,220,.08);padding:1px 6px;
+  border-radius:4px;font-size:12px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 20px;
+  border-radius:9px;border:none;font-size:14px;font-weight:600;cursor:pointer;
+  font-family:inherit;text-decoration:none;transition:background .15s}
+.btn-acc{background:#d97757;color:#fff}
+.btn-acc:hover{background:#c46341}
+.btn-sec{background:rgba(240,232,220,.08);color:rgba(240,237,232,.7);border:1px solid rgba(240,232,220,.1)}
+.btn-sec:hover{background:rgba(240,232,220,.13)}
+.btns{display:flex;gap:10px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-mark">S</div>
+    <span class="logo-name">StudioCLI Companion</span>
+  </div>
+  <h1>Install the Extension</h1>
+  <p class="sub">The StudioCLI Companion lets the AI see and control your browser tab in real-time.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Download the extension files</div>
+        <div class="step-desc">The extension is already included with StudioCLI. The files are in <code>web/public/extension/</code></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Open Chrome Extensions</div>
+        <div class="step-desc">Go to <code>chrome://extensions</code> and enable <b>Developer mode</b> (top-right toggle).</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Load Unpacked</div>
+        <div class="step-desc">Click <b>Load unpacked</b> and select the <code>extension/</code> folder from StudioCLI's web directory.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Start capturing</div>
+        <div class="step-desc">Click the StudioCLI icon in your toolbar, set the Studio URL to <code>http://localhost:3456</code>, then click <b>Start</b>.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Enable Computer Use in Studio</div>
+        <div class="step-desc">Open StudioCLI, click the <b>Computer</b> button in the toolbar, and start sending instructions.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="btns">
+    <a href="/" class="btn btn-acc">Open StudioCLI</a>
+    <a href="chrome://extensions" class="btn btn-sec">Chrome Extensions</a>
+  </div>
+</div>
+</body>
+</html>

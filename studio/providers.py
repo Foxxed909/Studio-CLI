@@ -92,14 +92,17 @@ def call_openrouter(api_key, model, history, prompt, system_prompt=None, _retry=
         return None, str(e)
 
 
-def call_openrouter_stream(api_key, model, history, prompt, system_prompt=None):
+def call_openrouter_stream(api_key, model, history, prompt, system_prompt=None, fast_mode=False, thinking_budget=0):
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     for m in history:
         messages.append({"role": "assistant" if m["role"] == "model" else m["role"], "content": m["text"]})
     messages.append({"role": "user", "content": prompt})
-    payload = json.dumps({"model": model, "messages": messages, "stream": True}).encode()
+    body = {"model": model, "messages": messages, "stream": True}
+    if thinking_budget and int(thinking_budget) > 0:
+        body["thinking"] = {"type": "enabled", "budget_tokens": int(thinking_budget)}
+    payload = json.dumps(body).encode()
     req = request.Request(OPENROUTER_BASE, data=payload, headers={
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",

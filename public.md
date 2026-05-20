@@ -1,5 +1,29 @@
 # AI Studio CLI — Public Changelog
 
+## v10.0 — 2026-05-20
+
+### Web UI — 4 Model Tiers
+The model selector is now organized into 4 **intent-based response modes** — each backed by a different model and system prompt tuned for that style:
+
+| Tier | Description | Access |
+|------|-------------|--------|
+| ⚡ **Flash-Lite** | Instant answers, no fluff — free tier | Free |
+| 🔥 **Flash** | Fast and sharp, everyday tasks | Pro |
+| ✦ **Auto** | Context-aware smart routing | Pro |
+| 🧠 **Deep Thinking** | Chain-of-thought, extended reasoning | Max |
+
+Each tier injects a purpose-built system prompt automatically — no configuration needed.
+
+### Web UI — Canvas
+The **Live Code Preview** is now the **Canvas** — a full in-browser IDE for generated apps:
+
+- **Live Preview tab** — see your generated HTML/CSS/JS running in real-time
+- **Split view** — code + preview side by side
+- **Download** — save the finished app as a standalone HTML file
+- **Suggest Fix** — type a change ("make the button blue", "add dark mode") and the AI rewrites the code in-place; preview updates automatically
+
+
+
 ## v9.5 (second patch) — 2026-05-18
 
 ### Bug Fixes

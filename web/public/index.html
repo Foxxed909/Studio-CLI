@@ -461,28 +461,52 @@ button,input,textarea,select{font-family:inherit}
   .layout.cu-open .main{margin-right:0}
 }
 
-/* ── Live Code Preview panel ─────────────────────────────────────────────────── */
+/* ── Canvas (Live Code Preview) panel ───────────────────────────────────────── */
 .lcp-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
   z-index:200;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
 .lcp-overlay.open{display:flex}
 .lcp-modal{background:var(--surface);border:1px solid var(--border2);
-  border-radius:12px;width:90vw;max-width:900px;height:80vh;
-  display:flex;flex-direction:column;overflow:hidden}
-.lcp-header{display:flex;align-items:center;justify-content:space-between;
-  padding:10px 14px;border-bottom:1px solid var(--border)}
-.lcp-title{font-size:13px;font-weight:600;color:var(--text)}
-.lcp-tabs{display:flex;gap:6px}
+  border-radius:14px;width:92vw;max-width:1100px;height:85vh;
+  display:flex;flex-direction:column;overflow:hidden;
+  box-shadow:0 24px 80px rgba(0,0,0,.7)}
+.lcp-header{display:flex;align-items:center;gap:8px;
+  padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.lcp-title{font-size:13px;font-weight:600;color:var(--text);margin-right:4px}
+.lcp-tabs{display:flex;gap:4px;flex:1}
 .lcp-tab{padding:4px 12px;border-radius:6px;border:1px solid var(--border);
-  background:transparent;color:var(--text2);font-size:12px;cursor:pointer;transition:all .15s}
+  background:transparent;color:var(--text2);font-size:12px;cursor:pointer;
+  transition:all .18s cubic-bezier(.16,1,.3,1);font-family:inherit}
 .lcp-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.lcp-tab:hover:not(.active){background:var(--surface2);color:var(--text)}
+.lcp-actions{display:flex;align-items:center;gap:6px}
+.lcp-dl-btn{display:flex;align-items:center;gap:5px;background:var(--surface2);
+  border:1px solid var(--border2);border-radius:8px;padding:4px 10px;
+  color:var(--text2);font-size:12px;cursor:pointer;transition:all .18s cubic-bezier(.16,1,.3,1);
+  font-family:inherit;white-space:nowrap}
+.lcp-dl-btn:hover{background:var(--surface3);color:var(--text);border-color:var(--border3);transform:translateY(-1px)}
 .lcp-close{background:none;border:none;cursor:pointer;color:var(--text3);
-  font-size:18px;padding:2px 7px;border-radius:6px}
+  font-size:18px;padding:2px 7px;border-radius:6px;transition:color .15s}
 .lcp-close:hover{color:var(--danger)}
 .lcp-body{flex:1;display:flex;overflow:hidden}
-.lcp-code-pane{flex:1;overflow:auto;padding:14px;font-family:monospace;
-  font-size:13px;white-space:pre;color:var(--text)}
-.lcp-preview-pane{flex:1;border-left:1px solid var(--border)}
-.lcp-preview-pane iframe{width:100%;height:100%;border:none;background:#fff}
+.lcp-code-pane{flex:1;overflow:auto;padding:14px;font-family:var(--font-mono);
+  font-size:13px;white-space:pre;color:var(--text);line-height:1.6}
+.lcp-preview-pane{flex:1;border-left:1px solid var(--border);display:flex;flex-direction:column}
+.lcp-preview-pane iframe{flex:1;width:100%;border:none;background:#fff}
+/* Canvas fix-bar */
+.lcp-fix-bar{flex-shrink:0;border-top:1px solid var(--border);padding:10px 14px;
+  display:flex;gap:8px;align-items:flex-end;background:var(--surface)}
+.lcp-fix-input{flex:1;background:var(--bg-elev);border:1px solid var(--border2);
+  border-radius:10px;padding:8px 12px;color:var(--text);font-size:13px;
+  font-family:var(--font-ui);resize:none;outline:none;min-height:36px;max-height:80px;
+  transition:border-color .15s;line-height:1.45}
+.lcp-fix-input::placeholder{color:var(--text3)}
+.lcp-fix-input:focus{border-color:var(--accent)}
+.lcp-fix-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;
+  padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;
+  transition:all .18s cubic-bezier(.16,1,.3,1);font-family:inherit;flex-shrink:0}
+.lcp-fix-btn:hover{background:var(--acc-h);transform:translateY(-1px)}
+.lcp-fix-btn:active{transform:translateY(0) scale(.97)}
+.lcp-fix-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
 
 /* ── Credits badge in header ─────────────────────────────────────────────────── */
 .credits-badge{display:inline-flex;align-items:center;gap:4px;
@@ -1468,29 +1492,36 @@ body.gm-ui-active .inp-foot-row{display:none}
 
   <!-- Model Dropdown -->
   <div class="gm-model-dd" id="gmModelDD">
-    <div class="gm-dd-section">Model</div>
-    <div class="gm-dd-item" onclick="gmSelectModel('meta-llama/llama-3.3-70b-instruct:free','Flash-Lite')">
-      <span class="gm-dd-check" id="gmCheck-free">✓</span>
-      <div class="gm-dd-info"><div class="gm-dd-name">Flash-Lite (Free)</div><div class="gm-dd-desc">Fastest answers, no key needed</div></div>
+    <div class="gm-dd-section">Response Mode</div>
+    <div class="gm-dd-item" onclick="gmSelectModel('meta-llama/llama-3.3-70b-instruct:free','Flash-Lite','flashlite')">
+      <span class="gm-dd-check" id="gmCheck-flashlite">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">⚡ Flash-Lite</div>
+        <div class="gm-dd-desc">Instant answers, zero fluff — free</div>
+      </div>
     </div>
-    <div class="gm-dd-item" onclick="gmSelectModel('openai/gpt-4o-mini','4o Mini')">
-      <span class="gm-dd-check" id="gmCheck-4omini" style="visibility:hidden">✓</span>
-      <div class="gm-dd-info"><div class="gm-dd-name">GPT-4o Mini</div><div class="gm-dd-desc">Fast, smart everyday tasks</div></div>
+    <div class="gm-dd-item" onclick="gmSelectModel('openai/gpt-4o-mini','Flash','flash')">
+      <span class="gm-dd-check" id="gmCheck-flash" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">🔥 Flash</div>
+        <div class="gm-dd-desc">Fast and sharp, everyday tasks</div>
+      </div>
       <span class="gm-dd-badge">PRO</span>
     </div>
-    <div class="gm-dd-item" onclick="gmSelectModel('anthropic/claude-sonnet-4-6','Sonnet 4.6')">
-      <span class="gm-dd-check" id="gmCheck-sonnet" style="visibility:hidden">✓</span>
-      <div class="gm-dd-info"><div class="gm-dd-name">Claude Sonnet 4.6</div><div class="gm-dd-desc">Advanced reasoning + code</div></div>
+    <div class="gm-dd-item" onclick="gmSelectModel('anthropic/claude-sonnet-4-6','Auto','auto')">
+      <span class="gm-dd-check" id="gmCheck-auto" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">✦ Auto</div>
+        <div class="gm-dd-desc">Context-aware — smart routing</div>
+      </div>
       <span class="gm-dd-badge">PRO</span>
     </div>
-    <div class="gm-dd-item" onclick="gmSelectModel('google/gemini-2.5-pro','Gemini 2.5 Pro')">
-      <span class="gm-dd-check" id="gmCheck-gemini" style="visibility:hidden">✓</span>
-      <div class="gm-dd-info"><div class="gm-dd-name">Gemini 2.5 Pro</div><div class="gm-dd-desc">Google's frontier model</div></div>
-      <span class="gm-dd-badge">PRO</span>
-    </div>
-    <div class="gm-dd-item" onclick="gmSelectModel('anthropic/claude-opus-4-7','Opus 4.7')">
-      <span class="gm-dd-check" id="gmCheck-opus" style="visibility:hidden">✓</span>
-      <div class="gm-dd-info"><div class="gm-dd-name">Claude Opus 4.7</div><div class="gm-dd-desc">Most powerful, complex tasks</div></div>
+    <div class="gm-dd-item" onclick="gmSelectModel('anthropic/claude-opus-4-7','Deep Thinking','deep')">
+      <span class="gm-dd-check" id="gmCheck-deep" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">🧠 Deep Thinking</div>
+        <div class="gm-dd-desc">Extended reasoning, chain-of-thought</div>
+      </div>
       <span class="gm-dd-badge">MAX</span>
     </div>
     <div class="gm-dd-divider"></div>
@@ -1693,23 +1724,33 @@ body.gm-ui-active .inp-foot-row{display:none}
   </div>
 </div>
 
-<!-- ── Live Code Preview modal ────────────────────────────────────────────────── -->
+<!-- ── Canvas (Live Code Preview) modal ──────────────────────────────────────── -->
 <div class="lcp-overlay" id="lcpOverlay" onclick="lcpClose(event)">
   <div class="lcp-modal" onclick="event.stopPropagation()">
     <div class="lcp-header">
-      <span class="lcp-title">Live Code Preview</span>
+      <span class="lcp-title">Canvas</span>
       <div class="lcp-tabs">
         <button class="lcp-tab active" id="lcpTabCode" onclick="lcpSwitch('code')">Code</button>
         <button class="lcp-tab" id="lcpTabPreview" onclick="lcpSwitch('preview')">Preview</button>
         <button class="lcp-tab" id="lcpTabSplit" onclick="lcpSwitch('split')">Split</button>
       </div>
-      <button class="lcp-close" onclick="closeLCP()">×</button>
+      <div class="lcp-actions">
+        <button class="lcp-dl-btn" onclick="lcpDownload()" title="Download as HTML">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </button>
+        <button class="lcp-close" onclick="closeLCP()">×</button>
+      </div>
     </div>
     <div class="lcp-body" id="lcpBody">
       <div class="lcp-code-pane" id="lcpCode"></div>
       <div class="lcp-preview-pane" id="lcpPreview" style="display:none">
-        <iframe id="lcpFrame" sandbox="allow-scripts"></iframe>
+        <iframe id="lcpFrame" sandbox="allow-scripts allow-same-origin"></iframe>
       </div>
+    </div>
+    <div class="lcp-fix-bar" id="lcpFixBar">
+      <textarea class="lcp-fix-input" id="lcpFixInput" placeholder="Suggest a fix or change… e.g. 'make the button blue' or 'add a dark mode toggle'" rows="1" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();lcpApplyFix();}"></textarea>
+      <button class="lcp-fix-btn" id="lcpFixBtn" onclick="lcpApplyFix()">Apply Fix</button>
     </div>
   </div>
 </div>
@@ -2576,7 +2617,9 @@ async function _runAI(title,_retry=0,_img=undefined,_pf=undefined){
             const rp=RESEARCH_PRESETS.find(p=>p.id===rpId);
             if(rp)return rp.prompt;
           }
-          return s.sysPrompt||undefined;
+          if(s.sysPrompt) return s.sysPrompt;
+          if(window._activeTier && TIER_PROMPTS[window._activeTier]) return TIER_PROMPTS[window._activeTier];
+          return undefined;
         })(),temperature:s.temperature,
         max_tokens:s.maxTokens,stream:s.stream,image:img||undefined,
         top_p:s.topP,frequency_penalty:s.freqPen,presence_penalty:s.presPen,
@@ -2765,6 +2808,7 @@ function openCUPanel(){
   panel.classList.add("open");
   document.querySelector(".layout")?.classList.add("cu-open");
   document.getElementById("computerBtn").classList.add("active");
+  window._computerMode = true;
   cuRefreshScreen();
   _cuStartPoll();
 }
@@ -2773,6 +2817,7 @@ function closeCUPanel(){
   document.getElementById("cuPanel").classList.remove("open");
   document.querySelector(".layout")?.classList.remove("cu-open");
   document.getElementById("computerBtn").classList.remove("active");
+  window._computerMode = false;
   _cuStopPoll();
 }
 
@@ -2964,7 +3009,7 @@ function _tryLivePreview(text, bubEl){
   if(bubEl && !bubEl.querySelector(".lcp-open-btn")){
     const btn=document.createElement("button");
     btn.className="feat-btn lcp-open-btn";btn.style.marginTop="8px";
-    btn.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Live Preview`;
+    btn.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Open in Canvas`;
     btn.onclick=openLCP;
     bubEl.appendChild(btn);
   }
@@ -2983,13 +3028,60 @@ function lcpSwitch(mode){
   document.querySelectorAll(".lcp-tab").forEach(t=>t.classList.remove("active"));
   if(mode==="code"){code.style.display="block";prev.style.display="none";document.getElementById("lcpTabCode").classList.add("active");}
   else if(mode==="preview"){
-    code.style.display="none";prev.style.display="block";
+    code.style.display="none";prev.style.display="flex";prev.style.flexDirection="column";
     document.getElementById("lcpFrame").srcdoc=window._lcpCode||"";
     document.getElementById("lcpTabPreview").classList.add("active");
   } else {
-    code.style.display="block";prev.style.display="block";code.style.flex="1";prev.style.flex="1";
+    code.style.display="block";prev.style.display="flex";prev.style.flexDirection="column";
+    code.style.flex="1";prev.style.flex="1";
     document.getElementById("lcpFrame").srcdoc=window._lcpCode||"";
     document.getElementById("lcpTabSplit").classList.add("active");
+  }
+}
+function lcpDownload(){
+  const code=window._lcpCode||"";
+  if(!code){showToast("No code to download","warn");return;}
+  const blob=new Blob([code],{type:"text/html"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="studio-canvas-"+(Date.now().toString(36))+".html";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+  showToast("Downloaded","ok");
+}
+async function lcpApplyFix(){
+  const inp=document.getElementById("lcpFixInput");
+  const btn=document.getElementById("lcpFixBtn");
+  const suggestion=(inp.value||"").trim();
+  if(!suggestion){inp.focus();return;}
+  const currentCode=window._lcpCode||"";
+  if(!currentCode){showToast("No code in canvas to fix","warn");return;}
+  btn.disabled=true;btn.textContent="Fixing…";
+  const s=loadSettings();
+  const headers={"Content-Type":"application/json"};
+  if(s.key)headers["Authorization"]=`Bearer ${s.key}`;
+  const fixPrompt=`Here is the current HTML/CSS/JS code:\n\n\`\`\`html\n${currentCode.slice(0,12000)}\n\`\`\`\n\nApply this change: ${suggestion}\n\nReturn ONLY the complete updated HTML file. No explanation, no markdown fences — just the raw HTML.`;
+  try{
+    const resp=await fetch("/api/chat",{method:"POST",headers,
+      body:JSON.stringify({messages:[{role:"user",content:fixPrompt}],
+        model:model||"meta-llama/llama-3.3-70b-instruct:free",
+        stream:false,max_tokens:8192,
+        system_override:"You are a precise code editor. Apply the requested change to the provided code and return the complete updated file. Output raw HTML only — no explanation, no markdown fences."})});
+    if(!resp.ok){const e=await resp.json().catch(()=>({}));showToast(e.error||"Fix failed","warn");return;}
+    const data=await resp.json();
+    let newCode=(data.content||"").trim();
+    // Strip markdown fences if model added them
+    newCode=newCode.replace(/^```html?\n?/i,"").replace(/\n?```\s*$/,"").trim();
+    if(!newCode){showToast("AI returned empty response","warn");return;}
+    window._lcpCode=newCode;
+    document.getElementById("lcpCode").textContent=newCode;
+    document.getElementById("lcpFrame").srcdoc=newCode;
+    inp.value="";inp.style.height="auto";
+    showToast("Fix applied","ok");
+  }catch(err){
+    showToast(err.message||"Fix error","warn");
+  }finally{
+    btn.disabled=false;btn.textContent="Apply Fix";
   }
 }
 
@@ -3036,6 +3128,15 @@ const RESEARCH_PRESETS=[
   {id:"devils",name:"Devil's Advocate",icon:"⚡",desc:"Challenge assumptions, stress-test ideas",
    prompt:`You are an expert critical analyst and devil's advocate.\n\nYour role: challenge, stress-test, find weaknesses.\n- Steelman the idea as well as possible first\n- Then systematically attack: assumptions, evidence gaps, logical flaws, edge cases\n- Find the strongest counterarguments — not strawmen\n- Identify hidden risks, second-order effects, unintended consequences\n- Conclude with a balanced verdict: what's actually strong vs. weak\n\nYour criticism is surgical and evidence-based. You make ideas better by testing them.`},
 ];
+
+// ── Model Tier System Prompts ───────────────────────────────────────────────────
+const TIER_PROMPTS = {
+  flashlite: `You are Flash-Lite, a razor-fast AI assistant in StudioCLI. Your one job: answer immediately, accurately, briefly. Rules: no preamble, no sign-off, no "certainly!" — straight to the answer. Use the fewest words that fully solve the problem. For code, output only the necessary snippet. For questions, one or two sentences unless more is truly needed.`,
+  flash: `You are Flash, a sharp and efficient AI assistant in StudioCLI. Be helpful, clear, and complete — without fluff. Get to the answer in the first sentence. Structure your response only when it meaningfully helps (code, lists, comparisons). For code tasks: write clean, working code with just enough context to use it.`,
+  auto: `You are Auto, a context-aware AI assistant in StudioCLI. Read the intent behind the message, not just the words. Short question → short answer. Complex problem → thorough breakdown. Code request → production-quality code with relevant explanation. Architecture question → tradeoffs, options, recommendation. Adapt your depth, format, and tone to what the situation actually calls for.`,
+  deep: `You are Deep Thinking, an advanced reasoning AI in StudioCLI. Before answering, think through the problem carefully: consider edge cases, assumptions, tradeoffs, and alternative approaches. For complex questions, show your reasoning chain explicitly. For code: write robust, well-considered solutions and explain why you made key design decisions. For ambiguous problems: state your interpretation, then solve. Prioritize correctness and depth over speed.`,
+};
+let _activeTier = 'flashlite';
 
 function spTab(el){
   document.querySelectorAll(".sp-tab").forEach(t=>t.classList.remove("sp-active"));
@@ -3536,21 +3637,27 @@ function _ddOutside(e) {
     document.getElementById("gmInpModelChip")?.classList.remove("open");
   }
 }
-function gmSelectModel(modelId, label) {
+function gmSelectModel(modelId, label, tierId) {
   const msel = document.getElementById("msel");
   if(msel) {
     for(let i=0;i<msel.options.length;i++) {
       if(msel.options[i].value === modelId) { msel.selectedIndex = i; msel.dispatchEvent(new Event("change")); break; }
     }
   }
+  // Store active tier for system prompt injection
+  if(tierId) window._activeTier = tierId;
   // Update header display
   const nm = document.getElementById("gmModelName");
   if(nm) nm.textContent = label;
   // Update input chip
   const ic = document.getElementById("gmInpModelName");
   if(ic) ic.textContent = label.length > 14 ? label.slice(0,12)+"…" : label;
-  // Update checkmarks
+  // Update checkmarks — show for selected tier
   document.querySelectorAll(".gm-dd-check").forEach(c=>{ c.style.visibility="hidden"; });
+  if(tierId) {
+    const chk = document.getElementById("gmCheck-" + tierId);
+    if(chk) chk.style.visibility = "visible";
+  }
   // Close dropdown
   _gmDDOpen = false;
   document.getElementById("gmModelDD").classList.remove("open");
@@ -3606,7 +3713,7 @@ function _syncChips() {
   if(window._webSearch) active.push({id:"web",label:"🌐 Web Search",off:()=>{toggleWebSearch();}});
   if(window._deepResearch) active.push({id:"research",label:"🔬 Deep Research",off:()=>{toggleDeepResearch();}});
   if(window._turboMode) active.push({id:"turbo",label:"⚡ Turbo",off:()=>{toggleTurbo();}});
-  if(window._liveCode) active.push({id:"canvas",label:"✿ Canvas",off:()=>{toggleLiveCode();}});
+  if(window._liveCodeMode) active.push({id:"canvas",label:"✿ Canvas",off:()=>{toggleLiveCode();}});
   if(window._computerMode) active.push({id:"computer",label:"🖥 Computer",off:()=>{toggleComputer();}});
   chips.innerHTML = active.map(c =>
     `<div class="gm-chip" onclick="${c.id}_chip_off()">${c.label}<span class="gm-chip-x">×</span></div>`
@@ -3708,6 +3815,9 @@ function _gmInit() {
       if(ic) ic.textContent = short.length > 14 ? short.slice(0,12)+"…" : short;
     }
   });
+  // Init default checkmark (Flash-Lite)
+  const defaultChk = document.getElementById("gmCheck-flashlite");
+  if(defaultChk) defaultChk.style.visibility = "visible";
 }
 </script>
 </body>

@@ -167,6 +167,35 @@ After the v9.5 fix that deleted the local `PLANS` block, a second audit found fu
 
 ---
 
+## v10 Web UI — Model Tiers & Canvas (2026-05-20)
+
+### 4 Model Tiers
+Replaced the 5-item model dropdown with 4 intent-based tiers, each with a custom `system_override` prompt injected client-side:
+
+| Tier | Model | Behavior |
+|------|-------|----------|
+| Flash-Lite | `meta-llama/llama-3.3-70b-instruct:free` | Instant, no fluff, minimal words |
+| Flash | `openai/gpt-4o-mini` | Balanced, efficient, complete |
+| Auto | `anthropic/claude-sonnet-4-6` | Context-aware depth adaptation |
+| Deep Thinking | `anthropic/claude-opus-4-7` | Chain-of-thought, tradeoffs, robust |
+
+System prompts are in `TIER_PROMPTS` object in `index.html`. They inject via `system_override` in `/api/chat` — lowest priority (research preset and custom sysPrompt win over tier prompt).
+
+`_activeTier` is a module-level `let` (not `window`) initialized to `'flashlite'`. `gmSelectModel(modelId, label, tierId)` now accepts a third arg and sets `window._activeTier`.
+
+**Checkmark IDs**: `gmCheck-flashlite`, `gmCheck-flash`, `gmCheck-auto`, `gmCheck-deep` — initialized on `_gmInit`.
+
+### Canvas (Enhanced LCP)
+The `lcpOverlay` is now called "Canvas" in the UI. Additions:
+- **Download button** — `lcpDownload()` creates a Blob and triggers `<a download>`. File named `studio-canvas-<base36ts>.html`.
+- **Suggest Fix bar** — `lcp-fix-bar` at bottom of modal. `lcpApplyFix()` sends the current `window._lcpCode` + user suggestion to `/api/chat` (non-streaming, max 8192 tokens) and replaces `_lcpCode` + iframe `srcdoc` with the result. AI instructed to return raw HTML only.
+- `lcp-preview-pane` now uses `display:flex;flex-direction:column` to accommodate the iframe properly.
+- `iframe` sandbox now includes `allow-same-origin` for relative resource loading.
+
+### Known gotchas
+- `lcpApplyFix` uses `stream:false` — model must be in ALLOWED_MODELS. Uses `s.model` which defaults to the free tier.
+- Code pane truncated to 12k chars before sending to fix endpoint to avoid 400 on oversized bodies.
+
 ## Deployment Notes
 
 - Installed via `install_windows.bat` — registers `studio` and `aistudio` aliases in PATH

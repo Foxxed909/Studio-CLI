@@ -994,6 +994,15 @@ body.gm-ui-active .header{
 
 /* header actions (right side) */
 .gm-header-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+.gm-upgrade-btn{
+  display:flex;align-items:center;gap:5px;padding:5px 12px;
+  background:linear-gradient(135deg,rgba(25,195,125,.18),rgba(14,165,233,.1));
+  border:1px solid rgba(25,195,125,.35);border-radius:20px;
+  font-size:12px;font-weight:600;color:#4ade80;text-decoration:none;
+  transition:all .15s;white-space:nowrap;flex-shrink:0}
+.gm-upgrade-btn:hover{border-color:rgba(25,195,125,.6);
+  background:linear-gradient(135deg,rgba(25,195,125,.26),rgba(14,165,233,.15));color:#86efac}
+@media(max-width:600px){.gm-upgrade-btn{display:none}}
 
 /* temp chat button — dotted circle */
 .gm-temp-btn{
@@ -1026,6 +1035,19 @@ body.gm-ui-active .header{
 .pill-icon{font-size:12px}
 .pill-name{font-size:12px;font-weight:500}
 .pill-caret{width:10px;height:10px;opacity:.5}
+
+/* ── Gemini-style user message bubble ── */
+body.gm-ui-active .msg.user{align-items:flex-end}
+body.gm-ui-active .msg.user .msg-head{display:none}
+body.gm-ui-active .msg.user .bubble{
+  background:var(--surface2);border:1px solid var(--border2);
+  border-radius:18px 18px 4px 18px;
+  padding:12px 18px;margin-left:0;
+  max-width:72%;word-break:break-word}
+body.gm-ui-active .msg.user .msg-actions{margin-left:0;justify-content:flex-end}
+[data-theme="light"] body.gm-ui-active .msg.user .bubble,
+body.gm-ui-active[data-theme="light"] .msg.user .bubble{
+  background:var(--surface);border-color:var(--border)}
 
 /* ── Chat area (beta adds top padding for transparent header) ── */
 body.gm-ui-active .chat-wrap{
@@ -1106,6 +1128,13 @@ body.gm-ui-active .inp-wrap{
 body.gm-ui-active .inp-wrap:focus-within{
   border-radius:22px;border-color:rgba(255,255,255,.12);
   box-shadow:0 6px 32px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06)}
+@keyframes typingGlow{
+  0%,100%{box-shadow:0 4px 24px rgba(0,0,0,.5),0 -4px 22px var(--acc-glow),0 0 0 1px rgba(255,255,255,.08)}
+  50%    {box-shadow:0 4px 24px rgba(0,0,0,.5),0  8px 26px var(--acc-glow),0 0 0 1px rgba(255,255,255,.08)}
+}
+body.gm-ui-active .inp-wrap.typing{
+  animation:typingGlow 2s ease-in-out infinite;
+  border-color:rgba(255,255,255,.15)}
 
 /* hide old inner rows in beta (replaced by pill bar) */
 body.gm-ui-active .banner{display:none}
@@ -1120,9 +1149,13 @@ body.gm-ui-active .inp-foot-row{display:none}
 
 /* pill center — textarea (explicit resets so original .inp-box bg/border don't bleed) */
 .inp-box{
-  display:flex;align-items:flex-end;gap:0;padding:14px 14px 0;
+  display:flex;align-items:center;gap:0;padding:14px 16px 8px;
   background:none!important;border:none!important;border-radius:0!important;
   flex-direction:row!important}
+.inp-box:focus-within{box-shadow:none!important;border-color:transparent!important}
+/* pill bottom row — tighten spacing */
+.inp-box-row{
+  display:flex;align-items:center;gap:6px;padding:4px 8px 10px}
 #cin{
   flex:1;background:transparent;border:none;outline:none;
   color:var(--text);font-size:var(--chat-fs);line-height:1.55;resize:none;
@@ -1132,9 +1165,7 @@ body.gm-ui-active .inp-foot-row{display:none}
 #cin::placeholder{color:var(--text3)}
 #cin::-webkit-scrollbar{display:none}
 
-/* pill bottom row */
-.inp-box-row{
-  display:flex;align-items:center;gap:6px;padding:8px 8px 10px}
+/* pill bottom row — handled by override above */
 
 /* + attach button — pill style */
 #attachBtn{
@@ -1205,32 +1236,38 @@ body.gm-ui-active .inp-foot-row{display:none}
 /* ── Model Dropdown ── */
 .gm-model-dd{
   position:fixed;top:58px;left:50px;z-index:300;
-  width:360px;background:#2d2d2d;border-radius:12px;
-  box-shadow:0 8px 32px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);
-  overflow:hidden;display:none;
+  width:360px;background:var(--surface);border-radius:14px;
+  box-shadow:0 12px 40px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.3);
+  border:1px solid var(--border2);overflow:hidden;display:none;
+  max-height:calc(100vh - 80px);overflow-y:auto;
   animation:ddIn .15s cubic-bezier(.16,1,.3,1)}
 .gm-model-dd.open{display:block}
+.gm-model-dd::-webkit-scrollbar{width:3px}
+.gm-model-dd::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 @keyframes ddIn{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
 .gm-dd-item{
   display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;
-  transition:background .12s;color:#e8eaed}
-.gm-dd-item:hover{background:rgba(255,255,255,.07)}
-.gm-dd-check{width:20px;color:#8ab4f8;flex-shrink:0;font-size:16px}
+  transition:background .12s;color:var(--text)}
+.gm-dd-item:hover{background:var(--surface2)}
+.gm-dd-item.active,.gm-dd-item:has(.gm-dd-check:not([style*="hidden"])){background:var(--acc-soft)}
+.gm-dd-check{width:20px;color:var(--acc);flex-shrink:0;font-size:16px}
 .gm-dd-info{flex:1}
-.gm-dd-name{font-size:14px;font-weight:500}
-.gm-dd-desc{font-size:12px;color:#9aa0a6;margin-top:1px}
-.gm-dd-badge{font-size:10px;font-weight:700;background:rgba(255,255,255,.1);
-  color:#aaa;border-radius:10px;padding:2px 7px;letter-spacing:.04em}
-.gm-dd-divider{height:1px;background:rgba(255,255,255,.08);margin:4px 0}
-.gm-dd-section{padding:10px 16px 6px;font-size:11px;font-weight:700;color:#9aa0a6;
+.gm-dd-name{font-size:14px;font-weight:500;color:var(--text)}
+.gm-dd-desc{font-size:12px;color:var(--text3);margin-top:1px}
+.gm-dd-badge{font-size:10px;font-weight:700;border-radius:10px;padding:2px 7px;letter-spacing:.04em;flex-shrink:0}
+.gm-dd-badge.free{background:rgba(25,195,125,.15);color:#4ade80;border:1px solid rgba(25,195,125,.25)}
+.gm-dd-badge.pro{background:rgba(66,133,244,.15);color:#8ab4f8;border:1px solid rgba(66,133,244,.25)}
+.gm-dd-badge.max{background:rgba(168,85,247,.15);color:#c084fc;border:1px solid rgba(168,85,247,.25)}
+.gm-dd-divider{height:1px;background:var(--border);margin:4px 0}
+.gm-dd-section{padding:10px 16px 6px;font-size:11px;font-weight:700;color:var(--text3);
   text-transform:uppercase;letter-spacing:.1em}
 .gm-dd-thinking{
   display:flex;align-items:center;justify-content:space-between;
   padding:12px 16px;cursor:pointer;transition:background .12s}
-.gm-dd-thinking:hover{background:rgba(255,255,255,.07)}
+.gm-dd-thinking:hover{background:var(--surface2)}
 .gm-dd-thinking-left{display:flex;flex-direction:column;gap:2px}
-.gm-dd-thinking-title{font-size:14px;color:#e8eaed;font-weight:500}
-.gm-dd-thinking-sub{font-size:12px;color:#9aa0a6}
+.gm-dd-thinking-title{font-size:14px;color:var(--text);font-weight:500}
+.gm-dd-thinking-sub{font-size:12px;color:var(--text3)}
 
 /* ── Bottom Sheet (Tools) ── */
 .gm-sheet-backdrop{
@@ -1471,6 +1508,7 @@ body.gm-ui-active .inp-foot-row{display:none}
     </button>
     <!-- right side actions -->
     <div class="gm-header-right">
+      <a class="gm-upgrade-btn" href="/pricing.html" title="Upgrade plan">✦ Upgrade</a>
       <button class="credits-badge" id="creditsBadge" onclick="openSettings()" title="Credits balance" style="display:none">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span id="creditsText">Credits</span>
@@ -1490,39 +1528,80 @@ body.gm-ui-active .inp-foot-row{display:none}
     </div>
   </div>
 
-  <!-- Model Dropdown -->
+  <!-- Model + Mode Dropdown -->
   <div class="gm-model-dd" id="gmModelDD">
-    <div class="gm-dd-section">Response Mode</div>
-    <div class="gm-dd-item" onclick="gmSelectModel('meta-llama/llama-3.3-70b-instruct:free','Flash-Lite','flashlite')">
-      <span class="gm-dd-check" id="gmCheck-flashlite">✓</span>
+    <!-- ── Model section ── -->
+    <div class="gm-dd-section">Model</div>
+    <div class="gm-dd-item" onclick="gmSetModel('openai/gpt-oss-20b:free','GPT OSS 20B')">
+      <span class="gm-dd-check gm-model-check" id="gmMCheck-gpt20b">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">GPT OSS 20B</div>
+        <div class="gm-dd-desc">OpenAI 20B · ultra fast</div>
+      </div>
+      <span class="gm-dd-badge free">FREE</span>
+    </div>
+    <div class="gm-dd-item" onclick="gmSetModel('openai/gpt-oss-120b:free','GPT OSS 120B')">
+      <span class="gm-dd-check gm-model-check" id="gmMCheck-gpt120b" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">GPT OSS 120B</div>
+        <div class="gm-dd-desc">OpenAI 120B · balanced</div>
+      </div>
+      <span class="gm-dd-badge free">FREE</span>
+    </div>
+    <div class="gm-dd-item" onclick="gmSetModel('nvidia/nemotron-3-super-120b-a12b:free','Nemotron 120B')">
+      <span class="gm-dd-check gm-model-check" id="gmMCheck-nemotron" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">Nemotron 120B</div>
+        <div class="gm-dd-desc">NVIDIA 120B · powerful</div>
+      </div>
+      <span class="gm-dd-badge free">FREE</span>
+    </div>
+    <div class="gm-dd-divider"></div>
+    <!-- ── Mode section ── -->
+    <div class="gm-dd-section">Mode</div>
+    <div class="gm-dd-item" onclick="gmSetMode('flashlite','⚡ Flash-Lite')">
+      <span class="gm-dd-check gm-mode-check" id="gmTCheck-flashlite">✓</span>
       <div class="gm-dd-info">
         <div class="gm-dd-name">⚡ Flash-Lite</div>
-        <div class="gm-dd-desc">Instant answers, zero fluff — free</div>
+        <div class="gm-dd-desc">Super fast · less reasoning</div>
       </div>
     </div>
-    <div class="gm-dd-item" onclick="gmSelectModel('openai/gpt-4o-mini','Flash','flash')">
-      <span class="gm-dd-check" id="gmCheck-flash" style="visibility:hidden">✓</span>
+    <div class="gm-dd-item" onclick="gmSetMode('flash','🔥 Flash')">
+      <span class="gm-dd-check gm-mode-check" id="gmTCheck-flash" style="visibility:hidden">✓</span>
       <div class="gm-dd-info">
         <div class="gm-dd-name">🔥 Flash</div>
-        <div class="gm-dd-desc">Fast and sharp, everyday tasks</div>
+        <div class="gm-dd-desc">Daily driver · balanced tasks</div>
       </div>
-      <span class="gm-dd-badge">PRO</span>
     </div>
-    <div class="gm-dd-item" onclick="gmSelectModel('anthropic/claude-sonnet-4-6','Auto','auto')">
-      <span class="gm-dd-check" id="gmCheck-auto" style="visibility:hidden">✓</span>
+    <div class="gm-dd-item" onclick="gmSetMode('pro','💎 Pro')">
+      <span class="gm-dd-check gm-mode-check" id="gmTCheck-pro" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">💎 Pro</div>
+        <div class="gm-dd-desc">Pro coding · advanced analysis</div>
+      </div>
+      <span class="gm-dd-badge pro">PRO</span>
+    </div>
+    <div class="gm-dd-item" onclick="gmSetMode('thinking','🧠 Thinking')">
+      <span class="gm-dd-check gm-mode-check" id="gmTCheck-thinking" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">🧠 Thinking</div>
+        <div class="gm-dd-desc">Advanced thinking + problem solving</div>
+      </div>
+    </div>
+    <div class="gm-dd-item" onclick="gmSetMode('deep','🔍 Deep Thinking')">
+      <span class="gm-dd-check gm-mode-check" id="gmTCheck-deep" style="visibility:hidden">✓</span>
+      <div class="gm-dd-info">
+        <div class="gm-dd-name">🔍 Deep Thinking</div>
+        <div class="gm-dd-desc">Full deep mode · 240% credits</div>
+      </div>
+      <span class="gm-dd-badge max">MAX</span>
+    </div>
+    <div class="gm-dd-item" onclick="gmSetMode('auto','✦ Auto')">
+      <span class="gm-dd-check gm-mode-check" id="gmTCheck-auto" style="visibility:hidden">✓</span>
       <div class="gm-dd-info">
         <div class="gm-dd-name">✦ Auto</div>
-        <div class="gm-dd-desc">Context-aware — smart routing</div>
+        <div class="gm-dd-desc">Context-aware · smart routing</div>
       </div>
-      <span class="gm-dd-badge">PRO</span>
-    </div>
-    <div class="gm-dd-item" onclick="gmSelectModel('anthropic/claude-opus-4-7','Deep Thinking','deep')">
-      <span class="gm-dd-check" id="gmCheck-deep" style="visibility:hidden">✓</span>
-      <div class="gm-dd-info">
-        <div class="gm-dd-name">🧠 Deep Thinking</div>
-        <div class="gm-dd-desc">Extended reasoning, chain-of-thought</div>
-      </div>
-      <span class="gm-dd-badge">MAX</span>
     </div>
     <div class="gm-dd-divider"></div>
     <div class="gm-dd-thinking" onclick="toggleDeepResearch()">
@@ -1530,7 +1609,7 @@ body.gm-ui-active .inp-foot-row{display:none}
         <div class="gm-dd-thinking-title">Deep Research</div>
         <div class="gm-dd-thinking-sub" id="gmResearchLabel">Off</div>
       </div>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:#9aa0a6"><polyline points="9 18 15 12 9 6"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;color:var(--text3)"><polyline points="9 18 15 12 9 6"/></svg>
     </div>
   </div>
 
@@ -2355,6 +2434,10 @@ const cinEl=document.getElementById("cin"),sendBtn=document.getElementById("send
 cinEl.addEventListener("input",()=>{
   cinEl.style.height="auto";cinEl.style.height=Math.min(cinEl.scrollHeight,160)+"px";
   sendBtn.disabled=!cinEl.value.trim()||busy;updateTok();
+  const iw=document.querySelector(".inp-wrap");if(iw)iw.classList.toggle("typing",cinEl.value.length>0);
+});
+cinEl.addEventListener("blur",()=>{
+  if(!cinEl.value){const iw=document.querySelector(".inp-wrap");if(iw)iw.classList.remove("typing");}
 });
 cinEl.addEventListener("keydown",e=>{
   if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();if(!sendBtn.disabled)doSend();}
@@ -2545,7 +2628,8 @@ function setBusy(val){
 // ── Send ───────────────────────────────────────────────────────────────────────
 async function doSend(){
   const text=cinEl.value.trim();if(!text||busy)return;
-  setBusy(true);cinEl.value="";cinEl.style.height="auto";updateTok();
+  setBusy(true);cinEl.value="";cinEl.style.height="24px";updateTok();
+  const iw=document.querySelector(".inp-wrap");if(iw)iw.classList.remove("typing");
   const msgTs=Date.now();
   messages.push({role:"user",content:text,ts:msgTs});
   renderMessage("user",text,msgTs);
@@ -2973,6 +3057,9 @@ function _setPlanPill(plan){
     wrap.querySelector(".sf-upgrade-label").textContent = "Upgrade plan →";
     wrap.href = "/pricing.html";
   }
+  // Navbar upgrade button: only show on free plan
+  const navUpgrade = document.querySelector(".gm-upgrade-btn");
+  if(navUpgrade) navUpgrade.style.display = plan === "free" ? "" : "none";
 }
 (function _initUpgradePill(){
   const plan = localStorage.getItem("studioPlan") || "free";
@@ -3131,12 +3218,16 @@ const RESEARCH_PRESETS=[
 
 // ── Model Tier System Prompts ───────────────────────────────────────────────────
 const TIER_PROMPTS = {
-  flashlite: `You are Flash-Lite, a razor-fast AI assistant in StudioCLI. Your one job: answer immediately, accurately, briefly. Rules: no preamble, no sign-off, no "certainly!" — straight to the answer. Use the fewest words that fully solve the problem. For code, output only the necessary snippet. For questions, one or two sentences unless more is truly needed.`,
-  flash: `You are Flash, a sharp and efficient AI assistant in StudioCLI. Be helpful, clear, and complete — without fluff. Get to the answer in the first sentence. Structure your response only when it meaningfully helps (code, lists, comparisons). For code tasks: write clean, working code with just enough context to use it.`,
-  auto: `You are Auto, a context-aware AI assistant in StudioCLI. Read the intent behind the message, not just the words. Short question → short answer. Complex problem → thorough breakdown. Code request → production-quality code with relevant explanation. Architecture question → tradeoffs, options, recommendation. Adapt your depth, format, and tone to what the situation actually calls for.`,
-  deep: `You are Deep Thinking, an advanced reasoning AI in StudioCLI. Before answering, think through the problem carefully: consider edge cases, assumptions, tradeoffs, and alternative approaches. For complex questions, show your reasoning chain explicitly. For code: write robust, well-considered solutions and explain why you made key design decisions. For ambiguous problems: state your interpretation, then solve. Prioritize correctness and depth over speed.`,
+  flashlite: `You are Flash-Lite in StudioCLI. Answer immediately and briefly. No preamble, no sign-off, no "certainly!" — straight to the answer. Use the fewest words that fully solve the problem. For code, output only the necessary snippet. For questions, one or two sentences unless more is truly needed.`,
+  flash: `You are Flash in StudioCLI — the daily driver. Be clear, helpful, and complete without over-explaining. Get to the answer in the first sentence. Structure your response only when it meaningfully helps (code, lists, comparisons). For code tasks: write clean, working code with just enough context to use it.`,
+  pro: `You are Pro in StudioCLI. You are an expert software engineer and technical analyst. Write clean, production-ready code. Explain architectural decisions briefly. Cover edge cases. Optimize for correctness and maintainability. When asked non-coding questions, give thorough, structured answers.`,
+  thinking: `You are Thinking mode in StudioCLI. Before answering, reason through the problem step-by-step. Identify assumptions, consider multiple approaches, and explain your thought process. For code: think through the architecture before writing. For questions: show the chain of logic that leads to the answer.`,
+  deep: `You are Deep Thinking in StudioCLI — full deep mode. Think step-by-step before answering. Show your reasoning chain explicitly. Consider edge cases, tradeoffs, and alternative approaches. For code: write robust, well-considered solutions and explain key design decisions. For ambiguous problems: state your interpretation, then solve. Prioritize thorough correctness over speed. This mode uses 240% of normal processing depth.`,
+  auto: `You are Auto mode in StudioCLI. Read the intent behind the message, not just the words. Short question → short answer. Complex problem → thorough breakdown. Code request → production-quality code with relevant explanation. Architecture question → tradeoffs, options, recommendation. Adapt your depth, format, and tone to what the situation actually calls for.`,
 };
 let _activeTier = 'flashlite';
+let _activeModelId = 'openai/gpt-oss-20b:free';
+let _activeModelLabel = 'GPT OSS 20B';
 
 function spTab(el){
   document.querySelectorAll(".sp-tab").forEach(t=>t.classList.remove("sp-active"));
@@ -3615,10 +3706,10 @@ function toggleModelDD(anchorId) {
     const anchor = document.getElementById(anchorId || "gmModelTrigger") || headerBtn;
     const br = anchor.getBoundingClientRect();
     const ddW = 360;
-    // Position above if near bottom of screen
+    const ddH = 500; // expanded height (7 models + sections + Deep Research)
     const spaceBelow = window.innerHeight - br.bottom;
-    if(spaceBelow < 330) {
-      dd.style.top = Math.max(8, br.top - 322) + "px";
+    if(spaceBelow < ddH) {
+      dd.style.top = Math.max(8, br.top - ddH - 8) + "px";
       dd.style.transformOrigin = "bottom left";
     } else {
       dd.style.top = (br.bottom + 8) + "px";
@@ -3630,36 +3721,47 @@ function toggleModelDD(anchorId) {
 }
 function _ddOutside(e) {
   const dd = document.getElementById("gmModelDD");
-  if(!dd.contains(e.target)) {
-    _gmDDOpen = false;
-    dd.classList.remove("open");
-    document.getElementById("gmModelTrigger").classList.remove("open");
-    document.getElementById("gmInpModelChip")?.classList.remove("open");
-  }
+  if(!dd.contains(e.target)) _closeModelDD();
 }
-function gmSelectModel(modelId, label, tierId) {
-  const msel = document.getElementById("msel");
-  if(msel) {
-    for(let i=0;i<msel.options.length;i++) {
-      if(msel.options[i].value === modelId) { msel.selectedIndex = i; msel.dispatchEvent(new Event("change")); break; }
-    }
-  }
-  // Store active tier for system prompt injection
-  if(tierId) window._activeTier = tierId;
-  // Update header display
+// Model ID → checkmark ID mapping
+const _modelCheckIds = {
+  'openai/gpt-oss-20b:free':              'gmMCheck-gpt20b',
+  'openai/gpt-oss-120b:free':             'gmMCheck-gpt120b',
+  'nvidia/nemotron-3-super-120b-a12b:free':'gmMCheck-nemotron',
+};
+function _updateModelChip(){
   const nm = document.getElementById("gmModelName");
-  if(nm) nm.textContent = label;
-  // Update input chip
   const ic = document.getElementById("gmInpModelName");
-  if(ic) ic.textContent = label.length > 14 ? label.slice(0,12)+"…" : label;
-  // Update checkmarks — show for selected tier
-  document.querySelectorAll(".gm-dd-check").forEach(c=>{ c.style.visibility="hidden"; });
-  if(tierId) {
-    const chk = document.getElementById("gmCheck-" + tierId);
-    if(chk) chk.style.visibility = "visible";
-  }
-  // Close dropdown
-  _gmDDOpen = false;
+  const lbl = _activeModelLabel;
+  if(nm) nm.textContent = lbl;
+  if(ic) ic.textContent = lbl.length > 14 ? lbl.slice(0,12)+"…" : lbl;
+}
+function gmSetModel(modelId, label){
+  _activeModelId = modelId; _activeModelLabel = label;
+  // Sync legacy <select> so existing send logic picks up the right model
+  const msel = document.getElementById("msel");
+  if(msel){ for(let i=0;i<msel.options.length;i++){ if(msel.options[i].value===modelId){msel.selectedIndex=i;msel.dispatchEvent(new Event("change"));break;} } }
+  _updateModelChip();
+  // Update model-section checkmarks only
+  document.querySelectorAll(".gm-model-check").forEach(c=>c.style.visibility="hidden");
+  const chkId = _modelCheckIds[modelId];
+  if(chkId){ const c=document.getElementById(chkId); if(c) c.style.visibility="visible"; }
+  _closeModelDD();
+}
+function gmSetMode(tierId, label){
+  _activeTier = tierId; window._activeTier = tierId;
+  // Update mode-section checkmarks only
+  document.querySelectorAll(".gm-mode-check").forEach(c=>c.style.visibility="hidden");
+  const chk = document.getElementById("gmTCheck-"+tierId);
+  if(chk) chk.style.visibility="visible";
+  _closeModelDD();
+}
+// Legacy shim — kept so any remaining calls don't crash
+function gmSelectModel(modelId, label, tierId){
+  if(tierId) gmSetMode(tierId, label); else gmSetModel(modelId, label);
+}
+function _closeModelDD(){
+  _gmDDOpen=false;
   document.getElementById("gmModelDD").classList.remove("open");
   document.getElementById("gmModelTrigger").classList.remove("open");
   document.getElementById("gmInpModelChip")?.classList.remove("open");
@@ -3802,22 +3904,13 @@ function _gmInit() {
   document.addEventListener("keydown", e => {
     if(e.key === "Escape") { if(_gmDDOpen) toggleModelDD(); closeToolsSheet(); }
   });
-  // Sync model display chip + header with native selector
-  const msel = document.getElementById("msel");
-  if(msel) msel.addEventListener("change", () => {
-    const opt = msel.options[msel.selectedIndex];
-    if(opt) {
-      const short = opt.text.replace(/ \(Free\)| PRO| MAX/gi,"").trim();
-      const label = short.length > 18 ? short.slice(0,16)+"…" : short;
-      const nm = document.getElementById("gmModelName");
-      if(nm) nm.textContent = label;
-      const ic = document.getElementById("gmInpModelName");
-      if(ic) ic.textContent = short.length > 14 ? short.slice(0,12)+"…" : short;
-    }
-  });
-  // Init default checkmark (Flash-Lite)
-  const defaultChk = document.getElementById("gmCheck-flashlite");
-  if(defaultChk) defaultChk.style.visibility = "visible";
+  // Init default model checkmark + chip label
+  const defMChk = document.getElementById("gmMCheck-gpt20b");
+  if(defMChk) defMChk.style.visibility = "visible";
+  _updateModelChip();
+  // Init default mode checkmark (Flash-Lite)
+  const defTChk = document.getElementById("gmTCheck-flashlite");
+  if(defTChk) defTChk.style.visibility = "visible";
 }
 </script>
 </body>

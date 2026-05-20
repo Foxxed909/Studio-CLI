@@ -19,7 +19,13 @@ const supabaseAdmin = createClient(
 );
 
 // ── Auth middleware — verifies Supabase JWT ───────────────────────────────────
+// DEV_SKIP_AUTH=true in .env + localhost-only → bypasses JWT check for local testing.
+// Both conditions must hold — env var alone is not enough, prevents accidental exposure.
 async function requireAuth(req, res, next) {
+  if (process.env.DEV_SKIP_AUTH === "true" && isLocalRequest(req)) {
+    req.user = { id: "dev-local", email: "dev@localhost", devBypass: true };
+    return next();
+  }
   const token = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!token) return res.status(401).json({ error: "Not authenticated" });
   const { data, error } = await supabaseAdmin.auth.getUser(token);
@@ -89,6 +95,20 @@ function isLocalRequest(req) {
   const ip = req.ip || req.connection?.remoteAddress || "";
   return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
 }
+
+// ── Dev error ring-buffer (last 50 errors, in-memory only) ───────────────────
+const _recentErrors = [];
+function _captureError(context, err) {
+  _recentErrors.push({
+    ts: new Date().toISOString(),
+    context,
+    message: err?.message || String(err),
+    stack: err?.stack ? err.stack.split("\n").slice(0, 6).join("\n") : undefined,
+  });
+  if (_recentErrors.length > 50) _recentErrors.shift();
+}
+// Expose for use in route handlers
+global._captureError = _captureError;
 
 // Optional lightweight API secret for non-local callers.
 // Set STUDIO_API_SECRET in .env (≥32 chars) to require it on sensitive endpoints.
@@ -551,6 +571,7 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
     });
 
     apiReq.on("error", (e) => {
+      _captureError("chat/apiReq", e);
       if (!res.headersSent) res.setHeader("Content-Type", "text/event-stream");
       res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
       res.end();
@@ -736,7 +757,12 @@ app.use((req, res, next) => {
     if (req.path === "/api/chat")     _stats.chat++;
     if (req.path === "/api/search")   _stats.search++;
     if (req.path === "/api/research") _stats.research++;
-    if (res.statusCode >= 400)        _stats.errors++;
+    if (res.statusCode >= 500) {
+      _stats.errors++;
+      _captureError(`${req.method} ${req.path}`, new Error(`HTTP ${res.statusCode}`));
+    } else if (res.statusCode >= 400) {
+      _stats.errors++;
+    }
   });
   next();
 });
@@ -745,6 +771,43 @@ app.get("/api/stats", (req, res) => {
   const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
   if (!isLocal) return res.status(403).json({ error: "Forbidden" });
   res.json({ ..._stats, uptime: Math.floor((Date.now() - _startTime) / 1000) });
+});
+
+// ── /api/debug — localhost-only app state inspector ─────────────────────────
+app.get("/api/debug", async (req, res) => {
+  if (!isLocalRequest(req)) return res.status(403).json({ error: "Localhost only" });
+
+  // Supabase DB connectivity check (lightweight — just fetches the auth settings)
+  let dbStatus = "unknown";
+  try {
+    const { error } = await supabaseAdmin.auth.getUser("probe");
+    // A 400/401 means the server responded (connection good); actual network errors throw
+    dbStatus = error?.status === 400 || error?.message?.includes("invalid") ? "connected" : "connected";
+  } catch (e) {
+    dbStatus = "unreachable: " + e.message;
+  }
+
+  // Safe config snapshot — no secrets, just topology/feature info
+  const safeConfig = {
+    env:              process.env.NODE_ENV || "development",
+    port:             PORT,
+    devSkipAuth:      process.env.DEV_SKIP_AUTH === "true",
+    apiSecretSet:     !!(process.env.STUDIO_API_SECRET && process.env.STUDIO_API_SECRET.length >= 32),
+    supabaseConfigured: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
+    stripeConfigured: !!(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== ""),
+    openrouterKeySet: !!(process.env.OPENROUTER_API_KEY),
+    uptime:           Math.floor((Date.now() - _startTime) / 1000) + "s",
+  };
+
+  res.json({
+    db:             dbStatus,
+    activeSessions: _cuSessions.size,
+    communityClients: _cmClients?.size ?? 0,
+    requestStats:   _stats,
+    rateLimitHitsLastMin: _recentRLHits(),
+    config:         safeConfig,
+    recentErrors:   _recentErrors.slice(-10).reverse(), // newest first
+  });
 });
 
 // ── Community Chat — SSE broadcast (no extra packages) ───────────────────────

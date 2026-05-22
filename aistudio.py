@@ -634,10 +634,11 @@ def cmd_tokens(state, args, last_turn=None):
     )
 
     plan_id = get_plan(state)
-    pricing = MODEL_PRICING.get(state.get("model",""), {})
-    cost_in  = pricing.get("in",  0) * total_in  / 1_000_000
-    cost_out = pricing.get("out", 0) * total_out / 1_000_000
-    cost_str = f"${cost_in + cost_out:.4f}" if (cost_in + cost_out) > 0 else "—"
+    price_per_1k = MODEL_PRICING.get(state.get("model",""), DEFAULT_PRICE_PER_1K)
+    if isinstance(price_per_1k, dict):
+        price_per_1k = price_per_1k.get("out", DEFAULT_PRICE_PER_1K)
+    cost_total = price_per_1k * (total_in + total_out) / 1_000
+    cost_str = f"${cost_total:.4f}" if cost_total > 0 else "—"
 
     console.print(Panel(
         f"[bold]Last request:[/bold]   {last_line}\n\n"
@@ -665,8 +666,9 @@ def typewrite(text: str, delay: float = 0.025, style: str = ""):
 
 # ── THINKING ANIMATION ────────────────────────────
 _THINK_FRAMES = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
-_think_stop   = threading.Event()
+_think_stop      = threading.Event()
 _think_thread_ref = [None]
+_think_lock      = threading.Lock()   # guards _think_thread_ref across start/stop
 
 def _run_think_anim(label="Thinking"):
     i = 0
@@ -680,17 +682,19 @@ def _run_think_anim(label="Thinking"):
     sys.stdout.flush()
 
 def _start_think_anim(label="Thinking"):
-    _think_stop.clear()
-    t = threading.Thread(target=_run_think_anim, args=(label,), daemon=True)
-    _think_thread_ref[0] = t
-    t.start()
+    with _think_lock:
+        _think_stop.clear()
+        t = threading.Thread(target=_run_think_anim, args=(label,), daemon=True)
+        _think_thread_ref[0] = t
+        t.start()
 
 def _stop_think_anim():
     _think_stop.set()
-    t = _think_thread_ref[0]
-    if t and t.is_alive():
-        t.join(timeout=0.4)
-    _think_thread_ref[0] = None
+    with _think_lock:
+        t = _think_thread_ref[0]
+        if t and t.is_alive():
+            t.join(timeout=0.4)
+        _think_thread_ref[0] = None
 
 
 def cmd_logout(state, args):
@@ -1415,7 +1419,7 @@ ALL_COMMANDS = [
     "/alias","/multiline","/note","/regen","/context-bar","/resume",
     "/history-search","/hs","/compact","/clip","/tts",
     "/diffpatch","/format","/rename","/name","/n","/handoff","/outline","/comment",
-    "/hotswap","/pin","/template","/undo",
+    "/hotswap","/pin","/template","/undo","/undo-exchange",
     # v9.2
     "/fast","/thinking","/time","/statusline","/effort",
     "/pr-review","/git-suggest","/test-coverage","/safety-check",
@@ -1541,6 +1545,7 @@ COMMAND_METADATA = {
     "/compact":        ("AI",      "Compress old history into AI summary (keep last N turns)"),
     "/clip":           ("UTIL",    "Copy last AI response to clipboard"),
     "/tts":            ("UTIL",    "Speak last AI response aloud (Windows TTS)"),
+    "/undo-exchange":  ("HIST",    "Remove the last user+assistant exchange from history"),
     # v9.2 — Codex killers
     "/pr-review":      ("GIT",     "Review a git diff or branch — structured code review with severities"),
     "/git-suggest":    ("GIT",     "AI commit/branch strategy — squash, split, rebase recommendations"),
@@ -1694,7 +1699,8 @@ def cmd_quicknote(state, args):
     notes_file = CONFIG_DIR / "notes.json"
     try:
         notes = json.loads(notes_file.read_text()) if notes_file.exists() else []
-    except Exception:
+    except Exception as e:
+        debug_log(state, f"notes load error: {e}")
         notes = []
     if not args:
         if not notes:
@@ -1722,7 +1728,8 @@ def cmd_quicknotes(state, args):
     notes_file = CONFIG_DIR / "notes.json"
     try:
         notes = json.loads(notes_file.read_text()) if notes_file.exists() else []
-    except Exception:
+    except Exception as e:
+        debug_log(state, f"notes load error: {e}")
         notes = []
     if args.startswith("del ") or args.startswith("delete "):
         idx_str = args.split(None, 1)[1].strip()
@@ -1758,17 +1765,21 @@ def cmd_cost(state, args):
     total_in  = usage.get("total_in", 0)
     total_out = usage.get("total_out", 0)
     model   = state.get("model", "")
-    pricing = MODEL_PRICING.get(model, {})
-    price_in  = pricing.get("in",  DEFAULT_PRICE_PER_1K)
-    price_out = pricing.get("out", DEFAULT_PRICE_PER_1K)
-    cost_in   = price_in  * total_in  / 1_000_000
-    cost_out  = price_out * total_out / 1_000_000
+    price_raw = MODEL_PRICING.get(model, DEFAULT_PRICE_PER_1K)
+    # MODEL_PRICING stores a single float (price per 1K tokens) not a dict
+    if isinstance(price_raw, dict):
+        price_in  = price_raw.get("in",  DEFAULT_PRICE_PER_1K)
+        price_out = price_raw.get("out", DEFAULT_PRICE_PER_1K)
+    else:
+        price_in = price_out = float(price_raw)
+    cost_in   = price_in  * total_in  / 1_000
+    cost_out  = price_out * total_out / 1_000
     total_cost = cost_in + cost_out
 
     rows = (
         f"[bold]Model:[/bold]        {model or '(none)'}\n"
-        f"[bold]Tokens in:[/bold]    {total_in:,}   @ ${price_in:.4f}/1M  = [cyan]${cost_in:.4f}[/cyan]\n"
-        f"[bold]Tokens out:[/bold]   {total_out:,}  @ ${price_out:.4f}/1M  = [cyan]${cost_out:.4f}[/cyan]\n"
+        f"[bold]Tokens in:[/bold]    {total_in:,}   @ ${price_in:.4f}/1K  = [cyan]${cost_in:.4f}[/cyan]\n"
+        f"[bold]Tokens out:[/bold]   {total_out:,}  @ ${price_out:.4f}/1K  = [cyan]${cost_out:.4f}[/cyan]\n"
         f"[bold]Session total:[/bold] [bold yellow]${total_cost:.4f}[/bold yellow]\n\n"
         f"[dim]Estimates only. Actual billing may differ.[/dim]"
     )
@@ -2366,6 +2377,11 @@ def ai_respond(state, prompt, history, silent=False):
     gm_key = state.get("api_key") or load_api_key()
     model  = state.get("model") or DEFAULT_MODEL
     use_or = state.get("use_openrouter") or _is_openrouter_model(model)
+
+    # ── Soft model validation (warn, don't block — Ollama/custom IDs are valid) ─
+    _known_models = set(FREE_CHAT_MODELS) | set(STUDIO_MODEL_ALIASES.values()) | set(MODEL_PRICING.keys())
+    if model and not model.startswith("ollama/") and model not in _known_models:
+        console.print(f"  [yellow]⚠ Model '{model}' is not in the known model list — sending anyway[/yellow]")
 
     if use_or and or_key:
         if stream_mode in ("on", "auto", "type"):
@@ -4406,7 +4422,9 @@ def _load_creator_analytics():
     if CREATOR_ANALYTICS_FILE.exists():
         try:
             records = json.loads(CREATOR_ANALYTICS_FILE.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as e:
+            import traceback
+            sys.stderr.write(f"[studio] creator analytics load error: {e}\n{traceback.format_exc()}")
             records = {}
 
     # Merge fresh profile data
@@ -7632,10 +7650,13 @@ _live_watch_thread = None
 def start_live_watcher(state, history):
     global _live_watch_thread
     if _live_watch_thread and _live_watch_thread.is_alive(): return
-    
+
     root = state.get("workspace_root") or load_workspace_root() or Path.cwd()
     console.print(f"[bold green]📡 Live-FIF Active:[/bold green] Watching [cyan]{root}[/cyan] for bugs...")
-    
+
+    # Snapshot history at start time — avoids concurrent list mutation with the main REPL loop
+    history_snapshot = list(history)
+
     def watch_loop():
         mtimes = {}
         while not _live_watch_stop.is_set():
@@ -7647,9 +7668,10 @@ def start_live_watcher(state, history):
                             console.print(f"\n[bold yellow]📡 Live-FIF:[/bold yellow] [cyan]{f.name}[/cyan] modified. Analyzing...")
                             content = f.read_text(encoding="utf-8", errors="replace")
                             prompt = f"LIVE-FIF: The file `{f.name}` was just saved. Check for NEW bugs or security flaws introduced in this change:\n\n{content[:5000]}"
-                            ai_respond(state, prompt, history, silent=False)
+                            ai_respond(state, prompt, history_snapshot, silent=False)
                         mtimes[f] = mt
-            except Exception: pass
+            except Exception as e:
+                debug_log(state, f"live-fif watcher error: {e}")
             time.sleep(3)
 
     _live_watch_thread = threading.Thread(target=watch_loop, daemon=True)
@@ -9707,14 +9729,14 @@ def render_welcome(state):
 
     # ── RAIN ────────────────────────────────────────────────────────────────
     if ui == "rain":
-        rain_lines = [
-            "  ╔══════════════════════════════════════════════════════╗",
-            "  ║  ░ ░ ░   R  A  I  N   S  T  U  D  I  O   ░ ░ ░     ║",
-            "  ║  ──────────────────────────────────────────────────  ║",
-            f"  ║  v{VERSION}  · the terminal breathes                       ║",
-            "  ╚══════════════════════════════════════════════════════╝",
-        ]
-        _animate_banner(rain_lines, "bold #00FF41", delay=0.035)
+        console.print(Panel(
+            f"[bold #00FF41]R  A  I  N   S  T  U  D  I  O[/bold #00FF41]\n"
+            f"[dim #00FF41]v{VERSION}  ·  the terminal breathes[/dim #00FF41]",
+            border_style="#00FF41",
+            title="[bold #00FF41]░ ░ ░[/bold #00FF41]",
+            subtitle=f"[dim #00FFFF]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #00FFFF]",
+            padding=(0, 2),
+        ))
         console.print()
         noise = (
             "[dim #00FF41]│[/dim #00FF41]"
@@ -10558,7 +10580,8 @@ def run_repl(state):
                 elif cmd == "cap":     state = cmd_cap(state, args)
                 elif cmd == "tokens":  cmd_tokens(state, args, state.get("_last_tokens"))
                 elif cmd == "label":   state = cmd_label(state, args)
-                elif cmd == "undo":    cmd_undo(state, args)
+                elif cmd == "undo":          cmd_undo(state, args)
+                elif cmd == "undo-exchange": history = cmd_undo_exchange(state, args, history)
                 elif cmd == "reload":  state = cmd_reload(state)
 
                 # ── Chat management

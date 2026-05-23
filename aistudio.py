@@ -1428,6 +1428,8 @@ ALL_COMMANDS = [
     # v9.6 — utility commands
     "/calc","/math","/uuid","/guid","/hash","/b64","/base64",
     "/ts","/timestamp","/now","/ping","/jwt","/lorem","/spell",
+    # v9.6 — new features
+    "/autocommit","/secrets-guard","/debate",
 ]
 
 COMMAND_METADATA = {
@@ -1575,6 +1577,9 @@ COMMAND_METADATA = {
     "/jwt":            ("UTIL",    "Decode a JWT token (header + payload, no verification)"),
     "/lorem":          ("UTIL",    "Generate placeholder text: /lorem [paragraphs]"),
     "/spell":          ("UTIL",    "NATO phonetic alphabet for a string: /spell hello"),
+    "/autocommit":     ("GIT",     "Auto git-commit after every AI file write (on/off)"),
+    "/secrets-guard":  ("GIT",     "Scan staged diff for credentials before /git commit (on/off)"),
+    "/debate":         ("AI",      "Two agents (Ghost vs Silicon) debate a topic — 3 rounds"),
 }
 
 
@@ -3294,6 +3299,40 @@ def write_file_state(state, path, content):
     console.print(f"[green]✓ Saved → {p}[/green]")
     return p
 
+
+def _auto_git_commit(state, path):
+    """Stage path and create a [studio] commit when /autocommit is on."""
+    try:
+        subprocess.run(["git", "add", str(path)], capture_output=True)
+        staged = subprocess.run(
+            "git diff --cached --name-only", shell=True,
+            capture_output=True, text=True
+        ).stdout.strip()
+        if not staged:
+            return
+        diff = subprocess.run(
+            "git diff --cached", shell=True,
+            capture_output=True, text=True, encoding="utf-8", errors="replace"
+        ).stdout[:1500]
+        _tmp = []
+        response, _ = ai_respond(
+            state,
+            f"One-line git commit message for this diff (format: type(scope): description):\n\n{diff}",
+            _tmp,
+        )
+        raw_msg = ((response or "").strip().split("\n")[0]
+                   or f"update {Path(str(path)).name}")
+        msg = f"[studio] {raw_msg}"
+        r = subprocess.run(
+            ["git", "commit", "-m", msg],
+            capture_output=True, text=True, encoding="utf-8", errors="replace"
+        )
+        if r.returncode == 0:
+            console.print(f"[dim]✓ auto-committed: {msg}[/dim]")
+    except Exception:
+        pass
+
+
 # ── FILESYSTEM COMMANDS ───────────────────────────
 def cmd_ls(state, path="."):
     try:
@@ -3508,6 +3547,17 @@ def cmd_git(state, args, history):
         if not diff:
             diff = subprocess.run("git diff", shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         if not diff: console.print("[yellow]No changes to commit[/yellow]"); return history
+
+        if state.get("secrets_guard", True):
+            secret_hits = _scan_diff_secrets(diff)
+            if secret_hits:
+                console.print("[bold red]⚠  Secrets Guard: Potential credentials in staged diff:[/bold red]")
+                for lineno, label, snippet in secret_hits[:5]:
+                    console.print(f"  [red]~line {lineno}[/red]  [{label}]  [dim]{snippet[:80]}[/dim]")
+                if console.input("[bold red]Commit anyway? This may expose credentials. (y/n): [/bold red]").strip().lower() != "y":
+                    console.print("[yellow]Commit cancelled.[/yellow]")
+                    return history
+
         prompt   = f"Write a concise git commit message for these changes:\n\n{diff[:3000]}\n\nFormat: type(scope): description\nJust the message, nothing else."
         response, history = ai_respond(state, prompt, history)
         if response:
@@ -3571,13 +3621,34 @@ def cmd_watch(state, path, history):
     _watch_thread.start()
     return history
 
-# ── UNDO (restore .bak) ───────────────────────────
+# ── UNDO (git revert or .bak restore) ────────────
 def cmd_undo(state, args):
-    """Restore the most recent .bak file created by /fix or /patch."""
+    """Revert the last [studio] auto-commit (autocommit mode) or restore .bak file."""
     theme = state.get("theme", THEMES["default"])
+
+    if state.get("autocommit"):
+        last_log = subprocess.run(
+            "git log --oneline -1", shell=True,
+            capture_output=True, text=True, encoding="utf-8", errors="replace"
+        ).stdout.strip()
+        if last_log and "[studio]" in last_log:
+            console.print(Panel(
+                f"[bold]Last studio commit:[/bold] [cyan]{last_log}[/cyan]\n\n"
+                "[dim]Autocommit is ON — /undo will git revert HEAD.[/dim]",
+                border_style=theme["border"]))
+            if console.input("[bold]Revert this commit? (y/n): [/bold]").strip().lower() == "y":
+                r = subprocess.run(
+                    ["git", "revert", "--no-edit", "HEAD"],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace"
+                )
+                if r.returncode == 0:
+                    console.print(f"[{theme['success']}]✓ Reverted: {last_log}[/{theme['success']}]")
+                else:
+                    console.print(f"[red]{r.stderr.strip()}[/red]")
+            return
+
     if args:
         bak = resolve_path(state, args + ".bak", must_exist=False)
-        target = resolve_path(state, args, must_exist=False)
         candidates = [bak] if bak.exists() else []
     else:
         cwd = Path.cwd()
@@ -3593,6 +3664,97 @@ def cmd_undo(state, args):
     if console.input("[bold]Undo this change? (y/n): [/bold]").strip().lower() == "y":
         shutil.copy2(str(bak), str(target))
         console.print(f"[{theme['success']}]✓ Restored {target}[/{theme['success']}]")
+
+
+def cmd_autocommit(state, args):
+    """/autocommit [on|off] — toggle auto-git-commit after every AI file write."""
+    theme = state.get("theme", THEMES["default"])
+    val = (args or "").strip().lower()
+    if val == "on":
+        state["autocommit"] = True
+    elif val == "off":
+        state["autocommit"] = False
+    else:
+        state["autocommit"] = not state.get("autocommit", False)
+    status = "[green]ON[/green]" if state.get("autocommit") else "[red]OFF[/red]"
+    console.print(Panel(
+        f"Auto-commit after AI write: {status}\n\n"
+        "[dim]Every /write, /patch, /fix will run git add + commit.[/dim]\n"
+        "[dim]/undo uses git revert HEAD when autocommit is ON.[/dim]",
+        title="[bold]Auto-Commit Mode[/bold]", border_style=theme["border"]))
+    return state
+
+
+def cmd_secrets_guard(state, args):
+    """/secrets-guard [on|off] — scan staged diff for credentials before git commit."""
+    theme = state.get("theme", THEMES["default"])
+    val = (args or "").strip().lower()
+    if val == "on":
+        state["secrets_guard"] = True
+    elif val == "off":
+        state["secrets_guard"] = False
+    else:
+        state["secrets_guard"] = not state.get("secrets_guard", True)
+    status = "[green]ON[/green]" if state.get("secrets_guard", True) else "[red]OFF[/red]"
+    console.print(Panel(
+        f"Secrets guard on commit: {status}\n\n"
+        "[dim]Scans staged diff for API keys, tokens, and passwords before /git commit.[/dim]",
+        title="[bold]Secrets Guard[/bold]", border_style=theme["border"]))
+    return state
+
+
+def cmd_debate(state, args, history):
+    """/debate <topic> — Ghost (FOR) vs Silicon (AGAINST) argue 3 rounds."""
+    if not args:
+        console.print("[yellow]Usage: /debate <topic or design question>[/yellow]")
+        return history
+    topic = args.strip()
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+
+    ghost_state   = {**state, "system_prompt": AGENT_ROSTER["ghost"]["persona"]}
+    silicon_state = {**state, "system_prompt": AGENT_ROSTER["silicon"]["persona"]}
+
+    console.print(Panel(
+        f"[bold]Topic:[/bold] {topic}\n\n"
+        "[bold white]👻 Ghost[/bold white] argues [bold green]FOR[/bold green]  ·  "
+        "[bold red]🔬 Silicon[/bold red] argues [bold red]AGAINST[/bold red]\n\n"
+        "[dim]3 rounds — results not added to session history[/dim]",
+        title=f"[bold {acc}]⚔  Agent Debate[/bold {acc}]", border_style=acc))
+
+    ghost_last = ""
+    silicon_last = ""
+
+    for rnd in range(1, 4):
+        if rnd == 1:
+            g_prompt = (f"Argue strongly IN FAVOR of: '{topic}'. "
+                        "Be technical and specific. 3–4 sentences max.")
+        else:
+            g_prompt = (f"Round {rnd}. Counter Silicon's argument:\n\n{silicon_last}\n\n"
+                        f"Defend your FOR position on '{topic}'. 3–4 sentences.")
+        g_resp, _ = ai_respond(ghost_state, g_prompt, [])
+        ghost_last = (g_resp or "").strip()
+        console.print(Panel(ghost_last,
+            title=f"[bold white]👻 Ghost (FOR) — Round {rnd}[/bold white]",
+            border_style="white"))
+
+        if rnd == 1:
+            s_prompt = (f"Argue strongly AGAINST: '{topic}'. "
+                        f"Counter Ghost's point: {ghost_last}\n"
+                        "Be technical and specific. 3–4 sentences max.")
+        else:
+            s_prompt = (f"Round {rnd}. Counter Ghost's argument:\n\n{ghost_last}\n\n"
+                        f"Defend your AGAINST position on '{topic}'. 3–4 sentences.")
+        s_resp, _ = ai_respond(silicon_state, s_prompt, [])
+        silicon_last = (s_resp or "").strip()
+        console.print(Panel(silicon_last,
+            title=f"[bold red]🔬 Silicon (AGAINST) — Round {rnd}[/bold red]",
+            border_style="red"))
+
+    console.print(Panel(
+        f"[bold]Topic:[/bold] {topic}\n[dim]3 rounds complete — you be the judge.[/dim]",
+        title=f"[bold {acc}]⚔  Debate Complete[/bold {acc}]", border_style=acc))
+    return history
 
 
 def cmd_reload(state):
@@ -3626,6 +3788,8 @@ def cmd_fix(state, path, history):
                 backup.write_text(content, encoding="utf-8")
                 write_file_state(state, str(p), clean)
                 console.print(f"[dim]Backup → {backup}[/dim]")
+                if state.get("autocommit"):
+                    _auto_git_commit(state, p)
     except Exception as e: console.print(f"[red]{e}[/red]")
     return history
 
@@ -3681,6 +3845,8 @@ def cmd_patch(state, args, history):
                 backup.write_text(content, encoding="utf-8")
                 write_file_state(state, str(p), clean)
                 console.print(f"[dim]Backup → {backup}[/dim]")
+                if state.get("autocommit"):
+                    _auto_git_commit(state, p)
     except Exception as e:
         console.print(f"[red]{e}[/red]")
     return history
@@ -8703,6 +8869,32 @@ def _scan_file_safety(path: Path) -> list[tuple]:
                 break
     return hits
 
+
+# ── SECRETS GUARD (commit-time diff scan) ─────────────────────────────────────
+_SECRETS_PATTERNS = [
+    (r'(api[_-]?key|secret|password|passwd|token)\s*[=:]\s*["\'][a-zA-Z0-9_\-\.]{16,}["\']', "Hardcoded credential"),
+    (r'\bsk-[a-zA-Z0-9]{20,}',        "OpenAI-style API key"),
+    (r'\bAIza[a-zA-Z0-9_\-]{35}',     "Google API key"),
+    (r'\bsk-or-[a-zA-Z0-9\-]{40,}',   "OpenRouter API key"),
+    (r'\bhf_[a-zA-Z0-9]{30,}',        "HuggingFace token"),
+    (r'\bsk-ant-[a-zA-Z0-9\-]{40,}',  "Anthropic API key"),
+    (r'\br8_[a-zA-Z0-9]{30,}',        "Replicate token"),
+    (r'\bghp_[a-zA-Z0-9]{36}',        "GitHub PAT"),
+    (r'\bgsk_[a-zA-Z0-9]{40,}',       "Groq API key"),
+]
+
+def _scan_diff_secrets(diff_text: str) -> list[tuple]:
+    """Scan added lines of a git diff for exposed credentials."""
+    hits = []
+    for i, line in enumerate(diff_text.splitlines(), 1):
+        if not line.startswith("+") or line.startswith("+++"):
+            continue
+        for pattern, label in _SECRETS_PATTERNS:
+            if re.search(pattern, line, re.IGNORECASE):
+                hits.append((i, label, line[1:].strip()[:100]))
+                break
+    return hits
+
 def cmd_safety_check(state, args, history):
     """/safety-check [file|dir] — OWASP scan with AI-generated patch-ready fixes."""
     theme = state.get("theme", THEMES["default"])
@@ -11011,6 +11203,11 @@ def run_repl(state):
                 elif cmd == "lorem":            cmd_lorem(state, args)
                 elif cmd == "spell":            cmd_spell(state, args)
 
+                # ── v9.6 — new features ───────────────────────────────────────
+                elif cmd == "autocommit":       state = cmd_autocommit(state, args)
+                elif cmd in ("secrets-guard", "secretsguard", "secrets"): state = cmd_secrets_guard(state, args)
+                elif cmd == "debate":           history = cmd_debate(state, args, history)
+
                 else:
                     # Check user-defined aliases first
                     _user_aliases = _load_aliases()
@@ -11147,7 +11344,9 @@ def cmd_write(state, args, history):
         console.print(f"\n[bold]Preview (first 20 lines):[/bold]")
         console.print(Panel(Syntax("\n".join(clean.split("\n")[:20]), ext, theme="monokai"), border_style="cyan"))
         if check_write_allowed(state, filename, "save"):
-            write_file_state(state, filename, clean)
+            saved_p = write_file_state(state, filename, clean)
+            if state.get("autocommit"):
+                _auto_git_commit(state, saved_p)
     return history
 
 

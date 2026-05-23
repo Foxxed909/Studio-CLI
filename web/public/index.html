@@ -942,6 +942,21 @@ button,input,textarea,select{font-family:inherit}
   55% {opacity:1;transform:translateY(2px) scaleX(1.01);}
   100%{opacity:1;transform:translateY(0) scaleX(1);}
 }
+/* Purple Rain — chat bubble atmosphere */
+[data-theme="purple-rain"] .msg.assistant .bubble{
+  border-color:rgba(192,132,252,.14);
+  box-shadow:0 1px 18px rgba(168,85,247,.08),inset 0 1px 0 rgba(192,132,252,.07);
+}
+[data-theme="purple-rain"] .msg.user .bubble{
+  background:linear-gradient(135deg,rgba(168,85,247,.18),rgba(103,232,249,.08));
+  border-color:rgba(192,132,252,.28);
+}
+[data-theme="purple-rain"] .chat::-webkit-scrollbar-thumb{background:rgba(192,132,252,.22)}
+[data-theme="purple-rain"] .chat::-webkit-scrollbar-thumb:hover{background:rgba(192,132,252,.4)}
+[data-theme="purple-rain"] .inp-wrap:focus-within{
+  border-color:rgba(192,132,252,.45)!important;
+  box-shadow:0 0 0 3px rgba(168,85,247,.12),0 4px 28px rgba(0,0,0,.5)!important;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    GEMINI v10 UI — complete layout + interaction overhaul
@@ -2325,19 +2340,23 @@ body.gm-ui-active .file-pre-name{min-width:0}
 })();
 // ── Purple Rain canvas engine ───────────────────────────────────────────────
 const _purpleRain={
-  raf:null,drops:[],
+  raf:null,drops:[],splashes:[],_ltFrames:0,_ltNext:0,
   init(){
     const c=document.getElementById("prainCanvas");if(!c)return;
     c.width=window.innerWidth;c.height=window.innerHeight;
-    this.drops=Array.from({length:70},(_,i)=>({
-      x:Math.random()*c.width,
-      y:Math.random()*c.height-c.height,
-      speed:7+Math.random()*11,
-      len:10+Math.random()*22,
-      op:0.12+Math.random()*0.38,
-      w:0.5+Math.random()*0.9,
-      hue:260+Math.round(Math.random()*40),  // purple→violet range
-    }));
+    // 3 depth layers: 0=background (slow/dim), 1=mid, 2=foreground (fast/bright)
+    this.drops=Array.from({length:130},(_,i)=>{
+      const L=i<55?0:i<100?1:2;
+      return{
+        x:Math.random()*c.width,y:Math.random()*c.height-c.height,
+        speed:[2+Math.random()*3,6+Math.random()*5,12+Math.random()*10][L],
+        len:[6+Math.random()*10,12+Math.random()*14,18+Math.random()*20][L],
+        op:[0.05+Math.random()*0.07,0.11+Math.random()*0.14,0.22+Math.random()*0.3][L],
+        w:[0.3+Math.random()*0.3,0.5+Math.random()*0.5,0.8+Math.random()*0.7][L],
+        hue:255+Math.round(Math.random()*55),layer:L};
+    });
+    this.splashes=[];
+    this._ltNext=Date.now()+9000+Math.random()*12000;
     if(!this._resizeBound){
       window.addEventListener("resize",()=>{
         const cv=document.getElementById("prainCanvas");
@@ -2347,6 +2366,15 @@ const _purpleRain={
     }
     if(!this.raf)this._loop();
   },
+  // emit splash particles at (x,y) — call when a message arrives
+  splash(x,y){
+    for(let i=0;i<12;i++){
+      const a=-Math.PI+(Math.random()*Math.PI);
+      const spd=1.5+Math.random()*3.5;
+      this.splashes.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd-2.5,
+        op:0.8+Math.random()*0.2,sz:1.2+Math.random()*2,life:1,hue:270+Math.random()*40});
+    }
+  },
   _loop(){
     const c=document.getElementById("prainCanvas");
     if(!c||document.documentElement.getAttribute("data-theme")!=="purple-rain"){
@@ -2354,15 +2382,34 @@ const _purpleRain={
     }
     const ctx=c.getContext("2d");
     ctx.clearRect(0,0,c.width,c.height);
+    // occasional lightning flash
+    const now=Date.now();
+    if(now>=this._ltNext){this._ltFrames=2+Math.floor(Math.random()*3);this._ltNext=now+11000+Math.random()*18000;}
+    if(this._ltFrames>0){
+      ctx.fillStyle=`rgba(220,180,255,${0.025+0.015*this._ltFrames})`;
+      ctx.fillRect(0,0,c.width,c.height);
+      this._ltFrames--;
+    }
+    // rain drops (bg→fg order so foreground renders on top)
     for(const d of this.drops){
-      ctx.beginPath();
-      ctx.moveTo(d.x,d.y);
-      ctx.lineTo(d.x-1.2,d.y+d.len);
-      ctx.strokeStyle=`hsla(${d.hue},80%,72%,${d.op})`;
+      ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-1.8,d.y+d.len);
+      ctx.strokeStyle=`hsla(${d.hue},85%,${d.layer===2?80:68}%,${d.op})`;
       ctx.lineWidth=d.w;
+      if(d.layer===2){ctx.shadowColor=`hsla(${d.hue},90%,72%,0.35)`;ctx.shadowBlur=3;}
+      else ctx.shadowBlur=0;
       ctx.stroke();
       d.y+=d.speed;
-      if(d.y>c.height+d.len){d.y=-d.len-Math.random()*40;d.x=Math.random()*c.width;}
+      if(d.y>c.height+d.len){d.y=-(d.len+Math.random()*80);d.x=Math.random()*c.width;}
+    }
+    ctx.shadowBlur=0;
+    // splash particles
+    for(let i=this.splashes.length-1;i>=0;i--){
+      const s=this.splashes[i];
+      ctx.beginPath();ctx.arc(s.x,s.y,s.sz,0,6.28);
+      ctx.fillStyle=`hsla(${s.hue},85%,72%,${s.op*s.life})`;
+      ctx.fill();
+      s.x+=s.vx;s.y+=s.vy;s.vy+=0.15;s.life-=0.055;
+      if(s.life<=0)this.splashes.splice(i,1);
     }
     this.raf=requestAnimationFrame(()=>this._loop());
   },
@@ -2670,6 +2717,7 @@ function renderMessage(role,content,ts,anim=true,modelId){
   c.appendChild(row);
   if(document.documentElement.getAttribute("data-theme")==="purple-rain"){
     row.classList.add("pr-splash-in");setTimeout(()=>row.classList.remove("pr-splash-in"),550);
+    _purpleRain.splash(Math.min(row.getBoundingClientRect().right*.8,window.innerWidth*.75),window.innerHeight*.8);
   }
   scrollEl().scrollTop=scrollEl().scrollHeight;updateFab();return row;
 }
@@ -2960,6 +3008,7 @@ async function _runAI(title,_retry=0,_img=undefined,_pf=undefined){
     aBub.appendChild(aBody);aRow.appendChild(aHead);aRow.appendChild(aBub);c.appendChild(aRow);
     if(document.documentElement.getAttribute("data-theme")==="purple-rain"){
       aRow.classList.add("pr-splash-in");setTimeout(()=>aRow.classList.remove("pr-splash-in"),550);
+      _purpleRain.splash(window.innerWidth*.65,window.innerHeight*.75);
     }
 
     let full="",usageData=null,errShown=false;const aiTs=Date.now();

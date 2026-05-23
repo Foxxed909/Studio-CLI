@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>StudioTesting — Vibe Test</title>
+<title>Studio Lab — Experiment Room</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/styles/github-dark.min.css"/>
@@ -12,19 +12,26 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"/>
 <style>
 :root{
-  --bg:#070c14;--sidebar:#0a1020;--surface:#0f1826;--surface2:#141f30;--surface3:#1a2840;
-  --border:rgba(0,212,255,.1);--border2:rgba(0,212,255,.22);--border3:rgba(0,212,255,.35);
-  --text:#dde8f8;--text2:rgba(221,232,248,.65);--text3:#3d5070;
-  --cyan:#00d4ff;--cyan2:#38e4ff;--cyan-dim:rgba(0,212,255,.1);--cyan-glow:rgba(0,212,255,.28);
-  --green:#10e890;--red:#f04060;--warn:#f5a623;--purple:#a78bfa;
-  --r:11px;--r-sm:7px;--r-lg:16px;
-  --shadow:0 2px 20px rgba(0,0,0,.6);--shadow-lg:0 8px 48px rgba(0,0,0,.8);
-  --glow:0 0 28px rgba(0,212,255,.2);
-  --font:-apple-system,'Inter','Segoe UI',Roboto,sans-serif;
+  --bg:#050805;--sidebar:#080d08;--surface:#0c110c;--surface2:#111711;--surface3:#161e16;
+  --border:rgba(57,255,20,.08);--border2:rgba(57,255,20,.17);--border3:rgba(57,255,20,.3);
+  --text:#cff5cb;--text2:rgba(207,245,203,.58);--text3:#284026;
+  --cyan:#39ff14;--cyan2:#7fff6a;--cyan-dim:rgba(57,255,20,.08);--cyan-glow:rgba(57,255,20,.2);
+  --green:#39ff14;--red:#ff4455;--warn:#ffaa00;--purple:#cc44ff;
+  --r:8px;--r-sm:5px;--r-lg:12px;
+  --shadow:0 2px 20px rgba(0,0,0,.75);--shadow-lg:0 8px 52px rgba(0,0,0,.9);
+  --glow:0 0 24px rgba(57,255,20,.18);
+  --font:'JetBrains Mono','Fira Code','Cascadia Code','Courier New',monospace;
   --font-mono:'JetBrains Mono','Fira Code','Cascadia Code',monospace;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text);overflow:hidden}
+/* Subtle scanlines over everything */
+body::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;
+  background:repeating-linear-gradient(
+    0deg,transparent,transparent 3px,rgba(0,0,0,.04) 3px,rgba(0,0,0,.04) 4px
+  );
+}
 
 /* ── Shell: top nav + 3-col grid ─────────────────────────────────────────────── */
 .shell{display:flex;flex-direction:column;height:100vh;overflow:hidden}
@@ -37,18 +44,32 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 }
 .topnav-brand{display:flex;align-items:center;gap:9px;margin-right:6px}
 .topnav-logo{
-  width:32px;height:32px;border-radius:9px;flex-shrink:0;
-  background:linear-gradient(135deg,var(--cyan),#6366f1);
+  width:32px;height:32px;border-radius:6px;flex-shrink:0;
+  background:linear-gradient(135deg,rgba(57,255,20,.15),rgba(57,255,20,.05));
+  border:1px solid rgba(57,255,20,.3);
   display:flex;align-items:center;justify-content:center;
-  font-size:14px;font-weight:900;color:#fff;box-shadow:var(--glow);
+  font-size:16px;font-weight:900;color:var(--cyan);box-shadow:0 0 16px rgba(57,255,20,.15);
 }
-.topnav-title{font-size:15px;font-weight:800;letter-spacing:-.2px;
-  background:linear-gradient(90deg,var(--cyan),var(--cyan2));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.topnav-title{
+  font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--cyan);font-family:var(--font-mono);
+  animation:labGlitch 7s infinite;
+}
+@keyframes labGlitch{
+  0%,93%,100%{transform:none;text-shadow:none;opacity:1}
+  94%{transform:translateX(-2px);text-shadow:2px 0 rgba(255,50,255,.8),-2px 0 rgba(57,255,20,.8);opacity:.9}
+  95%{transform:translateX(2px);text-shadow:-2px 0 rgba(255,50,255,.8);opacity:.95}
+  96%{transform:none;text-shadow:none;opacity:1}
+  97%{transform:translateX(-1px) scaleY(1.02);text-shadow:1px 0 rgba(57,255,20,.5);opacity:.85}
+  98%{transform:none;opacity:1}
+}
 .topnav-ver{
-  background:var(--cyan-dim);border:1px solid var(--border);border-radius:20px;
-  padding:2px 8px;font-size:10px;font-weight:700;color:var(--cyan);
+  background:rgba(57,255,20,.07);border:1px solid rgba(57,255,20,.2);border-radius:4px;
+  padding:2px 8px;font-size:9px;font-weight:700;color:var(--cyan);
+  letter-spacing:.1em;text-transform:uppercase;font-family:var(--font-mono);
+  animation:expPulse 3s ease-in-out infinite;
 }
+@keyframes expPulse{0%,100%{opacity:.7}50%{opacity:1;box-shadow:0 0 8px rgba(57,255,20,.2)}}
 .topnav-divider{width:1px;height:22px;background:var(--border);margin:0 4px}
 .topnav-spacer{flex:1}
 .topnav-tabs{display:flex;gap:3px}
@@ -363,9 +384,9 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <!-- ── Top Navigation ─────────────────────────────────────────────────────── -->
   <nav class="topnav">
     <div class="topnav-brand">
-      <div class="topnav-logo" onclick="showToast('StudioTesting v1.1')" title="StudioTesting">S</div>
-      <span class="topnav-title">StudioTesting</span>
-      <span class="topnav-ver">v1.1</span>
+      <div class="topnav-logo" onclick="showToast('Studio Lab — experimental build')" title="Studio Lab">⚗</div>
+      <span class="topnav-title">Studio Lab</span>
+      <span class="topnav-ver">EXPERIMENTAL</span>
     </div>
     <div class="topnav-divider"></div>
     <div class="topnav-spacer"></div>
@@ -382,9 +403,12 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 
     <!-- Left sidebar -->
     <aside class="sidebar">
+      <div style="padding:10px 14px 6px;font-size:9px;letter-spacing:.14em;color:var(--text3);text-transform:uppercase">
+        EXPERIMENTS: <span id="expCount" style="color:var(--cyan)">0</span>
+      </div>
       <div class="s-nav-item active" id="sib-test" onclick="setTab('test')">
         <svg viewBox="0 0 24 24" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-        Vibe Test
+        Run Test
       </div>
       <div class="s-nav-item" id="sib-history" onclick="setTab('history')">
         <svg viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -408,11 +432,11 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
         Settings
       </div>
       <div class="s-spacer"></div>
-      <div class="s-avatar-row" onclick="showToast('Signed in via StudioCLI')">
-        <div class="s-avatar">J</div>
+      <div class="s-avatar-row" id="stAvatarRow" onclick="showToast('Signed in via StudioCLI')">
+        <div class="s-avatar" id="stAvatar">S</div>
         <div>
-          <div class="s-avatar-name">Foxxed</div>
-          <div class="s-avatar-sub">Free plan</div>
+          <div class="s-avatar-name" id="stAvatarName">Studio User</div>
+          <div class="s-avatar-sub" id="stAvatarPlan">Free plan</div>
         </div>
       </div>
     </aside>
@@ -497,9 +521,9 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 
       <div class="results" id="results">
         <div class="empty-state" id="emptyState">
-          <div class="empty-icon">⚡</div>
-          <div class="empty-title">Ready to test</div>
-          <div class="empty-sub">Pick a mode above and hit Run Test to stream AI responses.</div>
+          <div class="empty-icon" id="emptyIcon">⚗</div>
+          <div class="empty-title" id="emptyTitle">EXPERIMENT READY</div>
+          <div class="empty-sub" id="emptySub">Select a mode · load a prompt · initiate sequence.</div>
         </div>
       </div>
 
@@ -889,6 +913,9 @@ Format: **Plan** → **Step N** → **Result**. Be thorough.`;
     results.push(entry);
     _saveResult(entry);
     sessionRuns++;updateStats();
+    // increment sidebar experiment counter
+    const ec=document.getElementById('expCount');
+    if(ec)ec.textContent=parseInt(ec.textContent||'0')+1;
   }catch(e){
     aiEl.innerHTML=`<span style="color:var(--red)">Error: ${esc(e.message)}</span>`;
     aiEl.parentElement.classList.add('error-item');
@@ -969,12 +996,37 @@ function showToast(msg,ms=2500){
   clearTimeout(_toastTimer);_toastTimer=setTimeout(()=>t.classList.remove('show'),ms);
 }
 
+const _LAB_THOUGHTS=[
+  'What if the model is just guessing?','Do large models dream?',
+  'Test the edge cases. Always.','Entropy is the natural state.',
+  'Prompt engineering is just vibes with steps.','Is it hallucination or creativity?',
+  'The model read the internet. Now what?','Attention is all you need (allegedly).',
+  'What breaks it? Find it.','Chaos is reproducible with the right seed.',
+  'Every token is a decision.','Fine-tune your expectations first.',
+];
 window.addEventListener('DOMContentLoaded',()=>{
   const k=localStorage.getItem('studioOrKey');
-  if(!k)showToast('Set your API key in main Studio → Settings',4000);
-  else showToast('API key loaded ✓',2000);
+  if(!k)showToast('⚗ Set your API key in main Studio → Settings',4000);
+  else showToast('⚗ Lab ready — API key loaded',2000);
   updateStats();
   _restorePrevSession();
+  // populate sidebar user row from shared localStorage
+  const email=localStorage.getItem('studioEmail')||'';
+  const name=email?email.split('@')[0].replace(/\./g,' '):'Studio User';
+  const initial=(email||'S').charAt(0).toUpperCase();
+  const plan=localStorage.getItem('studioPlan')||'Free plan';
+  const av=document.getElementById('stAvatar');
+  const nm=document.getElementById('stAvatarName');
+  const pl=document.getElementById('stAvatarPlan');
+  if(av)av.textContent=initial;
+  if(nm)nm.textContent=name.split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+  if(pl)pl.textContent=plan;
+  // experiment counter from saved results
+  const saved=JSON.parse(localStorage.getItem('studioTestResults')||'[]');
+  const ec=document.getElementById('expCount');if(ec)ec.textContent=saved.length;
+  // random lab thought in empty sub
+  const sub=document.getElementById('emptySub');
+  if(sub)sub.textContent=_LAB_THOUGHTS[Math.floor(Math.random()*_LAB_THOUGHTS.length)];
 });
 
 // ── Group Chat ──────────────────────────────────────────────────────────────

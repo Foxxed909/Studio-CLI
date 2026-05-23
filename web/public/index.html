@@ -1231,6 +1231,10 @@ body.gm-ui-active .inp-foot-row{display:none}
   padding:10px 14px 0;display:none;align-items:center;gap:8px}
 .img-pre.on,.file-pre.on{display:flex}
 .img-pre img{width:40px;height:40px;border-radius:8px;object-fit:cover}
+body.gm-ui-active .img-pre,
+body.gm-ui-active .file-pre{
+  margin:0;background:transparent;border:0;border-radius:0;min-width:0}
+body.gm-ui-active .file-pre-name{min-width:0}
 
 /* pill center — textarea (explicit resets so original .inp-box bg/border don't bleed) */
 .inp-box{
@@ -1286,6 +1290,25 @@ body.gm-ui-active .inp-foot-row{display:none}
   padding:4px 10px;font-size:12px;color:#8ab4f8;cursor:pointer}
 .gm-chip:hover{background:rgba(66,133,244,.2)}
 .gm-chip-x{color:rgba(138,180,248,.6);margin-left:2px}
+/* Turbo chip — premium amber */
+.gm-chip-turbo{
+  display:flex;align-items:center;gap:5px;
+  background:linear-gradient(135deg,rgba(251,146,60,.18),rgba(239,68,68,.1));
+  border:1px solid rgba(251,146,60,.4);border-radius:20px;
+  padding:4px 10px;font-size:12px;color:#fb923c;cursor:pointer;font-weight:600;
+  box-shadow:0 0 10px rgba(251,146,60,.12);}
+.gm-chip-turbo:hover{background:linear-gradient(135deg,rgba(251,146,60,.26),rgba(239,68,68,.17));}
+.gm-chip-turbo-x{color:rgba(251,146,60,.5);margin-left:2px}
+.gm-turbo-bar{
+  display:flex;align-items:center;gap:7px;padding:2px 14px 6px;
+  font-size:11px;color:rgba(251,146,60,.75);letter-spacing:.01em;}
+.gm-turbo-bar-dot{
+  width:5px;height:5px;border-radius:50%;background:#fb923c;flex-shrink:0;
+  box-shadow:0 0 6px rgba(251,146,60,.7);animation:turboPulse 1.5s infinite;}
+@keyframes turboPulse{0%,100%{opacity:1}50%{opacity:.35}}
+.gm-inp-model-chip.turbo-ring{
+  border-color:rgba(251,146,60,.45)!important;
+  box-shadow:0 0 0 2px rgba(251,146,60,.12),0 0 14px rgba(251,146,60,.08)!important;}
 
 /* send + stop buttons */
 #send{
@@ -1792,7 +1815,7 @@ body.gm-ui-active .inp-foot-row{display:none}
       <div class="inp-box-row">
         <button id="attachBtn" onclick="openToolsSheet()" title="Tools &amp; attachments">+</button>
         <button class="gm-inp-model-chip" id="gmInpModelChip" onclick="toggleModelDD('gmInpModelChip')" title="Change model">
-          <svg viewBox="0 0 56 56" width="13" height="13" style="flex-shrink:0"><defs><linearGradient id="spkG2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4285f4"/><stop offset="40%" stop-color="#0f9d58"/><stop offset="70%" stop-color="#fbbc04"/><stop offset="100%" stop-color="#ea4335"/></linearGradient></defs><path d="M28 2 C28 15,41 15,54 28 C41 28,41 41,28 54 C28 41,15 41,2 28 C15 28,15 15,28 2Z" fill="url(#spkG2)"/></svg>
+          <span id="gmInpModelIcon" style="flex-shrink:0;display:flex;align-items:center;line-height:1"><span style="font-size:11px;color:rgba(232,234,237,.8);font-weight:700">✦</span></span>
           <span class="gm-inp-model-chip-name" id="gmInpModelName">Flash-Lite</span>
           <svg class="gm-chip-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
@@ -2411,7 +2434,7 @@ function renderSidebar(){
 }
 function loadConversation(id){
   const c=getConvo(id);if(!c)return;
-  activeConvoId=id;messages=[...c.messages];
+  activeConvoId=id;localStorage.setItem("studioActiveConvo",id);messages=[...c.messages];
   document.getElementById("chatTitle").textContent=c.title||"Conversation";
   document.getElementById("chatInner").innerHTML="";
   messages.forEach(m=>renderMessage(m.role,m.content,m.ts,false,m.model));
@@ -2446,7 +2469,7 @@ const EMPTY_HTML=`
     </div>
   </div>`;
 function newConversation(){
-  activeConvoId=genId();messages=[];
+  activeConvoId=genId();localStorage.setItem("studioActiveConvo",activeConvoId);messages=[];
   document.getElementById("chatTitle").textContent="New conversation";
   document.getElementById("chatInner").innerHTML=EMPTY_HTML;
   renderSidebar();closeSidebarMobile();
@@ -2546,7 +2569,15 @@ const hdr=()=>{const k=getSettings().key;return k?{"Content-Type":"application/j
     if(!hasKey)document.getElementById("banner").classList.add("on");
     updateBadge(hasKey,localStorage.getItem("studioBeta")==="1");
   }catch(e){console.warn("Config load failed",e);}
-  activeConvoId=genId();renderSidebar();
+  const _savedId=localStorage.getItem("studioActiveConvo");
+  const _allConvos=loadConvos();
+  if(_savedId&&_allConvos.find(c=>c.id===_savedId)){
+    loadConversation(_savedId);
+  } else {
+    activeConvoId=genId();
+    document.getElementById("chatInner").innerHTML=EMPTY_HTML;
+  }
+  renderSidebar();
 })();
 
 // ── Persona pill ───────────────────────────────────────────────────────────────
@@ -2582,7 +2613,7 @@ function _syncUmbrella(hasText){
 }
 cinEl.addEventListener("input",()=>{
   cinEl.style.height="auto";cinEl.style.height=Math.min(cinEl.scrollHeight,160)+"px";
-  sendBtn.disabled=!cinEl.value.trim()||busy;updateTok();
+  updateSendState();updateTok();
   const iw=document.querySelector(".inp-wrap");if(iw)iw.classList.toggle("typing",cinEl.value.length>0);
   _syncUmbrella(cinEl.value.length>0);
 });
@@ -2781,20 +2812,22 @@ function stopStream(){
 function setBusy(val){
   busy=val;sendBtn.style.display=val?"none":"flex";
   document.getElementById("stop").style.display=val?"flex":"none";
-  if(!val)sendBtn.disabled=!cinEl.value.trim();
+  updateSendState();
 }
 
 // ── Send ───────────────────────────────────────────────────────────────────────
 async function doSend(){
-  const text=cinEl.value.trim();if(!text||busy)return;
+  const text=cinEl.value.trim();
+  if(busy||!_hasInputPayload())return;
+  const userText=text||(pendingFile?`Attached file: ${pendingFile.name}`:`Attached image: ${pendingImage?.name||"image"}`);
   setBusy(true);cinEl.value="";cinEl.style.height="24px";updateTok();
   const iw=document.querySelector(".inp-wrap");if(iw)iw.classList.remove("typing");
   _syncUmbrella(false);
   const msgTs=Date.now();
-  messages.push({role:"user",content:text,ts:msgTs});
-  renderMessage("user",text,msgTs);
+  messages.push({role:"user",content:userText,ts:msgTs});
+  renderMessage("user",userText,msgTs);
   const cs=loadConvos(),exists=cs.find(c=>c.id===activeConvoId);
-  const title=(exists&&exists.title!=="New conversation")?exists.title:(text.length>40?text.slice(0,40)+"…":text);
+  const title=(exists&&exists.title!=="New conversation")?exists.title:(userText.length>40?userText.slice(0,40)+"…":userText);
   if(!exists||exists.title==="New conversation")document.getElementById("chatTitle").textContent=title;
   await _runAI(title);
 }
@@ -2819,9 +2852,34 @@ function _showSwitchToast(msg){
   clearTimeout(t._to);t._to=setTimeout(()=>t.style.opacity="0",3500);
 }
 
+function chatTimeoutMs(img,pf){
+  if(window._deepResearch)return 240000;
+  if(window._turboMode)return 180000;
+  if(img||pf)return 120000;
+  return 90000;
+}
+function timeoutMessage(ms){
+  return `Request timed out after ${Math.round(ms/1000)}s - the server may be under load. Try again or switch models.`;
+}
+function assistantErrorHtml(msg){
+  return `<div style="color:var(--danger);line-height:1.55">${esc(msg)}</div>`;
+}
+function appendAssistantError(c,msg){
+  const row=document.createElement("div");row.className="msg assistant";
+  const eHead=document.createElement("div");eHead.className="msg-head";
+  const av=document.createElement("div");av.className="av ai";av.textContent="S";
+  const eName=document.createElement("span");eName.className="msg-name";eName.textContent="Studio";
+  eHead.appendChild(av);eHead.appendChild(eName);
+  const bub=document.createElement("div");bub.className="bubble";
+  bub.style.color="var(--danger)";
+  bub.textContent=msg;
+  row.appendChild(eHead);row.appendChild(bub);c.appendChild(row);
+}
+
 async function _runAI(title,_retry=0,_img=undefined,_pf=undefined){
   let _retried=false;
   const c=chatEl();
+  let aRow=null,aBody=null;
   const tRow=document.createElement("div");tRow.className="msg assistant";tRow.style.animation="none";
   const tHead=document.createElement("div");tHead.className="msg-head";
   const tAv=document.createElement("div");tAv.className="av ai";tAv.textContent="S";
@@ -2892,13 +2950,13 @@ async function _runAI(title,_retry=0,_img=undefined,_pf=undefined){
     const ct=resp.headers.get("content-type")||"";
     const isSSE=s.stream&&ct.includes("text/event-stream");
 
-    const aRow=document.createElement("div");aRow.className="msg assistant";
+    aRow=document.createElement("div");aRow.className="msg assistant";
     const aHead=document.createElement("div");aHead.className="msg-head";
     const aAv=document.createElement("div");aAv.className="av ai";aAv.textContent="S";
     const aName=document.createElement("span");aName.className="msg-name";aName.textContent="Studio";
     aHead.appendChild(aAv);aHead.appendChild(aName);
     const aBub=document.createElement("div");aBub.className="bubble";
-    const aBody=document.createElement("div");aBody.innerHTML=`<span class="cursor"></span>`;
+    aBody=document.createElement("div");aBody.innerHTML=`<span class="cursor"></span>`;
     aBub.appendChild(aBody);aRow.appendChild(aHead);aRow.appendChild(aBub);c.appendChild(aRow);
     if(document.documentElement.getAttribute("data-theme")==="purple-rain"){
       aRow.classList.add("pr-splash-in");setTimeout(()=>aRow.classList.remove("pr-splash-in"),550);
@@ -2951,7 +3009,15 @@ async function _runAI(title,_retry=0,_img=undefined,_pf=undefined){
     if(_retried){await _runAI(title,_retry+1,img,pf);return;}
 
     if(!errShown){
-      if(full){aBody.innerHTML=md(full);}
+      if(full){
+        aBody.innerHTML=md(full);
+        if(isGarbled(full)){
+          const gw=document.createElement("div");
+          gw.style.cssText="margin-top:10px;padding:8px 12px;background:rgba(251,146,60,.09);border:1px solid rgba(251,146,60,.28);border-radius:8px;font-size:12px;display:flex;align-items:center;gap:8px;color:rgba(251,146,60,.9)";
+          gw.innerHTML=`<span style="flex-shrink:0;font-size:14px">⚠</span><span>Response may be corrupted — free models can produce garbled output under load.</span><button onclick="regenMsg(this)" style="margin-left:auto;padding:3px 10px;background:rgba(251,146,60,.18);border:1px solid rgba(251,146,60,.35);border-radius:12px;color:rgba(251,146,60,.95);font-size:11.5px;cursor:pointer;font-family:inherit;white-space:nowrap;flex-shrink:0">Retry ↺</button>`;
+          aBody.appendChild(gw);
+        }
+      }
       else{aBody.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px;padding:2px 0">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="width:8px;height:8px;border-radius:50%;background:var(--warn);flex-shrink:0;display:inline-block"></span>
@@ -2986,6 +3052,8 @@ async function _runAI(title,_retry=0,_img=undefined,_pf=undefined){
     }
   }catch(err){
     clearTimeout(_ato);
+    try{if(activeReader)activeReader.cancel();}catch{}
+    activeReader=null;
     tRow.remove();
     const row=document.createElement("div");row.className="msg assistant";
     const eHead=document.createElement("div");eHead.className="msg-head";
@@ -2999,6 +3067,29 @@ async function _runAI(title,_retry=0,_img=undefined,_pf=undefined){
       :"Network error: "+err.message;
     row.appendChild(eHead);row.appendChild(bub);c.appendChild(row);
   }finally{clearTimeout(_ato);if(!_retried)setBusy(false);activeReader=null;_activeAbortController=null;scrollEl().scrollTop=scrollEl().scrollHeight;updateFab();}
+}
+
+// ── Garbled response detection ─────────────────────────────────────────────────
+function isGarbled(text){
+  if(!text||text.length<80)return false;
+  const hasCyrillic=/[Ѐ-ӿ]/.test(text);
+  const hasChinese=/[一-鿿]/.test(text);
+  const hasArabic=/[؀-ۿ]/.test(text);
+  const hasHebrew=/[֐-׿]/.test(text);
+  const scriptCount=(hasCyrillic?1:0)+(hasChinese?1:0)+(hasArabic?1:0)+(hasHebrew?1:0);
+  if(scriptCount<2)return false;
+  // Two or more non-Latin scripts mixed with ASCII = likely token soup
+  const words=text.split(/\s+/);
+  let crossScript=0;
+  for(const w of words){
+    const wHasCyr=/[Ѐ-ӿ]/.test(w),wHasChn=/[一-鿿]/.test(w);
+    const wHasArb=/[؀-ۿ]/.test(w),wHasHeb=/[֐-׿]/.test(w);
+    const wLatin=/[a-zA-Z]/.test(w);
+    const wScripts=(wHasCyr?1:0)+(wHasChn?1:0)+(wHasArb?1:0)+(wHasHeb?1:0);
+    if(wScripts>=1&&wLatin)crossScript++;// Latin + non-Latin in same word
+    if(wScripts>=2)crossScript+=2;// two non-Latin scripts in one word
+  }
+  return crossScript>=3||(scriptCount>=3&&words.length>10);
 }
 
 // ── Feature toolbar state ───────────────────────────────────────────────────────
@@ -3559,18 +3650,26 @@ function updateStats(){
 
 // ── Image + file attachment ─────────────────────────────────────────────────────
 let pendingImage=null,pendingFile=null;
+const MAX_TEXT_FILE_BYTES=2*1024*1024;
+function formatBytes(bytes){
+  if(bytes<1024)return bytes+"B";
+  if(bytes<1024*1024)return(bytes/1024).toFixed(1)+"KB";
+  return(bytes/(1024*1024)).toFixed(2)+"MB";
+}
 function triggerAttach(){document.getElementById("imgInput").click();}
 function removeImage(silent=false){
   pendingImage=null;
   document.getElementById("imgPre").classList.remove("on");
   if(!silent)document.getElementById("imgInput").value="";
   if(!pendingFile)document.getElementById("attachBtn").style.color="";
+  updateSendState();
 }
 function removeFile(){
   pendingFile=null;
   document.getElementById("filePre").classList.remove("on");
   document.getElementById("imgInput").value="";
   if(!pendingImage)document.getElementById("attachBtn").style.color="";
+  updateSendState();
 }
 function handleImg(input){
   const file=input.files[0];if(!file)return;
@@ -3582,18 +3681,25 @@ function handleImg(input){
       document.getElementById("imgName").textContent=file.name;
       document.getElementById("imgPre").classList.add("on");
       document.getElementById("attachBtn").style.color="var(--accent)";
+      updateSendState();
     };
     reader.readAsDataURL(file);
   }else{
-    if(file.size>200000){toast("File too large (max 200KB).");return;}
+    if(file.size>MAX_TEXT_FILE_BYTES){
+      toast(`File too large (max ${formatBytes(MAX_TEXT_FILE_BYTES)}).`);
+      input.value="";
+      updateSendState();
+      return;
+    }
     const reader=new FileReader();
     reader.onload=e=>{
-      const sz=file.size<1024?file.size+"B":(file.size/1024).toFixed(1)+"KB";
+      const sz=formatBytes(file.size);
       pendingFile={content:e.target.result,name:file.name,type:file.type,size:sz};
       document.getElementById("fileName").textContent=file.name;
       document.getElementById("fileSize").textContent=sz;
       document.getElementById("filePre").classList.add("on");
       document.getElementById("attachBtn").style.color="var(--accent)";
+      updateSendState();
     };
     reader.readAsText(file,"utf-8");
   }
@@ -3662,6 +3768,7 @@ document.addEventListener("drop",e=>{
     document.getElementById("imgName").textContent=file.name;
     document.getElementById("imgPre").classList.add("on");
     document.getElementById("attachBtn").style.color="var(--accent)";
+    updateSendState();
     toast("Image attached: "+file.name);
   };
   reader.readAsDataURL(file);
@@ -3680,6 +3787,7 @@ cinEl.addEventListener("paste",e=>{
     document.getElementById("imgName").textContent="pasted-image.png";
     document.getElementById("imgPre").classList.add("on");
     document.getElementById("attachBtn").style.color="var(--accent)";
+    updateSendState();
     toast("Image pasted from clipboard.");
   };
   reader.readAsDataURL(file);
@@ -3895,12 +4003,35 @@ const _modelCheckIds = {
   'openai/gpt-oss-120b:free':             'gmMCheck-gpt120b',
   'nvidia/nemotron-3-super-120b-a12b:free':'gmMCheck-nemotron',
 };
+function modelProviderIcon(modelId){
+  if(!modelId)return'<span style="font-size:11px;color:rgba(232,234,237,.4)">●</span>';
+  const m=modelId.toLowerCase();
+  if(m.includes('gemini')||(m.includes('google')&&!m.includes('gemma')))
+    return'<svg viewBox="0 0 56 56" width="13" height="13"><defs><linearGradient id="mpGrad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4285f4"/><stop offset="40%" stop-color="#0f9d58"/><stop offset="70%" stop-color="#fbbc04"/><stop offset="100%" stop-color="#ea4335"/></linearGradient></defs><path d="M28 2 C28 15,41 15,54 28 C41 28,41 41,28 54 C28 41,15 41,2 28 C15 28,15 15,28 2Z" fill="url(#mpGrad)"/></svg>';
+  if(m.includes('claude')||m.includes('anthropic'))
+    return'<span style="font-size:12px;color:#d4a27f;font-weight:700;line-height:1">△</span>';
+  if(m.includes('nvidia')||m.includes('nemotron'))
+    return'<span style="font-size:11px;color:#76b900;font-weight:700;line-height:1">⬡</span>';
+  if(m.includes('llama')||m.includes('meta-llama'))
+    return'<span style="font-size:11px;color:#0668e1;font-weight:700;line-height:1">⬥</span>';
+  if(m.includes('qwen'))
+    return'<span style="font-size:11px;color:#7c3aed;font-weight:800;line-height:1">Q</span>';
+  if(m.includes('mistral'))
+    return'<span style="font-size:11px;color:#f57c00;font-weight:700;line-height:1">M</span>';
+  if(m.includes('gemma'))
+    return'<span style="font-size:11px;color:#4285f4;font-weight:700;line-height:1">G</span>';
+  if(m.includes('hermes')||m.includes('dolphin'))
+    return'<span style="font-size:11px;color:#06b6d4;line-height:1">◈</span>';
+  return'<span style="font-size:11px;color:rgba(232,234,237,.8);font-weight:700;line-height:1">✦</span>';
+}
 function _updateModelChip(){
   const nm = document.getElementById("gmModelName");
   const ic = document.getElementById("gmInpModelName");
+  const iconEl = document.getElementById("gmInpModelIcon");
   const lbl = _activeModelLabel;
   if(nm) nm.textContent = lbl;
   if(ic) ic.textContent = lbl.length > 14 ? lbl.slice(0,12)+"…" : lbl;
+  if(iconEl) iconEl.innerHTML = modelProviderIcon(_activeModelId);
 }
 function gmSetModel(modelId, label){
   _activeModelId = modelId; _activeModelLabel = label;
@@ -3980,14 +4111,29 @@ function _syncChips() {
   const active = [];
   if(window._webSearch) active.push({id:"web",label:"🌐 Web Search",off:()=>{toggleWebSearch();}});
   if(window._deepResearch) active.push({id:"research",label:"🔬 Deep Research",off:()=>{toggleDeepResearch();}});
-  if(window._turboMode) active.push({id:"turbo",label:"⚡ Turbo",off:()=>{toggleTurbo();}});
   if(window._liveCodeMode) active.push({id:"canvas",label:"✿ Canvas",off:()=>{toggleLiveCode();}});
   if(window._computerMode) active.push({id:"computer",label:"🖥 Computer",off:()=>{toggleComputer();}});
-  chips.innerHTML = active.map(c =>
+  let html = active.map(c =>
     `<div class="gm-chip" onclick="${c.id}_chip_off()">${c.label}<span class="gm-chip-x">×</span></div>`
   ).join("");
+  if(window._turboMode)
+    html += `<div class="gm-chip-turbo" onclick="turbo_chip_off()">⚡ Turbo<span class="gm-chip-turbo-x">×</span></div>`;
+  chips.innerHTML = html;
+  // Turbo bar — slide in below chips when active
+  const oldBar = document.getElementById("gmTurboBar");
+  if(oldBar) oldBar.remove();
+  if(window._turboMode){
+    const bar = document.createElement("div");
+    bar.id = "gmTurboBar";bar.className = "gm-turbo-bar";
+    bar.innerHTML = '<span class="gm-turbo-bar-dot"></span>TURBO ACTIVE · 2.5× credits · max 16K tokens · deep reasoning mode';
+    chips.after(bar);
+    document.getElementById("gmInpModelChip")?.classList.add("turbo-ring");
+  } else {
+    document.getElementById("gmInpModelChip")?.classList.remove("turbo-ring");
+  }
   // register off handlers dynamically
   active.forEach(c => { window[c.id+"_chip_off"] = ()=>{ c.off(); _syncChips(); _syncSheetBadges(); }; });
+  window["turbo_chip_off"] = ()=>{ window.toggleTurbo(); };
   _syncSheetBadges();
 }
 

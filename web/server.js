@@ -221,16 +221,28 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), (req,
   res.json({ received: true });
 });
 
-// Reject oversized bodies before parsing — screenshots are the only legitimate large payloads
+// Reject oversized bodies before parsing. Chat allows attachments/images; other API
+// routes stay small unless explicitly allowed.
+const DEFAULT_BODY_LIMIT_BYTES = 250_000;
+const CHAT_BODY_LIMIT_BYTES = 8_000_000;
+const SCREENSHOT_BODY_LIMIT_BYTES = 6_000_000;
+const DEFAULT_RESPONSE_TIMEOUT_MS = 90_000;
+const LONG_RESPONSE_TIMEOUT_MS = 300_000;
+const UPSTREAM_AI_TIMEOUT_MS = 240_000;
 app.use((req, res, next) => {
   const cl = parseInt(req.headers["content-length"] || "0", 10);
-  if (cl > 100_000 && req.path !== "/api/computer/screenshot") {
+  const limit = req.path === "/api/chat"
+    ? CHAT_BODY_LIMIT_BYTES
+    : req.path === "/api/computer/screenshot"
+      ? SCREENSHOT_BODY_LIMIT_BYTES
+      : DEFAULT_BODY_LIMIT_BYTES;
+  if (cl > limit) {
     return res.status(413).json({ error: "Request body too large." });
   }
   next();
 });
 
-app.use(express.json({ limit: "6mb" })); // 6 MB for screenshot data URLs from extension
+app.use(express.json({ limit: "8mb" }));
 
 // ── CORS — localhost only ────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = new Set([
@@ -253,7 +265,10 @@ app.use((req, res, next) => {
 
 // ── Global request timeout ───────────────────────────────────────────────────
 app.use((req, res, next) => {
-  res.setTimeout(90000, () => {
+  const timeoutMs = req.path === "/api/chat" || req.path === "/api/research"
+    ? LONG_RESPONSE_TIMEOUT_MS
+    : DEFAULT_RESPONSE_TIMEOUT_MS;
+  res.setTimeout(timeoutMs, () => {
     if (!res.headersSent) res.status(503).json({ error: "Request timed out." });
   });
   next();
@@ -453,19 +468,21 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
   // ── Model selection with feature overrides ─────────────────────────────
   let resolvedModel = model || FREE_MODELS[0].id;
   // Reject unknown models — prevents billing abuse via expensive unlisted models
-  if (model && !web_search && !turbo && !deep_research && !ALLOWED_MODELS.has(model)) {
+  if (model && !web_search && !deep_research && !ALLOWED_MODELS.has(model)) {
     return res.status(400).json({ error: "Unknown model" });
   }
   if (deep_research) resolvedModel = DEEP_RESEARCH_MODEL;
   else if (web_search) resolvedModel = WEB_SEARCH_MODEL;
-  else if (turbo) resolvedModel = TURBO_MODEL;
 
   const baseSystem = (persona && PERSONAS[persona]) ? PERSONAS[persona].system : PERSONAS.default.system;
   // system_override capped at 2000 chars — prevents prompt injection blowout
   const rawSystem = (system_override && typeof system_override === "string")
     ? system_override.slice(0, 2000)
     : baseSystem;
-  const systemPrompt = rawSystem + ANTI_INJECTION_SUFFIX;
+  const turboSystem = turbo
+    ? "\n\nTURBO MODE: Keep the selected model. Use deeper reasoning, check edge cases, and spend more output tokens when useful. Prefer complete, high-quality answers over short fast answers."
+    : "";
+  const systemPrompt = rawSystem + turboSystem + ANTI_INJECTION_SUFFIX;
 
   // Build final messages — inject image into last user message if provided
   let finalMessages = sanitizeMessages(messages);
@@ -482,6 +499,10 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
     }
   }
 
+  const requestedMaxTokens = Number(max_tokens) || 4096;
+  const resolvedMaxTokens = turbo
+    ? Math.min(Math.max(requestedMaxTokens, 8192), 16000)
+    : requestedMaxTokens;
   const payloadObj = {
     model: resolvedModel,
     messages: [
@@ -489,7 +510,7 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
       ...finalMessages,
     ],
     stream,
-    max_tokens: turbo ? Math.min(max_tokens || 512, 512) : (max_tokens || 4096),
+    max_tokens: resolvedMaxTokens,
     temperature: temperature ?? 1.0,
   };
   if (top_p != null && top_p !== 1) payloadObj.top_p = top_p;
@@ -576,7 +597,7 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
       res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`);
       res.end();
     });
-    apiReq.setTimeout(30000, () => {
+    apiReq.setTimeout(UPSTREAM_AI_TIMEOUT_MS, () => {
       apiReq.destroy(new Error("Upstream request timed out"));
     });
     apiReq.write(payload);
@@ -599,7 +620,7 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
       });
     });
     apiReq.on("error", (e) => res.status(500).json({ error: e.message }));
-    apiReq.setTimeout(60000, () => {
+    apiReq.setTimeout(UPSTREAM_AI_TIMEOUT_MS, () => {
       apiReq.destroy(new Error("Upstream request timed out"));
     });
     apiReq.write(payload);
@@ -734,7 +755,7 @@ app.post("/api/research", chatLimit, requireApiSecret, async (req, res) => {
     });
   });
   apiReq.on("error", (e) => { res.write(`data: ${JSON.stringify({ error: e.message })}\n\n`); res.end(); });
-  apiReq.setTimeout(60000, () => { apiReq.destroy(new Error("Upstream research request timed out")); });
+  apiReq.setTimeout(UPSTREAM_AI_TIMEOUT_MS, () => { apiReq.destroy(new Error("Upstream research request timed out")); });
   apiReq.write(payload); apiReq.end();
 });
 

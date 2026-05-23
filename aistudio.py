@@ -1450,7 +1450,7 @@ COMMAND_METADATA = {
     "/effort":         ("AI",      "Set reasoning effort: low to mxh"),
     "/thinking":       ("AI",      "Toggle internal reasoning display (DeepSeek/R1)"),
     "/research":       ("WEB",     "Deep multi-step AI research (Pro+)"),
-    "/turbo":          ("AI",      "2x fast mode — 2.5x credit cost (Pro+)"),
+    "/turbo":          ("AI",      "Deep reasoning + larger replies — 2.5x credit cost (Pro+)"),
     "/credits":        ("PLAN",    "Show credit balance and monthly quota"),
     "/computer-use":   ("MAX",     "AI desktop automation — see your screen (Max+)"),
     "/extension":      ("MAX",     "Chrome Extension — browser control & automation (Max+)"),
@@ -2027,6 +2027,12 @@ def build_system_prompt(state):
     # Fast mode: cap reply length
     if state.get("fast_mode"):
         extras.append("FAST MODE ACTIVE: Reply in 80 words or fewer. Skip preamble, cut filler. Direct answer only.")
+    if state.get("turbo_mode"):
+        extras.append(
+            "TURBO MODE ACTIVE: Keep the user's selected model. Use deeper reasoning, "
+            "spend more tokens when useful, check edge cases, and return a fuller, "
+            "higher-quality answer instead of a shorter or faster one."
+        )
 
     # Effort scaling instruction (injected into system prompt so all providers benefit)
     eff = state.get("effort", "medium")
@@ -6374,12 +6380,12 @@ def cmd_research(state, args, history):
 
 
 def cmd_turbo(state, args):
-    """/turbo — toggle 2x fast mode (2.5x credit cost, Pro+ only)."""
+    """/turbo [tokens] — keep the current model but spend more reasoning/output budget."""
     plan = get_plan(state)
     if not PLANS.get(plan, {}).get("turbo", False):
         console.print(Panel(
             "[red]Turbo Mode requires Pro or higher.[/red]\n"
-            "[dim]2x faster responses · 2.5x credit cost[/dim]\n"
+            "[dim]Deeper reasoning + larger replies · 2.5x credit cost[/dim]\n"
             "[dim]/upgrade pro to unlock.[/dim]",
             title="🔒 Turbo Locked", border_style="red"))
         return state
@@ -6388,25 +6394,35 @@ def cmd_turbo(state, args):
     theme = state.get("theme", THEMES["default"])
 
     if state["turbo_mode"]:
-        state["_pre_turbo_model"]  = state.get("model")
         state["_pre_turbo_fast"]   = state.get("fast_mode", False)
-        or_key = state.get("openrouter_key") or load_or_key()
-        if or_key:
-            state["model"] = TURBO_MODELS[0]
-        state["fast_mode"]         = True
-        state["thinking_budget"]   = 0
+        state["_pre_turbo_effort"] = state.get("effort", "medium")
+        state["_pre_turbo_think"]  = state.get("thinking_budget", 0)
+        state["_pre_turbo_show"]   = state.get("show_thinking", True)
+        try:
+            budget = int(args.strip()) if args and args.strip() else 16000
+        except ValueError:
+            budget = 16000
+        budget = max(8000, min(budget, 32000))
+        state.pop("_pre_turbo_model", None)
+        state["fast_mode"]         = False
+        state["effort"]            = "mxh"
+        state["thinking_budget"]   = budget
+        state["show_thinking"]     = True
         console.print(Panel(
             "[bold yellow]⚡⚡ TURBO MODE ACTIVE[/bold yellow]\n\n"
-            f"[dim]Model:        {state['model'].split('/')[-1]}[/dim]\n"
-            "[dim]Speed:        2x faster[/dim]\n"
+            f"[dim]Model:        {state['model'].split('/')[-1]} (unchanged)[/dim]\n"
+            "[dim]Mode:         deeper reasoning + fuller replies[/dim]\n"
             "[dim]Credit cost:  2.5x per message[/dim]\n"
-            "[dim]Thinking:     disabled[/dim]\n\n"
+            f"[dim]Thinking:     {budget} budget tokens[/dim]\n"
+            "[dim]Fast mode:    off[/dim]\n\n"
             "[dim]/turbo again to disable[/dim]",
             title="⚡ Turbo", border_style="yellow"))
     else:
-        if state.get("_pre_turbo_model"):
-            state["model"]     = state.pop("_pre_turbo_model")
         state["fast_mode"]     = state.pop("_pre_turbo_fast", False)
+        state["effort"]        = state.pop("_pre_turbo_effort", state.get("effort", "medium"))
+        state["thinking_budget"] = state.pop("_pre_turbo_think", state.get("thinking_budget", 0))
+        state["show_thinking"] = state.pop("_pre_turbo_show", state.get("show_thinking", True))
+        state.pop("_pre_turbo_model", None)
         state["turbo_mode"]    = False
         console.print(f"[{theme.get('accent','cyan')}]✓ Turbo mode off — restored previous settings[/{theme.get('accent','cyan')}]")
     return state

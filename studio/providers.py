@@ -57,15 +57,37 @@ def call_gemini(api_key, model, history, prompt, system_prompt=None, _retry=0):
         return None, str(e)
 
 
+def _or_msg_content(message):
+    return message.get("text", message.get("content", ""))
+
+
+def _positive_int(value, default=0):
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
 # ── OPENROUTER (REST) ─────────────────────────────────────────────────────────
-def call_openrouter(api_key, model, history, prompt, system_prompt=None, _retry=0):
+def call_openrouter(api_key, model, history, prompt, system_prompt=None,
+                    fast_mode=False, thinking_budget=0, max_tokens=None, _retry=0):
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     for m in history:
-        messages.append({"role": "assistant" if m["role"] == "model" else m["role"], "content": m["text"]})
+        messages.append({"role": "assistant" if m["role"] == "model" else m["role"], "content": _or_msg_content(m)})
     messages.append({"role": "user", "content": prompt})
-    payload = json.dumps({"model": model, "messages": messages}).encode()
+    body = {"model": model, "messages": messages}
+    thinking_budget = _positive_int(thinking_budget)
+    if thinking_budget:
+        body["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+    if max_tokens is not None:
+        body["max_tokens"] = _positive_int(max_tokens, 4096)
+    elif fast_mode:
+        body["max_tokens"] = 512
+    elif thinking_budget:
+        body["max_tokens"] = 8192
+    payload = json.dumps(body).encode()
     req = request.Request(OPENROUTER_BASE, data=payload, headers={
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}",
@@ -82,7 +104,11 @@ def call_openrouter(api_key, model, history, prompt, system_prompt=None, _retry=
             wait = 2 ** _retry
             console.print(f"[dim yellow]⏳ Rate limited — retrying in {wait}s ({_retry+1}/3)…[/dim yellow]")
             time.sleep(wait)
-            return call_openrouter(api_key, model, history, prompt, system_prompt, _retry + 1)
+            return call_openrouter(
+                api_key, model, history, prompt, system_prompt,
+                fast_mode=fast_mode, thinking_budget=thinking_budget,
+                max_tokens=max_tokens, _retry=_retry + 1,
+            )
         try:
             msg = json.loads(body)["error"]["message"]
         except Exception:
@@ -97,11 +123,15 @@ def call_openrouter_stream(api_key, model, history, prompt, system_prompt=None, 
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     for m in history:
-        messages.append({"role": "assistant" if m["role"] == "model" else m["role"], "content": m["text"]})
+        messages.append({"role": "assistant" if m["role"] == "model" else m["role"], "content": _or_msg_content(m)})
     messages.append({"role": "user", "content": prompt})
     body = {"model": model, "messages": messages, "stream": True}
-    if thinking_budget and int(thinking_budget) > 0:
-        body["thinking"] = {"type": "enabled", "budget_tokens": int(thinking_budget)}
+    thinking_budget = _positive_int(thinking_budget)
+    if thinking_budget:
+        body["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+        body["max_tokens"] = 8192
+    elif fast_mode:
+        body["max_tokens"] = 512
     payload = json.dumps(body).encode()
     req = request.Request(OPENROUTER_BASE, data=payload, headers={
         "Content-Type": "application/json",

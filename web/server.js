@@ -468,11 +468,10 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
   // ── Model selection with feature overrides ─────────────────────────────
   let resolvedModel = model || FREE_MODELS[0].id;
   // Reject unknown models — prevents billing abuse via expensive unlisted models
-  if (model && !web_search && !deep_research && !ALLOWED_MODELS.has(model)) {
+  if (model && !web_search && !ALLOWED_MODELS.has(model)) {
     return res.status(400).json({ error: "Unknown model" });
   }
-  if (deep_research) resolvedModel = DEEP_RESEARCH_MODEL;
-  else if (web_search) resolvedModel = WEB_SEARCH_MODEL;
+  if (web_search) resolvedModel = WEB_SEARCH_MODEL;
 
   const baseSystem = (persona && PERSONAS[persona]) ? PERSONAS[persona].system : PERSONAS.default.system;
   // system_override capped at 2000 chars — prevents prompt injection blowout
@@ -482,7 +481,10 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
   const turboSystem = turbo
     ? "\n\nTURBO MODE: Keep the selected model. Use deeper reasoning, check edge cases, and spend more output tokens when useful. Prefer complete, high-quality answers over short fast answers."
     : "";
-  const systemPrompt = rawSystem + turboSystem + ANTI_INJECTION_SUFFIX;
+  const deepSystem = deep_research
+    ? "\n\nDEEP RESEARCH MODE: Take your time with this query. Be thorough and structured. Fact-check claims before stating them. Format your response as: Overview → Key Findings → Analysis → Conclusion."
+    : "";
+  const systemPrompt = rawSystem + turboSystem + deepSystem + ANTI_INJECTION_SUFFIX;
 
   // Build final messages — inject image into last user message if provided
   let finalMessages = sanitizeMessages(messages);
@@ -676,9 +678,9 @@ app.get("/api/search", chatLimit, async (req, res) => {
   res.json({ query, results });
 });
 
-// ── /api/research  — deep research via sonar-pro or multi-step DDG ───────────
+// ── /api/research  — deep research using the active model ─────────────────────
 app.post("/api/research", chatLimit, requireApiSecret, async (req, res) => {
-  const { topic, messages = [] } = req.body;
+  const { topic, messages = [], model } = req.body;
   if (!topic || typeof topic !== "string" || topic.trim().length === 0) {
     return res.status(400).json({ error: "topic required" });
   }
@@ -692,14 +694,15 @@ app.post("/api/research", chatLimit, requireApiSecret, async (req, res) => {
     return res.json({ topic, results, source: "ddg" });
   }
 
-  // Use sonar-pro for deep web research
+  const resolvedModel = (model && ALLOWED_MODELS.has(model)) ? model : FREE_MODELS[0].id;
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
-  const systemMsg = "You are a deep research assistant. Use your web search capability to find current, accurate information. Structure your response as: Overview → Key Findings → Analysis → Conclusion.";
+  const systemMsg = "You are a deep research assistant. Take your time. Be thorough and structured. Fact-check claims before stating them. Format your response as: Overview → Key Findings → Analysis → Conclusion.";
   const payload = JSON.stringify({
-    model: DEEP_RESEARCH_MODEL,
+    model: resolvedModel,
     messages: [
       { role: "system", content: systemMsg },
       ...safeMessages,

@@ -2061,11 +2061,17 @@ body.gm-ui-active .file-pre-name{min-width:0}
         <button class="action-btn" id="stop" onclick="stopStream()" style="display:none">
           <svg viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
         </button>
-        <button class="gm-mic" id="gmMic" title="Voice input (coming soon)">
+        <button class="gm-mic" id="gmMic" title="Voice input">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
             <path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
             <path d="M19 10a7 7 0 0 1-14 0"/><line x1="12" y1="17" x2="12" y2="21"/>
             <line x1="8" y1="21" x2="16" y2="21"/>
+          </svg>
+        </button>
+        <button class="gm-mic" id="gmSpeak" title="Speak replies aloud" onclick="toggleSpeakReplies()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>
           </svg>
         </button>
         <button id="send" disabled>
@@ -3695,7 +3701,7 @@ async function _runAI(title,_retry=0,_img=undefined,_pf=undefined){
     if(_retried){await _runAI(title,_retry+1,img,pf);return;}
 
     if(!errShown){
-      if(full){aBody.innerHTML=md(full);}
+      if(full){aBody.innerHTML=md(full); if(window._speakReplies)speakText(full);}
       else{aBody.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px;padding:2px 0">
         <div style="display:flex;align-items:center;gap:8px">
           <span style="width:8px;height:8px;border-radius:50%;background:var(--warn);flex-shrink:0;display:inline-block"></span>
@@ -4370,6 +4376,47 @@ function toast(msg,duration=2800){
     localStorage.setItem("studioAnnounce97","1");
   }catch(e){} }, 1500);
 })();
+
+// ── Voice Studio: Web Speech mic input (STT) + reply playback (TTS) ───────────
+let _voiceRec=null,_voiceOn=false;
+function speakText(t){
+  if(!window.speechSynthesis)return;
+  const clean=(t||"")
+    .replace(/```[\s\S]*?```/g," (code block) ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g,"$1")
+    .replace(/[#*_`>|]/g,"").trim().slice(0,600);
+  if(!clean)return;
+  try{speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(clean));}catch(e){}
+}
+function toggleSpeakReplies(){
+  window._speakReplies=!window._speakReplies;
+  const b=document.getElementById("gmSpeak");if(b)b.style.color=window._speakReplies?"var(--acc)":"";
+  toast(window._speakReplies?"🔊 Speaking replies on":"Speaking replies off");
+  if(!window._speakReplies&&window.speechSynthesis)speechSynthesis.cancel();
+}
+function initVoice(){
+  const mic=document.getElementById("gmMic");if(!mic)return;
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  mic.title=SR?"Voice input (Web Speech)":"Voice input — unsupported in this browser";
+  mic.onclick=()=>{
+    if(!SR){toast("Voice input isn't supported in this browser");return;}
+    if(_voiceOn&&_voiceRec){_voiceRec.stop();return;}
+    _voiceRec=new SR();_voiceRec.lang="en-US";_voiceRec.interimResults=true;_voiceRec.continuous=false;
+    const cin=document.getElementById("cin");
+    _voiceRec.onstart =()=>{_voiceOn=true; mic.style.color="var(--danger)";};
+    _voiceRec.onend   =()=>{_voiceOn=false;mic.style.color="";};
+    _voiceRec.onerror =()=>{_voiceOn=false;mic.style.color="";};
+    _voiceRec.onresult=(e)=>{
+      let txt="";for(let i=0;i<e.results.length;i++)txt+=e.results[i][0].transcript;
+      if(!cin)return;
+      cin.value=txt;cin.dispatchEvent(new Event("input",{bubbles:true}));
+      cin.style.height="auto";cin.style.height=Math.min(cin.scrollHeight,200)+"px";
+    };
+    try{_voiceRec.start();}catch(e){toast("Could not start the mic");}
+  };
+}
+if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",initVoice);
+else initVoice();
 function toastConfirm(msg,okLabel,onOk){
   const wrap=document.getElementById("toastWrap");
   const t=document.createElement("div");t.className="toast confirm";

@@ -523,7 +523,20 @@ def test_checkpoint_rewind_roundtrip():
 
 run("/init writes STUDIO.md + preserves notes", test_init_generates_and_preserves_notes)
 run("/local degrades gracefully w/o Ollama",    test_local_models_graceful)
+def test_mcp_config_and_graceful_connect():
+    from studio import mcp as _mcp
+    st = _st()
+    # add / list / tools(fail) / remove must not crash and must persist
+    aistudio.cmd_mcp(st, "add demo echo hello")
+    cfg = _mcp.load_mcp_config()
+    assert "demo" in cfg.get("servers", {}), "MCP add did not persist"
+    aistudio.cmd_mcp(st, "list")
+    aistudio.cmd_mcp(st, "tools nonexistent-server")   # graceful connect failure
+    aistudio.cmd_mcp(st, "remove demo")
+    assert "demo" not in _mcp.load_mcp_config().get("servers", {}), "MCP remove failed"
+
 run("/checkpoint + /rewind round-trip",         test_checkpoint_rewind_roundtrip)
+run("/mcp config mgmt + graceful connect",      test_mcp_config_and_graceful_connect)
 
 # ══════════════════════════════════════════════════════════════
 # Summary

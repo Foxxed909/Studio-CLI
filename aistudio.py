@@ -1452,7 +1452,7 @@ ALL_COMMANDS = [
     "/speak",
     "/commit","/stage","/stash","/blame","/pr",
     "/init","/map","/scratch","/ollama",
-    "/checkpoint","/cp","/checkpoints","/rewind",
+    "/checkpoint","/cp","/checkpoints","/rewind","/mcp",
     "/ascii","/banner","/confetti","/matrix","/fortune",
 ]
 
@@ -8875,6 +8875,97 @@ def cmd_rewind(state, args, history):
     return new_hist
 
 
+# ── MCP / Connectors Hub ──────────────────────────────────────────────────────
+def cmd_mcp(state, args):
+    """/mcp [list|add|remove|tools|call] — manage MCP connector servers."""
+    from studio import mcp as _mcp
+    theme   = state.get("theme", THEMES["default"])
+    parts   = (args or "").split()
+    sub     = parts[0].lower() if parts else "list"
+    cfg     = _mcp.load_mcp_config()
+    servers = cfg.get("servers", {})
+
+    if sub in ("list", "ls", "status"):
+        if not servers:
+            console.print(Panel(
+                "[dim]No MCP servers configured.[/dim]\n\n"
+                "Add one:  [bold]/mcp add <name> <command> [args…][/bold]\n"
+                "Example:  [bold]/mcp add fs npx -y @modelcontextprotocol/server-filesystem .[/bold]\n\n"
+                "Then:     [bold]/mcp tools <name>[/bold]  ·  [bold]/mcp call <name> <tool> {json}[/bold]",
+                title="[bold]MCP · Connectors Hub[/bold]", border_style=theme["border"]))
+            return
+        rows = []
+        for n, spec in servers.items():
+            cmdline = " ".join([spec.get("command", "")] + spec.get("args", []))
+            rows.append(f"  [{theme['accent']}]{n}[/{theme['accent']}]  [dim]{cmdline[:60]}[/dim]")
+        console.print(Panel("\n".join(rows) + "\n\n[dim]/mcp tools <name> to inspect[/dim]",
+            title=f"[bold]MCP Servers ({len(servers)})[/bold]", border_style=theme["border"]))
+        return
+
+    if sub == "add":
+        if len(parts) < 3:
+            console.print("[yellow]Usage: /mcp add <name> <command> [args…][/yellow]"); return
+        name, command, sargs = parts[1], parts[2], parts[3:]
+        servers[name] = {"command": command, "args": sargs, "env": {}}
+        cfg["servers"] = servers
+        if _mcp.save_mcp_config(cfg):
+            console.print(f"[{theme['success']}]✓ Added MCP server '{name}'[/{theme['success']}]"
+                          f"  [dim]({command} {' '.join(sargs)})[/dim]")
+        else:
+            console.print("[red]Could not write mcp.json[/red]")
+        return
+
+    if sub in ("remove", "rm", "delete"):
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /mcp remove <name>[/yellow]"); return
+        if servers.pop(parts[1], None) is not None:
+            cfg["servers"] = servers; _mcp.save_mcp_config(cfg)
+            console.print(f"[{theme['success']}]✓ Removed '{parts[1]}'[/{theme['success']}]")
+        else:
+            console.print(f"[yellow]No server named '{parts[1]}'[/yellow]")
+        return
+
+    if sub == "tools":
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /mcp tools <name>[/yellow]"); return
+        name = parts[1]
+        console.print(f"[dim]Connecting to '{name}'…[/dim]")
+        try:
+            with _mcp.connect(name, cfg) as cli:
+                tools = cli.list_tools()
+        except Exception as e:
+            console.print(f"[red]Could not connect to '{name}': {e}[/red]"); return
+        if not tools:
+            console.print(f"[yellow]'{name}' exposes no tools.[/yellow]"); return
+        body = "\n".join(
+            f"  [{theme['accent']}]{t.get('name')}[/{theme['accent']}] — "
+            f"[dim]{((t.get('description') or '').splitlines() or [''])[0][:70]}[/dim]" for t in tools)
+        console.print(Panel(body, title=f"[bold]{name} · {len(tools)} tools[/bold]", border_style=theme["border"]))
+        return
+
+    if sub == "call":
+        if len(parts) < 3:
+            console.print("[yellow]Usage: /mcp call <name> <tool> [json-args][/yellow]"); return
+        name, tool = parts[1], parts[2]
+        raw = args.split(None, 3)[3] if len(parts) > 3 else "{}"
+        try:
+            targs = json.loads(raw) if raw.strip() else {}
+        except Exception:
+            console.print("[red]Tool args must be valid JSON.[/red]"); return
+        console.print(f"[dim]Calling {name}.{tool}…[/dim]")
+        try:
+            with _mcp.connect(name, cfg) as cli:
+                res = cli.call_tool(tool, targs)
+        except Exception as e:
+            console.print(f"[red]Call failed: {e}[/red]"); return
+        out = "".join(b.get("text", "") for b in (res.get("content") or []) if b.get("type") == "text")
+        console.print(Panel(out or json.dumps(res, indent=2)[:2000],
+            title=f"[bold]{name}.{tool}[/bold]", border_style=theme["border"]))
+        return
+
+    console.print("[yellow]/mcp [list|add|remove|tools|call][/yellow]")
+
+
 def cmd_scratch(state, args):
     """/scratch [text] — append a quick scratch note (or show the pad with no args)."""
     pad = CONFIG_DIR / "scratch.txt"
@@ -11629,6 +11720,7 @@ def run_repl(state):
                 elif cmd in ("checkpoint", "cp"): cmd_checkpoint(state, args, history)
                 elif cmd == "checkpoints":      cmd_checkpoints(state)
                 elif cmd == "rewind":           history = cmd_rewind(state, args, history)
+                elif cmd == "mcp":              cmd_mcp(state, args)
                 elif cmd == "commit":           cmd_commit(state, args)
                 elif cmd == "stage":            cmd_stage(state, args)
                 elif cmd == "stash":            cmd_stash(state, args)

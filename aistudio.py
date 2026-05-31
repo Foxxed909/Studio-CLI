@@ -1453,7 +1453,7 @@ ALL_COMMANDS = [
     "/commit","/stage","/stash","/blame","/pr",
     "/init","/map","/scratch","/ollama",
     "/checkpoint","/cp","/checkpoints","/rewind","/mcp",
-    "/workflow","/wf",
+    "/workflow","/wf","/marketplace","/market",
     "/ascii","/banner","/confetti","/matrix","/fortune",
 ]
 
@@ -8960,6 +8960,99 @@ def cmd_rewind(state, args, history):
     return new_hist
 
 
+# ── Studio Marketplace ────────────────────────────────────────────────────────
+_MARKET_PACKS = {
+    "git-pro": {
+        "desc": "Git power-command aliases",
+        "aliases": {
+            "wip":   "Write a one-line WIP commit message for the current staged changes.",
+            "explain-diff": "Explain what this git diff does in plain English: {input}",
+        },
+        "workflows": {},
+    },
+    "reviewer": {
+        "desc": "Three-step code-review workflow",
+        "aliases": {},
+        "workflows": {
+            "review": [
+                "Review the following code for correctness bugs: {input}",
+                "Now point out performance and readability improvements.",
+                "Summarize your review as a concise PR description.",
+            ],
+        },
+    },
+    "writer": {
+        "desc": "Writing & explanation helpers",
+        "aliases": {
+            "tighten": "Tighten this prose without losing meaning: {input}",
+            "eli5":    "Explain like I'm 5: {input}",
+        },
+        "workflows": {},
+    },
+}
+
+
+def cmd_marketplace(state, args):
+    """/marketplace [browse|install <pack>|export|import <file>] — share presets."""
+    theme  = state.get("theme", THEMES["default"])
+    acc    = theme.get("accent", "cyan")
+    parts  = (args or "").split()
+    op     = parts[0].lower() if parts else "browse"
+    expdir = CONFIG_DIR / "exports"
+
+    if op in ("browse", "list", ""):
+        rows = [f"  [{acc}]{name}[/{acc}]  [dim]{p['desc']}[/dim]  "
+                f"[dim]({len(p['aliases'])} cmds, {len(p['workflows'])} workflows)[/dim]"
+                for name, p in _MARKET_PACKS.items()]
+        catalog = (f"[bold]Packs[/bold] [dim](/marketplace install <name>)[/dim]\n" + "\n".join(rows)
+                   + f"\n\n[bold]Your library[/bold]\n"
+                   f"  [dim]Themes:[/dim] {len(THEMES)}   "
+                   f"[dim]Agents:[/dim] {len(AGENT_ROSTER)}   "
+                   f"[dim]Aliases:[/dim] {len(_load_aliases())}   "
+                   f"[dim]Workflows:[/dim] {len(_load_workflows())}\n\n"
+                   f"[dim]/marketplace export  ·  /marketplace import <file>[/dim]")
+        console.print(Panel(catalog, title="[bold]🛍️  Studio Marketplace[/bold]", border_style=theme["border"]))
+        return
+
+    if op == "install":
+        if len(parts) < 2 or parts[1] not in _MARKET_PACKS:
+            console.print(f"[yellow]Usage: /marketplace install <{'|'.join(_MARKET_PACKS)}>[/yellow]")
+            return
+        pack = _MARKET_PACKS[parts[1]]
+        al = _load_aliases(); al.update(pack["aliases"]); _save_aliases(al)
+        wf = _load_workflows(); wf.update(pack["workflows"]); _save_workflows(wf)
+        console.print(f"[{theme['success']}]✓ Installed '{parts[1]}'[/{theme['success']}]  "
+                      f"[dim](+{len(pack['aliases'])} aliases, +{len(pack['workflows'])} workflows)[/dim]")
+        return
+
+    if op == "export":
+        expdir.mkdir(parents=True, exist_ok=True)
+        out = expdir / f"studio-preset-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+        bundle = {
+            "kind": "studio-preset", "version": VERSION,
+            "theme": state.get("ui_style"),
+            "aliases": _load_aliases(),
+            "workflows": _load_workflows(),
+        }
+        out.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+        console.print(f"[{theme['success']}]✓ Exported your preset → {out}[/{theme['success']}]")
+        return
+
+    if op == "import":
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /marketplace import <file.json>[/yellow]"); return
+        data = _safe_read_json(Path(parts[1]), None)
+        if not isinstance(data, dict):
+            console.print(f"[red]Could not read preset: {parts[1]}[/red]"); return
+        al = _load_aliases(); al.update(data.get("aliases", {}) or {}); _save_aliases(al)
+        wf = _load_workflows(); wf.update(data.get("workflows", {}) or {}); _save_workflows(wf)
+        console.print(f"[{theme['success']}]✓ Imported preset[/{theme['success']}]  "
+                      f"[dim](+{len(data.get('aliases',{}))} aliases, +{len(data.get('workflows',{}))} workflows)[/dim]")
+        return
+
+    console.print("[yellow]/marketplace [browse|install <pack>|export|import <file>][/yellow]")
+
+
 # ── MCP / Connectors Hub ──────────────────────────────────────────────────────
 def cmd_mcp(state, args):
     """/mcp [list|add|remove|tools|call] — manage MCP connector servers."""
@@ -11808,6 +11901,7 @@ def run_repl(state):
                 elif cmd == "checkpoints":      cmd_checkpoints(state)
                 elif cmd == "rewind":           history = cmd_rewind(state, args, history)
                 elif cmd == "mcp":              cmd_mcp(state, args)
+                elif cmd in ("marketplace", "market"): cmd_marketplace(state, args)
                 elif cmd == "commit":           cmd_commit(state, args)
                 elif cmd == "stage":            cmd_stage(state, args)
                 elif cmd == "stash":            cmd_stash(state, args)

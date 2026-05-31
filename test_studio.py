@@ -551,7 +551,20 @@ def test_workflow_and_alias_args():
     assert "wftest" not in aistudio._load_workflows(), "workflow del failed"
 
 run("/mcp config mgmt + graceful connect",      test_mcp_config_and_graceful_connect)
+def test_marketplace_install_and_export_import():
+    st = _st()
+    aistudio.cmd_marketplace(st, "browse")                 # must not crash
+    aistudio.cmd_marketplace(st, "install writer")          # installs aliases
+    assert "eli5" in aistudio._load_aliases(), "pack install did not add alias"
+    aistudio.cmd_marketplace(st, "install reviewer")        # installs a workflow
+    assert "review" in aistudio._load_workflows(), "pack install did not add workflow"
+    aistudio.cmd_marketplace(st, "export")                  # writes a preset file
+    exports = sorted((aistudio.CONFIG_DIR / "exports").glob("studio-preset-*.json"))
+    assert exports, "export produced no file"
+    aistudio.cmd_marketplace(st, f"import {exports[-1]}")    # re-import must not crash
+
 run("/workflow + alias {input} substitution",   test_workflow_and_alias_args)
+run("/marketplace install + export/import",      test_marketplace_install_and_export_import)
 
 # ══════════════════════════════════════════════════════════════
 # Summary

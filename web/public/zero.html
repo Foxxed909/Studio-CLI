@@ -204,13 +204,16 @@ if(!window.ZERO_OK){
     +'<div style="font-size:30px;margin-bottom:10px">⬡</div>'
     +'<h2 style="margin-bottom:10px;font-size:20px">ZERO is invite-only</h2>'
     +'<p style="color:var(--ink2);margin-bottom:18px;font-size:14px">The new experimental UI is limited to internal testers. '
-    +'Enter your access code, or request access at <a style="color:var(--accent)" href="mailto:studio@foxxia.dev">studio@foxxia.dev</a>.</p>'
-    +'<div style="display:flex;gap:8px;justify-content:center"><input id="zCode" placeholder="Access code"><button onclick="zCheck()">Enter</button></div>'
+    +'Have an access code? Type it below, or request access at <a style="color:var(--accent)" href="mailto:studio@foxxia.dev">studio@foxxia.dev</a>.</p>'
+    +'<div style="display:flex;gap:8px;justify-content:center"><input id="zCode" placeholder="Access code"><button id="zEnter" type="button">Unlock</button></div>'
     +'<div id="zCodeErr" style="color:#f87171;font-size:13px;min-height:18px;margin-top:10px"></div>'
     +'<a href="/index.html" style="color:var(--ink3);font-size:13px">← Back to Studio</a></div></div>';
-  window.zCheck=function(){var v=(document.getElementById("zCode").value||"").trim();
+  var tryCode=function(){var v=(document.getElementById("zCode").value||"").trim();
     if(v==="ZERO-2026"){localStorage.setItem("zeroAccess","1");location.reload();}
     else document.getElementById("zCodeErr").textContent="Invalid code.";};
+  window.zCheck=tryCode;
+  document.getElementById("zEnter").addEventListener("click",tryCode);
+  document.getElementById("zCode").addEventListener("keydown",function(e){if(e.key==="Enter")tryCode();});
 }else{ (function(){
   "use strict";
   var ZK="zeroConvos", model="", convo=null, busy=false;

@@ -864,18 +864,28 @@ button,input,textarea,select{font-family:inherit}
    it click-through. Hidden by default — only shown for animated themes. */
 #themeFX{position:fixed;inset:0;width:100vw;height:100vh;z-index:0;
   pointer-events:none;display:none}
-[data-theme="windy-night"] #themeFX,
-[data-theme="foggy-skies"] #themeFX,
-[data-theme="moon"] #themeFX,
-[data-theme="shooting-stars"] #themeFX,
-[data-theme="black-hole"] #themeFX,
-[data-theme="magnetar"] #themeFX,
-[data-theme="purple-rain"] #themeFX{display:block}
+[data-theme="windy-night"] #themeFX,[data-theme="foggy-skies"] #themeFX,
+[data-theme="moon"] #themeFX,[data-theme="shooting-stars"] #themeFX,
+[data-theme="black-hole"] #themeFX,[data-theme="magnetar"] #themeFX,
+[data-theme="purple-rain"] #themeFX,
+[data-theme="nebula"] #themeFX,[data-theme="supernova"] #themeFX,
+[data-theme="galaxy"] #themeFX,[data-theme="eclipse"] #themeFX,
+[data-theme="thunderstorm"] #themeFX,[data-theme="aurora-borealis"] #themeFX,
+[data-theme="blizzard"] #themeFX,[data-theme="sunrise"] #themeFX,
+[data-theme="ocean-depths"] #themeFX,[data-theme="fireflies"] #themeFX,
+[data-theme="volcano"] #themeFX,[data-theme="desert-night"] #themeFX,
+[data-theme="vaporwave"] #themeFX,[data-theme="crt"] #themeFX,
+[data-theme="amber"] #themeFX,[data-theme="matrix-rain"] #themeFX{display:block}
 /* Lift app content above the canvas; let chat surface stay see-through */
 [data-theme="windy-night"] .app,[data-theme="foggy-skies"] .app,
 [data-theme="moon"] .app,[data-theme="shooting-stars"] .app,
-[data-theme="black-hole"] .app,[data-theme="magnetar"] .app,
-[data-theme="purple-rain"] .app{position:relative;z-index:1}
+[data-theme="black-hole"] .app,[data-theme="magnetar"] .app,[data-theme="purple-rain"] .app,
+[data-theme="nebula"] .app,[data-theme="supernova"] .app,[data-theme="galaxy"] .app,
+[data-theme="eclipse"] .app,[data-theme="thunderstorm"] .app,[data-theme="aurora-borealis"] .app,
+[data-theme="blizzard"] .app,[data-theme="sunrise"] .app,[data-theme="ocean-depths"] .app,
+[data-theme="fireflies"] .app,[data-theme="volcano"] .app,[data-theme="desert-night"] .app,
+[data-theme="vaporwave"] .app,[data-theme="crt"] .app,[data-theme="amber"] .app,
+[data-theme="matrix-rain"] .app{position:relative;z-index:1}
 @media (prefers-reduced-motion: reduce){#themeFX{display:none!important}}
 
 [data-theme="windy-night"]{
@@ -975,6 +985,216 @@ button,input,textarea,select{font-family:inherit}
 [data-theme="purple-rain"] .header{background:rgba(15,10,30,.8);backdrop-filter:blur(8px)}
 [data-theme="purple-rain"] .modal,[data-theme="purple-rain"] .sc-modal,[data-theme="purple-rain"] .toast,[data-theme="purple-rain"] .gc-modal{background:var(--surface)}
 [data-theme="purple-rain"] .model-sel option,[data-theme="purple-rain"] .model-sel optgroup,[data-theme="purple-rain"] .field select option{background:#17102e}
+
+/* ═══════════ THEME FAMILIES (Cosmic II · Weather · Nature · Retro/Synth) ═══════════ */
+[data-theme="nebula"]{
+  --bg:#120a22;--bg-elev:#0d0719;--sidebar:rgba(18,10,34,.74);--surface:#1b1130;--surface2:#221640;--surface3:#2b1d52;
+  --border:rgba(240,171,252,.13);--border2:rgba(240,171,252,.26);--border3:rgba(240,171,252,.42);
+  --text:rgb(237,233,254);--text2:rgba(237,233,254,.58);--text3:rgba(237,233,254,.3);--text4:rgba(237,233,254,.14);
+  --acc:rgb(240,171,252);--acc-soft:rgba(240,171,252,.14);--acc-glow:rgba(240,171,252,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="nebula"] body{background:radial-gradient(140% 120% at 50% 30%,#2a1a4a,#140a26 55%,#080414)}
+[data-theme="nebula"] .header{background:rgba(18,10,34,.8);backdrop-filter:blur(8px)}
+[data-theme="nebula"] .modal,[data-theme="nebula"] .sc-modal,[data-theme="nebula"] .toast,[data-theme="nebula"] .gc-modal{background:var(--surface)}
+[data-theme="nebula"] .model-sel option,[data-theme="nebula"] .model-sel optgroup,[data-theme="nebula"] .field select option{background:#1b1130}
+[data-theme="supernova"]{
+  --bg:#140c06;--bg-elev:#0f0904;--sidebar:rgba(20,12,6,.74);--surface:#1f140a;--surface2:#281a0d;--surface3:#332210;
+  --border:rgba(251,146,60,.13);--border2:rgba(251,146,60,.26);--border3:rgba(251,146,60,.42);
+  --text:rgb(245,237,226);--text2:rgba(245,237,226,.58);--text3:rgba(245,237,226,.3);--text4:rgba(245,237,226,.14);
+  --acc:rgb(251,146,60);--acc-soft:rgba(251,146,60,.14);--acc-glow:rgba(251,146,60,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="supernova"] body{background:radial-gradient(130% 120% at 50% 40%,#3a2410,#140c06 55%,#070402)}
+[data-theme="supernova"] .header{background:rgba(20,12,6,.8);backdrop-filter:blur(8px)}
+[data-theme="supernova"] .modal,[data-theme="supernova"] .sc-modal,[data-theme="supernova"] .toast,[data-theme="supernova"] .gc-modal{background:var(--surface)}
+[data-theme="supernova"] .model-sel option,[data-theme="supernova"] .model-sel optgroup,[data-theme="supernova"] .field select option{background:#1f140a}
+[data-theme="galaxy"]{
+  --bg:#0c0e26;--bg-elev:#080a1c;--sidebar:rgba(12,14,38,.74);--surface:#141733;--surface2:#1a1f42;--surface3:#232a55;
+  --border:rgba(196,181,253,.13);--border2:rgba(196,181,253,.26);--border3:rgba(196,181,253,.42);
+  --text:rgb(228,232,251);--text2:rgba(228,232,251,.58);--text3:rgba(228,232,251,.3);--text4:rgba(228,232,251,.14);
+  --acc:rgb(196,181,253);--acc-soft:rgba(196,181,253,.14);--acc-glow:rgba(196,181,253,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="galaxy"] body{background:radial-gradient(140% 120% at 50% 50%,#1a1d4a,#0c0e26 55%,#050613)}
+[data-theme="galaxy"] .header{background:rgba(12,14,38,.8);backdrop-filter:blur(8px)}
+[data-theme="galaxy"] .modal,[data-theme="galaxy"] .sc-modal,[data-theme="galaxy"] .toast,[data-theme="galaxy"] .gc-modal{background:var(--surface)}
+[data-theme="galaxy"] .model-sel option,[data-theme="galaxy"] .model-sel optgroup,[data-theme="galaxy"] .field select option{background:#141733}
+[data-theme="eclipse"]{
+  --bg:#0a0803;--bg-elev:#070502;--sidebar:rgba(10,8,3,.74);--surface:#14110a;--surface2:#1b160d;--surface3:#241d10;
+  --border:rgba(252,211,77,.13);--border2:rgba(252,211,77,.26);--border3:rgba(252,211,77,.42);
+  --text:rgb(245,240,226);--text2:rgba(245,240,226,.58);--text3:rgba(245,240,226,.3);--text4:rgba(245,240,226,.14);
+  --acc:rgb(252,211,77);--acc-soft:rgba(252,211,77,.14);--acc-glow:rgba(252,211,77,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="eclipse"] body{background:radial-gradient(120% 110% at 50% 40%,#1c1606,#0a0803 45%,#000)}
+[data-theme="eclipse"] .header{background:rgba(10,8,3,.8);backdrop-filter:blur(8px)}
+[data-theme="eclipse"] .modal,[data-theme="eclipse"] .sc-modal,[data-theme="eclipse"] .toast,[data-theme="eclipse"] .gc-modal{background:var(--surface)}
+[data-theme="eclipse"] .model-sel option,[data-theme="eclipse"] .model-sel optgroup,[data-theme="eclipse"] .field select option{background:#14110a}
+[data-theme="thunderstorm"]{
+  --bg:#0a0f1f;--bg-elev:#070b17;--sidebar:rgba(10,15,31,.74);--surface:#101a33;--surface2:#16223f;--surface3:#1d2b4d;
+  --border:rgba(147,197,253,.13);--border2:rgba(147,197,253,.26);--border3:rgba(147,197,253,.42);
+  --text:rgb(226,234,250);--text2:rgba(226,234,250,.58);--text3:rgba(226,234,250,.3);--text4:rgba(226,234,250,.14);
+  --acc:rgb(147,197,253);--acc-soft:rgba(147,197,253,.14);--acc-glow:rgba(147,197,253,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="thunderstorm"] body{background:radial-gradient(140% 120% at 50% 0,#101a33,#0a0f1f 55%,#05070f)}
+[data-theme="thunderstorm"] .header{background:rgba(10,15,31,.8);backdrop-filter:blur(8px)}
+[data-theme="thunderstorm"] .modal,[data-theme="thunderstorm"] .sc-modal,[data-theme="thunderstorm"] .toast,[data-theme="thunderstorm"] .gc-modal{background:var(--surface)}
+[data-theme="thunderstorm"] .model-sel option,[data-theme="thunderstorm"] .model-sel optgroup,[data-theme="thunderstorm"] .field select option{background:#101a33}
+[data-theme="aurora-borealis"]{
+  --bg:#04120f;--bg-elev:#030d0b;--sidebar:rgba(4,18,15,.74);--surface:#0a201c;--surface2:#0f2a25;--surface3:#15362f;
+  --border:rgba(94,234,212,.13);--border2:rgba(94,234,212,.26);--border3:rgba(94,234,212,.42);
+  --text:rgb(224,245,238);--text2:rgba(224,245,238,.58);--text3:rgba(224,245,238,.3);--text4:rgba(224,245,238,.14);
+  --acc:rgb(94,234,212);--acc-soft:rgba(94,234,212,.14);--acc-glow:rgba(94,234,212,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="aurora-borealis"] body{background:radial-gradient(140% 120% at 50% 0,#06231c,#04120f 55%,#020807)}
+[data-theme="aurora-borealis"] .header{background:rgba(4,18,15,.8);backdrop-filter:blur(8px)}
+[data-theme="aurora-borealis"] .modal,[data-theme="aurora-borealis"] .sc-modal,[data-theme="aurora-borealis"] .toast,[data-theme="aurora-borealis"] .gc-modal{background:var(--surface)}
+[data-theme="aurora-borealis"] .model-sel option,[data-theme="aurora-borealis"] .model-sel optgroup,[data-theme="aurora-borealis"] .field select option{background:#0a201c}
+[data-theme="blizzard"]{
+  --bg:#0f1822;--bg-elev:#0b121a;--sidebar:rgba(15,24,34,.74);--surface:#1a2a3a;--surface2:#213244;--surface3:#293d52;
+  --border:rgba(186,230,253,.13);--border2:rgba(186,230,253,.26);--border3:rgba(186,230,253,.42);
+  --text:rgb(224,242,254);--text2:rgba(224,242,254,.58);--text3:rgba(224,242,254,.3);--text4:rgba(224,242,254,.14);
+  --acc:rgb(186,230,253);--acc-soft:rgba(186,230,253,.14);--acc-glow:rgba(186,230,253,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="blizzard"] body{background:radial-gradient(140% 120% at 50% 0,#1a2a3a,#0f1822 55%,#080f16)}
+[data-theme="blizzard"] .header{background:rgba(15,24,34,.8);backdrop-filter:blur(8px)}
+[data-theme="blizzard"] .modal,[data-theme="blizzard"] .sc-modal,[data-theme="blizzard"] .toast,[data-theme="blizzard"] .gc-modal{background:var(--surface)}
+[data-theme="blizzard"] .model-sel option,[data-theme="blizzard"] .model-sel optgroup,[data-theme="blizzard"] .field select option{background:#1a2a3a}
+[data-theme="sunrise"]{
+  --bg:#1a1410;--bg-elev:#13100c;--sidebar:rgba(26,20,16,.74);--surface:#241a14;--surface2:#2e211a;--surface3:#382820;
+  --border:rgba(251,146,60,.13);--border2:rgba(251,146,60,.26);--border3:rgba(251,146,60,.42);
+  --text:rgb(253,237,226);--text2:rgba(253,237,226,.58);--text3:rgba(253,237,226,.3);--text4:rgba(253,237,226,.14);
+  --acc:rgb(251,146,60);--acc-soft:rgba(251,146,60,.14);--acc-glow:rgba(251,146,60,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="sunrise"] body{background:radial-gradient(150% 130% at 50% 100%,#3a2418,#1a1410 55%,#0a0a14)}
+[data-theme="sunrise"] .header{background:rgba(26,20,16,.8);backdrop-filter:blur(8px)}
+[data-theme="sunrise"] .modal,[data-theme="sunrise"] .sc-modal,[data-theme="sunrise"] .toast,[data-theme="sunrise"] .gc-modal{background:var(--surface)}
+[data-theme="sunrise"] .model-sel option,[data-theme="sunrise"] .model-sel optgroup,[data-theme="sunrise"] .field select option{background:#241a14}
+[data-theme="ocean-depths"]{
+  --bg:#03141f;--bg-elev:#020f17;--sidebar:rgba(3,20,31,.74);--surface:#0a2433;--surface2:#0f2e40;--surface3:#15384f;
+  --border:rgba(103,232,249,.13);--border2:rgba(103,232,249,.26);--border3:rgba(103,232,249,.42);
+  --text:rgb(224,245,251);--text2:rgba(224,245,251,.58);--text3:rgba(224,245,251,.3);--text4:rgba(224,245,251,.14);
+  --acc:rgb(103,232,249);--acc-soft:rgba(103,232,249,.14);--acc-glow:rgba(103,232,249,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="ocean-depths"] body{background:radial-gradient(150% 130% at 50% 0,#06283a,#03141f 55%,#01080f)}
+[data-theme="ocean-depths"] .header{background:rgba(3,20,31,.8);backdrop-filter:blur(8px)}
+[data-theme="ocean-depths"] .modal,[data-theme="ocean-depths"] .sc-modal,[data-theme="ocean-depths"] .toast,[data-theme="ocean-depths"] .gc-modal{background:var(--surface)}
+[data-theme="ocean-depths"] .model-sel option,[data-theme="ocean-depths"] .model-sel optgroup,[data-theme="ocean-depths"] .field select option{background:#0a2433}
+[data-theme="fireflies"]{
+  --bg:#0a1208;--bg-elev:#070d05;--sidebar:rgba(10,18,8,.74);--surface:#0f1a0c;--surface2:#142210;--surface3:#1a2c16;
+  --border:rgba(250,204,21,.13);--border2:rgba(250,204,21,.26);--border3:rgba(250,204,21,.42);
+  --text:rgb(237,247,224);--text2:rgba(237,247,224,.58);--text3:rgba(237,247,224,.3);--text4:rgba(237,247,224,.14);
+  --acc:rgb(250,204,21);--acc-soft:rgba(250,204,21,.14);--acc-glow:rgba(250,204,21,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="fireflies"] body{background:radial-gradient(140% 120% at 50% 60%,#0f1a0c,#0a1208 55%,#050804)}
+[data-theme="fireflies"] .header{background:rgba(10,18,8,.8);backdrop-filter:blur(8px)}
+[data-theme="fireflies"] .modal,[data-theme="fireflies"] .sc-modal,[data-theme="fireflies"] .toast,[data-theme="fireflies"] .gc-modal{background:var(--surface)}
+[data-theme="fireflies"] .model-sel option,[data-theme="fireflies"] .model-sel optgroup,[data-theme="fireflies"] .field select option{background:#0f1a0c}
+[data-theme="volcano"]{
+  --bg:#140503;--bg-elev:#0f0302;--sidebar:rgba(20,5,3,.74);--surface:#240a06;--surface2:#2e0d08;--surface3:#3a160f;
+  --border:rgba(251,146,60,.13);--border2:rgba(251,146,60,.26);--border3:rgba(251,146,60,.42);
+  --text:rgb(245,230,226);--text2:rgba(245,230,226,.58);--text3:rgba(245,230,226,.3);--text4:rgba(245,230,226,.14);
+  --acc:rgb(251,146,60);--acc-soft:rgba(251,146,60,.14);--acc-glow:rgba(251,146,60,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="volcano"] body{background:radial-gradient(140% 120% at 50% 100%,#2a0a06,#140503 55%,#070202)}
+[data-theme="volcano"] .header{background:rgba(20,5,3,.8);backdrop-filter:blur(8px)}
+[data-theme="volcano"] .modal,[data-theme="volcano"] .sc-modal,[data-theme="volcano"] .toast,[data-theme="volcano"] .gc-modal{background:var(--surface)}
+[data-theme="volcano"] .model-sel option,[data-theme="volcano"] .model-sel optgroup,[data-theme="volcano"] .field select option{background:#240a06}
+[data-theme="desert-night"]{
+  --bg:#14110f;--bg-elev:#0f0c0a;--sidebar:rgba(20,17,15,.74);--surface:#1a1630;--surface2:#211a14;--surface3:#2b2010;
+  --border:rgba(251,191,36,.13);--border2:rgba(251,191,36,.26);--border3:rgba(251,191,36,.42);
+  --text:rgb(245,240,226);--text2:rgba(245,240,226,.58);--text3:rgba(245,240,226,.3);--text4:rgba(245,240,226,.14);
+  --acc:rgb(251,191,36);--acc-soft:rgba(251,191,36,.14);--acc-glow:rgba(251,191,36,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="desert-night"] body{background:radial-gradient(140% 120% at 50% 20%,#1a1630,#14110f 55%,#0a0805)}
+[data-theme="desert-night"] .header{background:rgba(20,17,15,.8);backdrop-filter:blur(8px)}
+[data-theme="desert-night"] .modal,[data-theme="desert-night"] .sc-modal,[data-theme="desert-night"] .toast,[data-theme="desert-night"] .gc-modal{background:var(--surface)}
+[data-theme="desert-night"] .model-sel option,[data-theme="desert-night"] .model-sel optgroup,[data-theme="desert-night"] .field select option{background:#1a1630}
+[data-theme="vaporwave"]{
+  --bg:#1a0a2e;--bg-elev:#13081f;--sidebar:rgba(26,10,46,.74);--surface:#240d3a;--surface2:#2e1145;--surface3:#3a1750;
+  --border:rgba(240,171,252,.13);--border2:rgba(240,171,252,.26);--border3:rgba(240,171,252,.42);
+  --text:rgb(247,230,251);--text2:rgba(247,230,251,.58);--text3:rgba(247,230,251,.3);--text4:rgba(247,230,251,.14);
+  --acc:rgb(240,171,252);--acc-soft:rgba(240,171,252,.14);--acc-glow:rgba(240,171,252,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="vaporwave"] body{background:radial-gradient(150% 130% at 50% 55%,#2a0d3a,#1a0a2e 55%,#0d0620)}
+[data-theme="vaporwave"] .header{background:rgba(26,10,46,.8);backdrop-filter:blur(8px)}
+[data-theme="vaporwave"] .modal,[data-theme="vaporwave"] .sc-modal,[data-theme="vaporwave"] .toast,[data-theme="vaporwave"] .gc-modal{background:var(--surface)}
+[data-theme="vaporwave"] .model-sel option,[data-theme="vaporwave"] .model-sel optgroup,[data-theme="vaporwave"] .field select option{background:#240d3a}
+[data-theme="crt"]{
+  --bg:#020a02;--bg-elev:#010701;--sidebar:rgba(2,10,2,.74);--surface:#031203;--surface2:#061806;--surface3:#0a200a;
+  --border:rgba(134,239,172,.13);--border2:rgba(134,239,172,.26);--border3:rgba(134,239,172,.42);
+  --text:rgb(224,255,224);--text2:rgba(224,255,224,.58);--text3:rgba(224,255,224,.3);--text4:rgba(224,255,224,.14);
+  --acc:rgb(134,239,172);--acc-soft:rgba(134,239,172,.14);--acc-glow:rgba(134,239,172,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="crt"] body{background:radial-gradient(140% 120% at 50% 50%,#031203,#020a02 60%,#000500)}
+[data-theme="crt"] .header{background:rgba(2,10,2,.8);backdrop-filter:blur(8px)}
+[data-theme="crt"] .modal,[data-theme="crt"] .sc-modal,[data-theme="crt"] .toast,[data-theme="crt"] .gc-modal{background:var(--surface)}
+[data-theme="crt"] .model-sel option,[data-theme="crt"] .model-sel optgroup,[data-theme="crt"] .field select option{background:#031203}
+[data-theme="amber"]{
+  --bg:#140e02;--bg-elev:#0f0a01;--sidebar:rgba(20,14,2,.74);--surface:#241803;--surface2:#2e1f04;--surface3:#3a2810;
+  --border:rgba(252,211,77,.13);--border2:rgba(252,211,77,.26);--border3:rgba(252,211,77,.42);
+  --text:rgb(245,237,210);--text2:rgba(245,237,210,.58);--text3:rgba(245,237,210,.3);--text4:rgba(245,237,210,.14);
+  --acc:rgb(252,211,77);--acc-soft:rgba(252,211,77,.14);--acc-glow:rgba(252,211,77,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="amber"] body{background:radial-gradient(140% 120% at 50% 40%,#241803,#140e02 55%,#0a0701)}
+[data-theme="amber"] .header{background:rgba(20,14,2,.8);backdrop-filter:blur(8px)}
+[data-theme="amber"] .modal,[data-theme="amber"] .sc-modal,[data-theme="amber"] .toast,[data-theme="amber"] .gc-modal{background:var(--surface)}
+[data-theme="amber"] .model-sel option,[data-theme="amber"] .model-sel optgroup,[data-theme="amber"] .field select option{background:#241803}
+[data-theme="matrix-rain"]{
+  --bg:#020a05;--bg-elev:#010703;--sidebar:rgba(2,10,5,.74);--surface:#03140a;--surface2:#061a0d;--surface3:#0a2010;
+  --border:rgba(74,222,128,.13);--border2:rgba(74,222,128,.26);--border3:rgba(74,222,128,.42);
+  --text:rgb(224,255,224);--text2:rgba(224,255,224,.58);--text3:rgba(224,255,224,.3);--text4:rgba(224,255,224,.14);
+  --acc:rgb(74,222,128);--acc-soft:rgba(74,222,128,.14);--acc-glow:rgba(74,222,128,.34);
+  --accent:var(--acc);--accent-dim:var(--acc-soft);
+  --danger:#f87171;--warn:#fbbf24;
+  --shadow:0 2px 12px rgba(0,0,0,.6);--shadow-lg:0 8px 36px rgba(0,0,0,.82);
+}
+[data-theme="matrix-rain"] body{background:radial-gradient(140% 120% at 50% 0,#03140a,#020a05 60%,#000500)}
+[data-theme="matrix-rain"] .header{background:rgba(2,10,5,.8);backdrop-filter:blur(8px)}
+[data-theme="matrix-rain"] .modal,[data-theme="matrix-rain"] .sc-modal,[data-theme="matrix-rain"] .toast,[data-theme="matrix-rain"] .gc-modal{background:var(--surface)}
+[data-theme="matrix-rain"] .model-sel option,[data-theme="matrix-rain"] .model-sel optgroup,[data-theme="matrix-rain"] .field select option{background:#03140a}
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    GEMINI v10 UI — complete layout + interaction overhaul
@@ -2241,6 +2461,82 @@ body.gm-ui-active .file-pre-name{min-width:0}
               <span class="sw-name">Purple Rain</span>
             </button>
           </div>
+          <div class="modal-sec-title" style="margin-top:14px">Cosmic II ✨</div>
+          <div class="theme-grid">
+            <button class="theme-swatch" data-theme="nebula" onclick="applyTheme('nebula')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#2a1a4a,#080414)"><div class="sw-accent" style="background:#f0abfc"></div></div>
+              <span class="sw-name">Nebula</span>
+            </button>
+            <button class="theme-swatch" data-theme="supernova" onclick="applyTheme('supernova')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#3a2410,#070402)"><div class="sw-accent" style="background:#fb923c"></div></div>
+              <span class="sw-name">Supernova</span>
+            </button>
+            <button class="theme-swatch" data-theme="galaxy" onclick="applyTheme('galaxy')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#1a1d4a,#050613)"><div class="sw-accent" style="background:#c4b5fd"></div></div>
+              <span class="sw-name">Galaxy</span>
+            </button>
+            <button class="theme-swatch" data-theme="eclipse" onclick="applyTheme('eclipse')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#1c1606,#000000)"><div class="sw-accent" style="background:#fcd34d"></div></div>
+              <span class="sw-name">Eclipse</span>
+            </button>
+          </div>
+          <div class="modal-sec-title" style="margin-top:14px">Weather ✨</div>
+          <div class="theme-grid">
+            <button class="theme-swatch" data-theme="thunderstorm" onclick="applyTheme('thunderstorm')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#101a33,#05070f)"><div class="sw-accent" style="background:#93c5fd"></div></div>
+              <span class="sw-name">Thunderstorm</span>
+            </button>
+            <button class="theme-swatch" data-theme="aurora-borealis" onclick="applyTheme('aurora-borealis')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#06231c,#020807)"><div class="sw-accent" style="background:#5eead4"></div></div>
+              <span class="sw-name">Aurora</span>
+            </button>
+            <button class="theme-swatch" data-theme="blizzard" onclick="applyTheme('blizzard')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#1a2a3a,#080f16)"><div class="sw-accent" style="background:#bae6fd"></div></div>
+              <span class="sw-name">Blizzard</span>
+            </button>
+            <button class="theme-swatch" data-theme="sunrise" onclick="applyTheme('sunrise')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#3a2418,#0a0a14)"><div class="sw-accent" style="background:#fb923c"></div></div>
+              <span class="sw-name">Sunrise</span>
+            </button>
+          </div>
+          <div class="modal-sec-title" style="margin-top:14px">Nature ✨</div>
+          <div class="theme-grid">
+            <button class="theme-swatch" data-theme="ocean-depths" onclick="applyTheme('ocean-depths')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#06283a,#01080f)"><div class="sw-accent" style="background:#67e8f9"></div></div>
+              <span class="sw-name">Ocean Depths</span>
+            </button>
+            <button class="theme-swatch" data-theme="fireflies" onclick="applyTheme('fireflies')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#0f1a0c,#050804)"><div class="sw-accent" style="background:#facc15"></div></div>
+              <span class="sw-name">Fireflies</span>
+            </button>
+            <button class="theme-swatch" data-theme="volcano" onclick="applyTheme('volcano')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#2a0a06,#070202)"><div class="sw-accent" style="background:#fb923c"></div></div>
+              <span class="sw-name">Volcano</span>
+            </button>
+            <button class="theme-swatch" data-theme="desert-night" onclick="applyTheme('desert-night')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#1a1630,#0a0805)"><div class="sw-accent" style="background:#fbbf24"></div></div>
+              <span class="sw-name">Desert Night</span>
+            </button>
+          </div>
+          <div class="modal-sec-title" style="margin-top:14px">Retro / Synth ✨</div>
+          <div class="theme-grid">
+            <button class="theme-swatch" data-theme="vaporwave" onclick="applyTheme('vaporwave')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#2a0d3a,#0d0620)"><div class="sw-accent" style="background:#f0abfc"></div></div>
+              <span class="sw-name">Vaporwave</span>
+            </button>
+            <button class="theme-swatch" data-theme="crt" onclick="applyTheme('crt')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#031203,#000500)"><div class="sw-accent" style="background:#86efac"></div></div>
+              <span class="sw-name">CRT</span>
+            </button>
+            <button class="theme-swatch" data-theme="amber" onclick="applyTheme('amber')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#241803,#0a0701)"><div class="sw-accent" style="background:#fcd34d"></div></div>
+              <span class="sw-name">Amber</span>
+            </button>
+            <button class="theme-swatch" data-theme="matrix-rain" onclick="applyTheme('matrix-rain')">
+              <div class="sw-preview" style="background:radial-gradient(circle at 50% 0,#03140a,#000500)"><div class="sw-accent" style="background:#4ade80"></div></div>
+              <span class="sw-name">Matrix Rain</span>
+            </button>
+          </div>
         </div>
         <div class="modal-section">
           <div class="modal-sec-title">Font Size</div>
@@ -2520,7 +2816,145 @@ const ThemeFX=(function(){
         }
       };
     },
+    // ── Theme families (parameterized builders) ──────────────────────────────
+    "nebula":         ()=>mkStars({color:"192,132,252",density:90,cloud:"168,85,247"}),
+    "supernova":      ()=>mkGlow({core:"253,230,138",ring:"251,146,60",stars:true}),
+    "galaxy":         ()=>mkSwirl({hue:250}),
+    "eclipse":        ()=>mkGlow({core:"252,211,77",ring:"252,211,77",dark:true,stars:true}),
+    "thunderstorm":   ()=>mkFall({kind:"rain",color:"147,197,253",lightning:true}),
+    "aurora-borealis":()=>mkWaves(),
+    "blizzard":       ()=>mkFall({kind:"snow",color:"224,242,254"}),
+    "sunrise":        ()=>mkMotes({dir:"up",color:"253,186,116",count:46,horizon:"251,146,60"}),
+    "ocean-depths":   ()=>mkMotes({dir:"up",color:"103,232,249",count:60,bubbles:true}),
+    "fireflies":      ()=>mkMotes({dir:"side",color:"253,224,71",count:60,blink:true}),
+    "volcano":        ()=>mkEmbers(),
+    "desert-night":   ()=>mkStars({color:"252,211,77",density:80}),
+    "vaporwave":      ()=>mkGrid(),
+    "crt":            ()=>mkScan({color:"74,222,128"}),
+    "amber":          ()=>mkFall({kind:"chars",color:"251,191,36"}),
+    "matrix-rain":    ()=>mkFall({kind:"chars",color:"34,197,94"}),
   };
+
+  // ── Reusable scene builders (hoisted) ──────────────────────────────────────
+  function mkStars(o){let st=[],cl=[];return{
+    init(w,h){st=Array.from({length:o.density||90},()=>({x:rand(0,w),y:rand(0,h),
+        r:rand(0.4,1.5),base:rand(0.15,0.65),ph:rand(0,6.28),sp:rand(0.5,1.6)}));
+      cl=o.cloud?Array.from({length:5},()=>({x:rand(0,w),y:rand(0,h),r:rand(120,260),sp:rand(0.05,0.15)})):[];},
+    draw(ctx,w,h,t){const tt=t*0.001;
+      for(const c of cl){const g=ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,c.r);
+        g.addColorStop(0,`rgba(${o.cloud},0.06)`);g.addColorStop(1,`rgba(${o.cloud},0)`);
+        ctx.fillStyle=g;ctx.beginPath();ctx.arc(c.x,c.y,c.r,0,6.283);ctx.fill();
+        c.x+=c.sp;if(c.x-c.r>w)c.x=-c.r;}
+      for(const s of st){const op=s.base+0.3*Math.sin(tt*s.sp+s.ph);
+        ctx.fillStyle=`rgba(${o.color},${Math.max(0,op)})`;
+        ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,6.283);ctx.fill();}}
+  };}
+  function mkGlow(o){let st=[],cx=0,cy=0;return{
+    init(w,h){cx=w/2;cy=h*0.4;st=o.stars?Array.from({length:70},()=>({x:rand(0,w),y:rand(0,h),
+        r:rand(0.4,1.3),base:rand(0.15,0.6),ph:rand(0,6.28),sp:rand(0.5,1.5)})):[];},
+    draw(ctx,w,h,t){const tt=t*0.001,pulse=0.5+0.5*Math.sin(tt*1.1);
+      for(const s of st){const op=s.base+0.3*Math.sin(tt*s.sp+s.ph);
+        ctx.fillStyle=`rgba(255,255,255,${Math.max(0,op*0.7)})`;
+        ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,6.283);ctx.fill();}
+      const R=Math.min(w,h)*(0.18+0.05*pulse);
+      const g=ctx.createRadialGradient(cx,cy,o.dark?R*0.7:0,cx,cy,R*2.4);
+      g.addColorStop(0,o.dark?"rgba(0,0,0,0.0)":`rgba(${o.core},${0.5+0.3*pulse})`);
+      g.addColorStop(o.dark?0.5:0.25,`rgba(${o.ring},${0.3+0.2*pulse})`);
+      g.addColorStop(1,`rgba(${o.ring},0)`);
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*2.4,0,6.283);ctx.fill();
+      if(o.dark){ctx.fillStyle="#050505";ctx.beginPath();ctx.arc(cx,cy,R*0.95,0,6.283);ctx.fill();}}
+  };}
+  function mkSwirl(o){let p=[],cx=0,cy=0;return{
+    init(w,h){cx=w/2;cy=h/2;p=Array.from({length:260},()=>{const rad=rand(20,Math.min(w,h)*0.5);
+        return{ang:rand(0,6.28),rad,sp:rand(0.3,0.9)/Math.sqrt(rad/30),sz:rand(0.5,1.8),
+          hue:o.hue+rand(-30,40)};});},
+    draw(ctx,w,h,t){for(const o2 of p){o2.ang+=o2.sp*0.01;
+        const sp=o2.ang+o2.rad*0.012;
+        const x=cx+Math.cos(sp)*o2.rad,y=cy+Math.sin(sp)*o2.rad*0.55;
+        ctx.fillStyle=`hsla(${o2.hue},80%,72%,0.5)`;
+        ctx.beginPath();ctx.arc(x,y,o2.sz,0,6.283);ctx.fill();}
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,60);
+      g.addColorStop(0,`hsla(${o.hue},90%,85%,0.5)`);g.addColorStop(1,`hsla(${o.hue},90%,70%,0)`);
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,60,0,6.283);ctx.fill();}
+  };}
+  function mkFall(o){let p=[],ltF=0,ltN=0;const isChar=o.kind==="chars",isSnow=o.kind==="snow";
+    const glyphs="ｱｲｳｴｵ01ﾊﾋﾌ10ﾍﾎ";
+    return{
+    init(w,h){p=Array.from({length:isChar?90:140},()=>({x:rand(0,w),y:rand(-h,0),
+        sp:isSnow?rand(0.6,1.8):isChar?rand(3,9):rand(5,16),
+        len:isChar?0:rand(8,22),op:rand(0.2,0.7),sw:rand(0,6.28),
+        ch:glyphs[Math.floor(rand(0,glyphs.length))]}));ltF=0;ltN=0;},
+    draw(ctx,w,h,t){
+      if(o.lightning){if(t>=ltN){ltF=2+Math.floor(Math.random()*3);ltN=t+9000+Math.random()*16000;}
+        if(ltF>0){ctx.fillStyle=`rgba(200,220,255,${0.03+0.02*ltF})`;ctx.fillRect(0,0,w,h);ltF--;}}
+      for(const d of p){
+        if(isChar){ctx.fillStyle=`rgba(${o.color},${d.op})`;ctx.font="13px monospace";
+          ctx.fillText(d.ch,d.x,d.y);}
+        else if(isSnow){const sx=d.x+Math.sin(d.sw+t*0.001)*6;
+          ctx.fillStyle=`rgba(${o.color},${d.op})`;ctx.beginPath();ctx.arc(sx,d.y,1.6,0,6.283);ctx.fill();}
+        else{ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-1.5,d.y+d.len);
+          ctx.strokeStyle=`rgba(${o.color},${d.op})`;ctx.lineWidth=1.1;ctx.stroke();}
+        d.y+=d.sp;if(d.y>h+d.len){d.y=-(d.len+rand(0,60));d.x=rand(0,w);}}}
+  };}
+  function mkWaves(){let ph=0;return{
+    init(){ph=0;},
+    draw(ctx,w,h,t){const tt=t*0.001;const cols=["110,231,183","94,234,212","167,139,250"];
+      for(let b=0;b<3;b++){ctx.beginPath();
+        for(let x=0;x<=w;x+=12){const y=h*0.3+b*40+Math.sin(x*0.008+tt*(0.6+b*0.2))*38
+            +Math.sin(x*0.02+tt)*14;
+          x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+        const g=ctx.createLinearGradient(0,h*0.2,0,h*0.7);
+        g.addColorStop(0,`rgba(${cols[b]},0.0)`);g.addColorStop(0.5,`rgba(${cols[b]},0.22)`);
+        g.addColorStop(1,`rgba(${cols[b]},0.0)`);
+        ctx.strokeStyle=g;ctx.lineWidth=26;ctx.stroke();}}
+  };}
+  function mkEmbers(){let p=[];return{
+    init(w,h){p=Array.from({length:90},()=>({x:rand(0,w),y:rand(h*0.5,h+200),
+        sp:rand(0.6,2.4),sz:rand(0.6,2.4),op:rand(0.3,0.8),sw:rand(0,6.28),hue:rand(8,40)}));},
+    draw(ctx,w,h,t){const base=ctx.createLinearGradient(0,h,0,h*0.6);
+      base.addColorStop(0,"rgba(239,68,68,0.10)");base.addColorStop(1,"rgba(239,68,68,0)");
+      ctx.fillStyle=base;ctx.fillRect(0,h*0.6,w,h*0.4);
+      for(const e of p){const x=e.x+Math.sin(e.sw+t*0.001)*8;
+        ctx.fillStyle=`hsla(${e.hue},95%,60%,${e.op})`;
+        ctx.beginPath();ctx.arc(x,e.y,e.sz,0,6.283);ctx.fill();
+        e.y-=e.sp;e.op-=0.004;if(e.y<-10||e.op<=0){e.y=h+rand(0,60);e.x=rand(0,w);e.op=rand(0.3,0.8);}}}
+  };}
+  function mkMotes(o){let p=[];return{
+    init(w,h){p=Array.from({length:o.count||50},()=>({x:rand(0,w),y:rand(0,h),
+        sp:rand(0.3,1.2),sz:rand(o.bubbles?1:1.2,o.bubbles?3.5:2.6),
+        ph:rand(0,6.28),drift:rand(-0.4,0.4)}));},
+    draw(ctx,w,h,t){const tt=t*0.001;
+      if(o.horizon){const g=ctx.createLinearGradient(0,h,0,h*0.5);
+        g.addColorStop(0,`rgba(${o.horizon},0.18)`);g.addColorStop(1,`rgba(${o.horizon},0)`);
+        ctx.fillStyle=g;ctx.fillRect(0,h*0.5,w,h*0.5);}
+      for(const m of p){const blink=o.blink?(0.4+0.6*Math.abs(Math.sin(tt*1.8+m.ph))):0.7;
+        if(o.bubbles){ctx.strokeStyle=`rgba(${o.color},${blink*0.6})`;ctx.lineWidth=1;
+          ctx.beginPath();ctx.arc(m.x,m.y,m.sz,0,6.283);ctx.stroke();}
+        else{ctx.fillStyle=`rgba(${o.color},${blink})`;
+          ctx.beginPath();ctx.arc(m.x,m.y,m.sz,0,6.283);ctx.fill();}
+        if(o.dir==="up")m.y-=m.sp; else {m.x+=m.drift;m.y+=Math.sin(tt+m.ph)*0.3;}
+        if(m.y<-6){m.y=h+6;m.x=rand(0,w);} if(m.x<-6)m.x=w+6; if(m.x>w+6)m.x=-6;}}
+  };}
+  function mkGrid(){return{
+    init(){},
+    draw(ctx,w,h,t){const tt=t*0.001;const hz=h*0.55;
+      const sun=ctx.createRadialGradient(w/2,hz-10,0,w/2,hz-10,120);
+      sun.addColorStop(0,"rgba(240,171,252,0.5)");sun.addColorStop(1,"rgba(240,171,252,0)");
+      ctx.fillStyle=sun;ctx.beginPath();ctx.arc(w/2,hz-10,120,0,6.283);ctx.fill();
+      ctx.strokeStyle="rgba(103,232,249,0.35)";ctx.lineWidth=1;
+      for(let i=0;i<14;i++){const y=hz+Math.pow(i/14,2)*(h-hz)+((tt*30)%((h-hz)/14));
+        ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+      for(let x=-10;x<=10;x++){ctx.beginPath();ctx.moveTo(w/2+x*30,hz);
+        ctx.lineTo(w/2+x*(w/8),h);ctx.stroke();}}
+  };}
+  function mkScan(o){let off=0;return{
+    init(){off=0;},
+    draw(ctx,w,h,t){off=(t*0.04)%6;
+      ctx.fillStyle=`rgba(${o.color},0.05)`;
+      for(let y=off;y<h;y+=4){ctx.fillRect(0,y,w,1.4);}
+      const flick=0.02+0.02*Math.sin(t*0.02);
+      ctx.fillStyle=`rgba(${o.color},${flick})`;ctx.fillRect(0,0,w,h);}
+  };}
 
   function cv(){return canvas||(canvas=document.getElementById("themeFX"));}
   function resize(){const c=cv();if(!c)return;
@@ -2539,6 +2973,22 @@ const ThemeFX=(function(){
     "black-hole":    {cx:.5,cy:.5,rf:1.0,stops:[[0,"#1a0f03"],[.3,"#0a0603"],[.7,"#000000"],[1,"#000000"]]},
     "magnetar":      {cx:.5,cy:0, rf:1.3,stops:[[0,"#2a0d3a"],[.5,"#11071c"],[1,"#05030a"]]},
     "purple-rain":   {cx:.5,cy:0, rf:1.3,stops:[[0,"#241248"],[.55,"#0f0a1e"],[1,"#080513"]]},
+    "nebula":        {cx:.5,cy:.3,rf:1.4,stops:[[0,"#2a1a4a"],[.5,"#140a26"],[1,"#080414"]]},
+    "supernova":     {cx:.5,cy:.4,rf:1.4,stops:[[0,"#3a2410"],[.5,"#140c06"],[1,"#070402"]]},
+    "galaxy":        {cx:.5,cy:.5,rf:1.4,stops:[[0,"#1a1d4a"],[.5,"#0c0e26"],[1,"#050613"]]},
+    "eclipse":       {cx:.5,cy:.4,rf:1.2,stops:[[0,"#1c1606"],[.4,"#0a0803"],[1,"#000000"]]},
+    "thunderstorm":  {cx:.5,cy:0, rf:1.4,stops:[[0,"#101a33"],[.5,"#0a0f1f"],[1,"#05070f"]]},
+    "aurora-borealis":{cx:.5,cy:0,rf:1.4,stops:[[0,"#06231c"],[.5,"#04120f"],[1,"#020807"]]},
+    "blizzard":      {cx:.5,cy:0, rf:1.4,stops:[[0,"#1a2a3a"],[.5,"#0f1822"],[1,"#080f16"]]},
+    "sunrise":       {cx:.5,cy:1, rf:1.5,stops:[[0,"#3a2418"],[.5,"#1a1410"],[1,"#0a0a14"]]},
+    "ocean-depths":  {cx:.5,cy:0, rf:1.5,stops:[[0,"#06283a"],[.5,"#03141f"],[1,"#01080f"]]},
+    "fireflies":     {cx:.5,cy:.6,rf:1.4,stops:[[0,"#0f1a0c"],[.5,"#0a1208"],[1,"#050804"]]},
+    "volcano":       {cx:.5,cy:1, rf:1.4,stops:[[0,"#2a0a06"],[.5,"#140503"],[1,"#070202"]]},
+    "desert-night":  {cx:.5,cy:.2,rf:1.4,stops:[[0,"#1a1630"],[.55,"#14110f"],[1,"#0a0805"]]},
+    "vaporwave":     {cx:.5,cy:.55,rf:1.5,stops:[[0,"#2a0d3a"],[.5,"#1a0a2e"],[1,"#0d0620"]]},
+    "crt":           {cx:.5,cy:.5,rf:1.4,stops:[[0,"#031203"],[.6,"#020a02"],[1,"#000500"]]},
+    "amber":         {cx:.5,cy:.4,rf:1.4,stops:[[0,"#241803"],[.5,"#140e02"],[1,"#0a0701"]]},
+    "matrix-rain":   {cx:.5,cy:0, rf:1.4,stops:[[0,"#03140a"],[.6,"#020a05"],[1,"#000500"]]},
   };
   function paintBg(){const b=BG[active];if(!b){ctx.clearRect(0,0,W,H);return;}
     const g=ctx.createRadialGradient(W*b.cx,H*b.cy,0,W*b.cx,H*b.cy,Math.max(W,H)*b.rf);

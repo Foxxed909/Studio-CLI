@@ -392,14 +392,43 @@ THEMES = {
     "shootingstars":{"name":"Shooting Stars ☄️",       "banner_color":"bold #93c5fd",  "accent":"#c4b5fd",       "prompt_user":"#93c5fd",     "prompt_arrow":"#a78bfa",         "border":"#1e3a8a",   "success":"#67e8f9",  "error":"#f87171", "warning":"#fde68a","dim":"dim",  "banner_sub":"#a78bfa",     "icon":"☄️", "prompt_name":"stars"},
     "blackhole":   {"name":"Black Hole 🕳️",           "banner_color":"bold #fb923c",  "accent":"#f59e0b",       "prompt_user":"#fb923c",     "prompt_arrow":"#b45309",         "border":"#7c2d12",   "success":"#fbbf24",  "error":"bold red","warning":"#fb923c","dim":"dim",  "banner_sub":"#b45309",     "icon":"🕳️", "prompt_name":"hole"},
     "magnetar":    {"name":"Magnetar 🧲",              "banner_color":"bold #e879f9",  "accent":"#d946ef",       "prompt_user":"#e879f9",     "prompt_arrow":"#c026d3",         "border":"#701a75",   "success":"#f0abfc",  "error":"bold red","warning":"#fbbf24","dim":"dim",  "banner_sub":"#c026d3",     "icon":"🧲", "prompt_name":"magnetar"},
+    # ── Cosmic II ────────────────────────────────────────────────────────────
+    "nebula":      {"name":"Nebula 🌌",        "banner_color":"bold #c084fc","accent":"#f0abfc","prompt_user":"#c084fc","prompt_arrow":"#e879f9","border":"#7e22ce","success":"#f0abfc","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#e879f9","icon":"🌌","prompt_name":"nebula"},
+    "supernova":   {"name":"Supernova 💥",     "banner_color":"bold #fde68a","accent":"#fb923c","prompt_user":"#fde68a","prompt_arrow":"#fb923c","border":"#b45309","success":"#fde68a","error":"bold red","warning":"#fb923c","dim":"dim","banner_sub":"#fb923c","icon":"💥","prompt_name":"nova"},
+    "galaxy":      {"name":"Galaxy 🌀",        "banner_color":"bold #818cf8","accent":"#c4b5fd","prompt_user":"#a5b4fc","prompt_arrow":"#c4b5fd","border":"#4338ca","success":"#c4b5fd","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#c4b5fd","icon":"🌀","prompt_name":"galaxy"},
+    "eclipse":     {"name":"Eclipse 🌑",       "banner_color":"bold #fcd34d","accent":"#fde68a","prompt_user":"#fcd34d","prompt_arrow":"#fbbf24","border":"#78350f","success":"#fde68a","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#fbbf24","icon":"🌑","prompt_name":"eclipse"},
+    # ── Weather ──────────────────────────────────────────────────────────────
+    "thunderstorm":{"name":"Thunderstorm ⛈️",  "banner_color":"bold #93c5fd","accent":"#60a5fa","prompt_user":"#93c5fd","prompt_arrow":"#bfdbfe","border":"#1e3a8a","success":"#bfdbfe","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#bfdbfe","icon":"⛈️","prompt_name":"storm"},
+    "borealis":    {"name":"Aurora Borealis 🌠","banner_color":"bold #6ee7b7","accent":"#5eead4","prompt_user":"#6ee7b7","prompt_arrow":"#34d399","border":"#047857","success":"#6ee7b7","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#34d399","icon":"🌠","prompt_name":"borealis"},
+    "blizzard":    {"name":"Blizzard ❄️",      "banner_color":"bold #e0f2fe","accent":"#bae6fd","prompt_user":"#e0f2fe","prompt_arrow":"#7dd3fc","border":"#0369a1","success":"#bae6fd","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#7dd3fc","icon":"❄️","prompt_name":"blizzard"},
+    "sunrise":     {"name":"Sunrise 🌅",       "banner_color":"bold #fdba74","accent":"#fb923c","prompt_user":"#fdba74","prompt_arrow":"#f97316","border":"#c2410c","success":"#fdba74","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#f97316","icon":"🌅","prompt_name":"sunrise"},
+    # ── Nature ───────────────────────────────────────────────────────────────
+    "oceandepths": {"name":"Ocean Depths 🌊",  "banner_color":"bold #22d3ee","accent":"#67e8f9","prompt_user":"#22d3ee","prompt_arrow":"#06b6d4","border":"#155e75","success":"#67e8f9","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#06b6d4","icon":"🌊","prompt_name":"depths"},
+    "fireflies":   {"name":"Fireflies ✨",      "banner_color":"bold #fde047","accent":"#facc15","prompt_user":"#fde047","prompt_arrow":"#a3e635","border":"#3f6212","success":"#a3e635","error":"bold red","warning":"#fde047","dim":"dim","banner_sub":"#a3e635","icon":"✨","prompt_name":"fireflies"},
+    "volcano":     {"name":"Volcano 🌋",       "banner_color":"bold #f87171","accent":"#fb923c","prompt_user":"#f87171","prompt_arrow":"#ef4444","border":"#7f1d1d","success":"#fb923c","error":"bold red","warning":"#fb923c","dim":"dim","banner_sub":"#ef4444","icon":"🌋","prompt_name":"volcano"},
+    "desertnight": {"name":"Desert Night 🏜️",  "banner_color":"bold #fcd34d","accent":"#fbbf24","prompt_user":"#fcd34d","prompt_arrow":"#d97706","border":"#92400e","success":"#fcd34d","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#d97706","icon":"🏜️","prompt_name":"desert"},
+    # ── Retro / Synth ────────────────────────────────────────────────────────
+    "vaporwave":   {"name":"Vaporwave 🌴",     "banner_color":"bold #f0abfc","accent":"#67e8f9","prompt_user":"#f0abfc","prompt_arrow":"#22d3ee","border":"#a21caf","success":"#67e8f9","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#22d3ee","icon":"🌴","prompt_name":"vapor"},
+    "crt":         {"name":"CRT 📺",           "banner_color":"bold #4ade80","accent":"#86efac","prompt_user":"#4ade80","prompt_arrow":"#22c55e","border":"#166534","success":"#86efac","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#22c55e","icon":"📺","prompt_name":"crt"},
+    "amber":       {"name":"Amber 🟠",         "banner_color":"bold #fbbf24","accent":"#fcd34d","prompt_user":"#fbbf24","prompt_arrow":"#f59e0b","border":"#b45309","success":"#fcd34d","error":"bold red","warning":"#f59e0b","dim":"dim","banner_sub":"#f59e0b","icon":"🟠","prompt_name":"amber"},
+    "matrixrain":  {"name":"Matrix Rain 🟩",   "banner_color":"bold #22c55e","accent":"#4ade80","prompt_user":"#22c55e","prompt_arrow":"#16a34a","border":"#14532d","success":"#4ade80","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#16a34a","icon":"🟩","prompt_name":"matrix"},
 }
+
+_CELESTIAL_BASE  = ("windynight", "foggyskies", "moon", "shootingstars", "blackhole", "magnetar")
+_THEME_FAMILY_STYLES = (
+    # Cosmic II · Weather · Nature · Retro/Synth — all share the celestial chrome
+    "nebula", "supernova", "galaxy", "eclipse",
+    "thunderstorm", "borealis", "blizzard", "sunrise",
+    "oceandepths", "fireflies", "volcano", "desertnight",
+    "vaporwave", "crt", "amber", "matrixrain",
+)
 
 UI_STYLES    = ("claude", "gemini", "codex", "studio", "ghost", "nova", "foxxia", "strawberry",
                 "darkred", "sophia", "godson", "downcli", "badhappening", "rain",
-                "windynight", "foggyskies", "moon", "shootingstars", "blackhole", "magnetar")
+                *_CELESTIAL_BASE, *_THEME_FAMILY_STYLES)
 
 # UI styles that share the unified "celestial" chrome (theme-adaptive header/prompt)
-CELESTIAL_STYLES = ("windynight", "foggyskies", "moon", "shootingstars", "blackhole", "magnetar")
+CELESTIAL_STYLES = (*_CELESTIAL_BASE, *_THEME_FAMILY_STYLES)
 STREAM_MODES = ("off", "auto", "on", "type")
 
 STUDIO_MODEL_ALIASES = {
@@ -474,6 +503,11 @@ VIBE_PRESETS = {
     "shootingstars":{"ui": "shootingstars","theme": "shootingstars"},
     "blackhole":    {"ui": "blackhole",    "theme": "blackhole"},
     "magnetar":     {"ui": "magnetar",     "theme": "magnetar"},
+    **{n: {"ui": n, "theme": n} for n in (
+        "nebula","supernova","galaxy","eclipse",
+        "thunderstorm","borealis","blizzard","sunrise",
+        "oceandepths","fireflies","volcano","desertnight",
+        "vaporwave","crt","amber","matrixrain")},
 }
 
 # ── MODE DETECTION ────────────────────────────────────────────────────────────

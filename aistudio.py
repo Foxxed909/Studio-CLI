@@ -9727,6 +9727,26 @@ _CELESTIAL_CHROME = {
                      "motif": "◜◝  ◯  ◞◟    ◜◝  ◯  ◞◟    ◜◝"},
     "magnetar":     {"icon": "🧲", "title": "MAGNETAR",        "tag": "a pulsing field",
                      "motif": "≈ ⌇ ≈ ⌇ ≈   ⌇ ≈ ⌇ ≈ ⌇   ≈ ⌇ ≈"},
+    # Cosmic II
+    "nebula":       {"icon": "🌌", "title": "NEBULA",         "tag": "cosmic dust",            "motif": "✦ · ✧  ☁ ✦  · ✧ ·  ✦ ☁ ✧"},
+    "supernova":    {"icon": "💥", "title": "SUPERNOVA",      "tag": "a star's last light",    "motif": "· ✦ ✸ ✦ ·   ✸   · ✦ ✸ ✦ ·"},
+    "galaxy":       {"icon": "🌀", "title": "GALAXY",         "tag": "a billion suns",         "motif": "✦ ˚ · ✶ ˚ ✦ · ✶ ˚ · ✦ ✶"},
+    "eclipse":      {"icon": "🌑", "title": "ECLIPSE",        "tag": "the corona",             "motif": "· ◌ ◍ ● ◍ ◌ ·   ✦   · ◌ ●"},
+    # Weather
+    "thunderstorm": {"icon": "⛈️", "title": "THUNDERSTORM",   "tag": "the sky cracks",         "motif": "╱ ⚡ ╲ ┊ ╱ ⚡ ┊ ╲ ⚡ ╱ ┊"},
+    "borealis":     {"icon": "🌠", "title": "AURORA BOREALIS","tag": "ribbons of light",       "motif": "～≈～ ≋ ～≈～ ≋ ～≈～ ≋ ～"},
+    "blizzard":     {"icon": "❄️", "title": "BLIZZARD",       "tag": "whiteout",               "motif": "❄ · ❅ ·  ❄ ❅ · ❄ ·  ❅ ❄"},
+    "sunrise":      {"icon": "🌅", "title": "SUNRISE",        "tag": "first light",            "motif": "· ☀ ·   ▁▂▃▂▁   · ☀ ·"},
+    # Nature
+    "oceandepths":  {"icon": "🌊", "title": "OCEAN DEPTHS",   "tag": "bioluminescence",        "motif": "° · ｡ ○ ° ｡ · ○ ° · ｡ ○"},
+    "fireflies":    {"icon": "✨", "title": "FIREFLIES",      "tag": "tiny lanterns",          "motif": "· ✦ · ˚ ✦ ·  ✦ ˚ · ✦ ·"},
+    "volcano":      {"icon": "🌋", "title": "VOLCANO",        "tag": "molten",                 "motif": "˚ ∴ ✦ ∴ ˚   ∴ ✦ ∴   ˚ ∴"},
+    "desertnight":  {"icon": "🏜️", "title": "DESERT NIGHT",   "tag": "dunes & stars",          "motif": "· ✦ · ︵︵ · ✦ · ︵ · ✦"},
+    # Retro / Synth
+    "vaporwave":    {"icon": "🌴", "title": "VAPORWAVE",      "tag": "a e s t h e t i c",      "motif": "▘▝ ░ ▞ ░ ▝▘ ░ ▞ ░ ▝▘"},
+    "crt":          {"icon": "📺", "title": "CRT",            "tag": "phosphor glow",          "motif": "▒▓ ▒░ ▓▒ ░▒ ▓▒░ ▒▓ ░"},
+    "amber":        {"icon": "🟠", "title": "AMBER",          "tag": "warm glow",              "motif": "· ▰ ▱ ▰ ·   ▱ ▰ ▱   · ▰"},
+    "matrixrain":   {"icon": "🟩", "title": "MATRIX RAIN",    "tag": "follow the white rabbit","motif": "│╎ █ ╎│ ░ ╎ █ ╎ ░ │ █"},
 }
 
 # Prompt-arrow glyph per celestial style (ASCII-width-safe for ptk alignment).
@@ -9737,6 +9757,10 @@ _CELESTIAL_GLYPH = {
     "shootingstars":"✦",
     "blackhole":    "◯",
     "magnetar":     "⌇",
+    "nebula":"✧","supernova":"✸","galaxy":"✶","eclipse":"●",
+    "thunderstorm":"⚡","borealis":"≈","blizzard":"❄","sunrise":"☀",
+    "oceandepths":"°","fireflies":"✦","volcano":"∴","desertnight":"✦",
+    "vaporwave":"▞","crt":"▒","amber":"▰","matrixrain":"█",
 }
 
 

@@ -1452,6 +1452,7 @@ ALL_COMMANDS = [
     "/speak",
     "/commit","/stage","/stash","/blame","/pr",
     "/init","/map","/scratch","/ollama",
+    "/checkpoint","/cp","/checkpoints","/rewind",
     "/ascii","/banner","/confetti","/matrix","/fortune",
 ]
 
@@ -8789,6 +8790,91 @@ def cmd_init(state, args):
         title="[bold]Project Memory · /init[/bold]", border_style=theme["border"]))
 
 
+# ── Checkpoints & Rewind ──────────────────────────────────────────────────────
+def _checkpoints_dir():
+    d = CONFIG_DIR / "checkpoints"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def cmd_checkpoint(state, args, history):
+    """/checkpoint [label] — snapshot the conversation + uncommitted file changes."""
+    theme = state.get("theme", THEMES["default"])
+    cid   = datetime.now().strftime("%Y%m%d-%H%M%S")
+    label = (args or "").strip() or "checkpoint"
+    cdir  = _checkpoints_dir() / cid
+    cdir.mkdir(parents=True, exist_ok=True)
+    (cdir / "history.json").write_text(json.dumps(history or [], indent=2), encoding="utf-8")
+    # Snapshot uncommitted changes as a patch (if inside a git repo)
+    cwd = state.get("workspace_root") or "."
+    diff, _ = _run_git(["diff", "HEAD"], cwd=cwd)
+    if diff.strip():
+        (cdir / "uncommitted.patch").write_text(diff, encoding="utf-8")
+    head, _ = _run_git(["rev-parse", "--short", "HEAD"], cwd=cwd)
+    (cdir / "meta.json").write_text(json.dumps({
+        "id": cid, "label": label, "ts": time.time(),
+        "model": state.get("model"), "msgs": len(history or []),
+        "git_head": head, "has_patch": bool(diff.strip()),
+    }, indent=2), encoding="utf-8")
+    console.print(f"[{theme['success']}]✓ Checkpoint [bold]{cid}[/bold] · {label}[/{theme['success']}]"
+                  f"  [dim]({len(history or [])} msgs"
+                  + (", +uncommitted diff" if diff.strip() else "") + ")[/dim]")
+
+
+def cmd_checkpoints(state):
+    """/checkpoints — list saved checkpoints."""
+    theme = state.get("theme", THEMES["default"])
+    cps = sorted(_checkpoints_dir().glob("*/meta.json"), reverse=True)
+    if not cps:
+        console.print("[dim]No checkpoints yet — /checkpoint [label] to make one.[/dim]")
+        return
+    rows = []
+    for mp in cps[:25]:
+        m = _safe_read_json(mp, {})
+        when = datetime.fromtimestamp(m.get("ts", 0)).strftime("%m-%d %H:%M")
+        rows.append(f"  [{theme['accent']}]{m.get('id','?')}[/{theme['accent']}]  "
+                    f"[dim]{when}[/dim]  {m.get('label','')}  "
+                    f"[dim]· {m.get('msgs',0)} msgs"
+                    + (" · +diff" if m.get("has_patch") else "") + "[/dim]")
+    console.print(Panel("\n".join(rows) + "\n\n[dim]/rewind <id> to restore (add 'files' to also apply the saved diff)[/dim]",
+        title=f"[bold]Checkpoints ({len(cps)})[/bold]", border_style=theme["border"]))
+
+
+def cmd_rewind(state, args, history):
+    """/rewind <id|last> [files] — restore conversation (and optionally files) from a checkpoint."""
+    theme = state.get("theme", THEMES["default"])
+    parts = (args or "").split()
+    if not parts:
+        console.print("[yellow]Usage: /rewind <id|last> [files][/yellow]  ·  see /checkpoints")
+        return history
+    sel       = parts[0]
+    do_files  = "files" in parts[1:]
+    all_cps   = sorted(_checkpoints_dir().glob("*/"), reverse=True)
+    if sel == "last":
+        target = all_cps[0] if all_cps else None
+    else:
+        target = next((c for c in all_cps if c.name == sel or c.name.startswith(sel)), None)
+    if not target:
+        console.print(f"[yellow]Checkpoint '{sel}' not found — see /checkpoints[/yellow]")
+        return history
+    new_hist = _safe_read_json(target / "history.json", None)
+    if not isinstance(new_hist, list):
+        console.print("[red]Checkpoint history is unreadable.[/red]")
+        return history
+    msg = f"[{theme['success']}]✓ Rewound to {target.name}[/{theme['success']}]  [dim]({len(new_hist)} msgs)[/dim]"
+    if do_files:
+        patch = target / "uncommitted.patch"
+        if patch.exists():
+            cwd = state.get("workspace_root") or "."
+            out, err = _run_git(["apply", "--3way", str(patch)], cwd=cwd)
+            msg += ("\n[green]✓ Applied saved file diff[/green]" if not err
+                    else f"\n[yellow]Could not apply diff: {err}[/yellow]")
+        else:
+            msg += "\n[dim](no file diff stored in this checkpoint)[/dim]"
+    console.print(msg)
+    return new_hist
+
+
 def cmd_scratch(state, args):
     """/scratch [text] — append a quick scratch note (or show the pad with no args)."""
     pad = CONFIG_DIR / "scratch.txt"
@@ -11540,6 +11626,9 @@ def run_repl(state):
 
                 # ── v9.7 Git/VCS · Context · Fun/visual ────────────────────────
                 elif cmd == "init":             cmd_init(state, args)
+                elif cmd in ("checkpoint", "cp"): cmd_checkpoint(state, args, history)
+                elif cmd == "checkpoints":      cmd_checkpoints(state)
+                elif cmd == "rewind":           history = cmd_rewind(state, args, history)
                 elif cmd == "commit":           cmd_commit(state, args)
                 elif cmd == "stage":            cmd_stage(state, args)
                 elif cmd == "stash":            cmd_stash(state, args)

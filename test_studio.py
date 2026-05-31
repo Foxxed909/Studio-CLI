@@ -510,8 +510,20 @@ def test_local_models_graceful():
     assert isinstance(out, dict), "cmd_local must return state"
     aistudio.cmd_local(st, "off")           # leaving local mode must not crash
 
+def test_checkpoint_rewind_roundtrip():
+    st = _st()
+    hist = [{"role": "user", "text": "hello"}, {"role": "model", "text": "hi there"}]
+    aistudio.cmd_checkpoint(st, "test-cp", hist)
+    aistudio.cmd_checkpoints(st)                       # must not crash
+    restored = aistudio.cmd_rewind(st, "last", [])     # restore most recent
+    assert restored == hist, "rewind did not restore the conversation"
+    # bad id returns the original history unchanged
+    same = aistudio.cmd_rewind(st, "nope-not-real", hist)
+    assert same == hist
+
 run("/init writes STUDIO.md + preserves notes", test_init_generates_and_preserves_notes)
 run("/local degrades gracefully w/o Ollama",    test_local_models_graceful)
+run("/checkpoint + /rewind round-trip",         test_checkpoint_rewind_roundtrip)
 
 # ══════════════════════════════════════════════════════════════
 # Summary

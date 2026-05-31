@@ -11253,7 +11253,7 @@ def run_repl(state):
                 elif cmd == "upgrade":        cmd_upgrade(state, args)
                 elif cmd == "plan":           cmd_plan(state)
                 elif cmd == "permissions":    state = cmd_permissions(state)
-                elif cmd == "beta":
+                elif cmd in ("beta", "experimental"):
                     _beta_sub = (args or "").strip().lower().split(" ", 1)[0]
                     if _beta_sub in ("docx", "xlsx", "screenshot", "image", "img", "vision", "video", "feedback"):
                         history = cmd_beta_features(state, args, history)
@@ -11300,7 +11300,7 @@ def run_repl(state):
 
                 # ── v5.8 new commands ─────────────────────────────────────────
                 elif cmd in ("profile", "me"):           cmd_profile_view(state)
-                elif cmd in ("insights", "stats"):       cmd_insights(state)
+                elif cmd in ("insights", "stats", "analytics"): cmd_insights(state)
                 elif cmd == "vault":                     cmd_vault(state, args)
                 elif cmd == "team":                      cmd_team(state, args)
 

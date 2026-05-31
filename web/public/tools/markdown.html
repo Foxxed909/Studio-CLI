@@ -1,0 +1,32 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Markdown Preview — Studio Tools</title>
+<style>
+:root{--bg:#06070b;--surface:#0f1117;--surface2:#161a22;--border:rgba(148,163,184,.16);
+--text:#e7ebf0;--text2:#9aa4b2;--acc:#22d3ee;--danger:#f87171;--ok:#4ade80}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(130% 100% at 50% 0,#0d1422,#06070b 60%);
+color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);
+position:sticky;top:0;background:rgba(6,7,11,.7);backdrop-filter:blur(8px);z-index:5}
+.logo{font-weight:800;font-size:16px;display:flex;gap:8px;align-items:center}
+.back{color:var(--text2);text-decoration:none;font-size:13px;border:1px solid var(--border);padding:7px 13px;border-radius:9px}
+.back:hover{color:var(--text);border-color:var(--acc)}
+main{max-width:880px;margin:0 auto;padding:26px 20px 70px}
+h1{font-size:23px;margin:4px 0 2px}.sub{color:var(--text2);margin:0 0 22px;font-size:13.5px}
+textarea,input[type=text]{width:100%;background:#0a0d13;border:1px solid var(--border);border-radius:10px;
+color:var(--text);padding:11px 13px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;outline:none}
+textarea{min-height:120px;resize:vertical}textarea:focus,input:focus{border-color:var(--acc)}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+button.b{background:var(--acc);color:#04121a;border:0;border-radius:9px;padding:9px 16px;font-weight:600;cursor:pointer;font-size:13px}
+button.s{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:9px 16px;cursor:pointer;font-size:13px}
+button.s:hover{border-color:var(--acc)}
+.out{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:13px;margin-top:12px;
+white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;min-height:40px}
+label{font-size:12px;color:var(--text2);display:block;margin:10px 0 4px}
+.err{color:var(--danger)}.ok{color:var(--ok)}.acc{color:var(--acc)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.swatch{height:60px;border-radius:10px;border:1px solid var(--border)}
+mark{background:rgba(34,211,238,.3);color:#fff;border-radius:3px}
+</style></head><body>
+<header><div class="logo">🧰 📝 Markdown Preview</div><a class="back" href="/tools/">← All Tools</a></header>
+<main><h1>📝 Markdown Preview</h1><p class="sub">Live Markdown → HTML preview.</p>
+<div class="grid"><div><label>Markdown</label><textarea id="md" oninput="render()" style="min-height:300px"># Hello\n\n- one\n- two\n\n**bold** and `code`</textarea></div><div><label>Preview</label><div class="out" id="prev" style="min-height:300px"></div></div></div></main><script>function render(){const t=document.getElementById('md').value;let h;if(window.marked){h=marked.parse(t);if(window.DOMPurify)h=DOMPurify.sanitize(h);}else{h=t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}document.getElementById('prev').innerHTML=h;}const s1=document.createElement('script');s1.src='https://cdn.jsdelivr.net/npm/marked/marked.min.js';s1.onload=render;document.head.appendChild(s1);const s2=document.createElement('script');s2.src='https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js';document.head.appendChild(s2);render();</script></body></html>

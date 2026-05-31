@@ -26,3 +26,7 @@ web/node_modules/
 # Secrets / keys (never commit)
 .env
 *.key
+
+# /init project-memory output
+STUDIO.md
+scratch.txt

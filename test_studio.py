@@ -480,15 +480,31 @@ def test_fun_cmds_no_crash():
     aistudio.cmd_scratch(_st(), "")
 
 def test_new_cmds_registered():
-    for c in ["/speak","/commit","/stage","/stash","/blame","/pr","/map",
+    for c in ["/speak","/commit","/stage","/stash","/blame","/pr","/init","/map",
               "/scratch","/ascii","/banner","/confetti","/matrix","/fortune"]:
         assert c in aistudio.ALL_COMMANDS, f"{c} missing from ALL_COMMANDS"
+
+def test_init_generates_and_preserves_notes():
+    import tempfile
+    d = tempfile.mkdtemp()
+    Path(d, "app.py").write_text("print('hi')\n", encoding="utf-8")
+    Path(d, "package.json").write_text("{}", encoding="utf-8")
+    st = _st(); st["workspace_root"] = d
+    aistudio.cmd_init(st, d)
+    smd = Path(d, "STUDIO.md")
+    assert smd.exists(), "STUDIO.md not created"
+    txt = smd.read_text(encoding="utf-8")
+    assert "Project Memory" in txt and "STUDIO:NOTES" in txt
+    smd.write_text(txt + "\nMY CUSTOM NOTE 123\n", encoding="utf-8")
+    aistudio.cmd_init(st, d)               # regenerate
+    assert "MY CUSTOM NOTE 123" in smd.read_text(encoding="utf-8"), "user notes not preserved"
 
 run("speak degrades gracefully (no engine)",   test_speak_no_crash)
 run("speak listen routes to voice/STT",        test_speak_routes_to_voice_for_listen)
 run("git/context commands no crash",           test_git_cmds_no_crash)
 run("fun/visual commands no crash",            test_fun_cmds_no_crash)
 run("new v9.7 commands in ALL_COMMANDS",       test_new_cmds_registered)
+run("/init writes STUDIO.md + preserves notes", test_init_generates_and_preserves_notes)
 
 # ══════════════════════════════════════════════════════════════
 # Summary

@@ -504,7 +504,14 @@ run("speak listen routes to voice/STT",        test_speak_routes_to_voice_for_li
 run("git/context commands no crash",           test_git_cmds_no_crash)
 run("fun/visual commands no crash",            test_fun_cmds_no_crash)
 run("new v9.7 commands in ALL_COMMANDS",       test_new_cmds_registered)
+def test_local_models_graceful():
+    st = _st()
+    out = aistudio.cmd_local(st, "")        # Ollama not running in test env → install panel
+    assert isinstance(out, dict), "cmd_local must return state"
+    aistudio.cmd_local(st, "off")           # leaving local mode must not crash
+
 run("/init writes STUDIO.md + preserves notes", test_init_generates_and_preserves_notes)
+run("/local degrades gracefully w/o Ollama",    test_local_models_graceful)
 
 # ══════════════════════════════════════════════════════════════
 # Summary

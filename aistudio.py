@@ -1451,7 +1451,7 @@ ALL_COMMANDS = [
     # v9.7 — Speak (merged), Git/VCS, Context, Fun/visual
     "/speak",
     "/commit","/stage","/stash","/blame","/pr",
-    "/init","/map","/scratch",
+    "/init","/map","/scratch","/ollama",
     "/ascii","/banner","/confetti","/matrix","/fortune",
 ]
 
@@ -1807,8 +1807,56 @@ def cmd_cost(state, args):
     console.print(Panel(rows, title="[bold]Session Cost[/bold]", border_style=theme["border"]))
 
 
-def cmd_local(state, model="llama3"):
-    state["model"] = f"ollama/{model}"
+def _ollama_tags():
+    """Return list of locally-installed Ollama model names, or None if unreachable."""
+    from urllib import request as _rq
+    url = OLLAMA_BASE.replace("/api/chat", "/api/tags")
+    try:
+        with _rq.urlopen(url, timeout=3) as resp:
+            data = json.loads(resp.read().decode())
+        return [m.get("name") for m in data.get("models", []) if m.get("name")]
+    except Exception:
+        return None
+
+
+def cmd_local(state, args=""):
+    """/local [model|off] — use a local Ollama model. No args lists installed models."""
+    theme = state.get("theme", THEMES["default"])
+    arg   = (args or "").strip()
+    if arg.lower() in ("off", "stop", "exit"):
+        state.pop("use_ollama", None)
+        console.print("[dim]Local mode off.[/dim]")
+        return state
+    tags = _ollama_tags()
+    if tags is None:
+        console.print(Panel(
+            "[yellow]Ollama not reachable at localhost:11434.[/yellow]\n\n"
+            "Install from [cyan]https://ollama.com[/cyan], then:\n"
+            "  [bold]ollama serve[/bold]            start the server\n"
+            "  [bold]ollama pull llama3.2[/bold]    download a model\n\n"
+            "Re-run [bold]/local[/bold] to pick one. Local models are free, offline, no API key.",
+            title="[bold]Local Models · Ollama[/bold]", border_style=theme["border"]))
+        return state
+    if not arg:
+        if not tags:
+            console.print("[yellow]No local models installed. Try: [bold]ollama pull llama3.2[/bold][/yellow]")
+            return state
+        cur = state.get("model", "")
+        console.print(Panel(
+            "\n".join(f"  [{theme['accent']}]{t}[/{theme['accent']}]"
+                      + (" [dim]← active[/dim]" if f"ollama/{t}" == cur else "") for t in tags)
+            + "\n\n[dim]/local <name> to use one  ·  /local off to leave local mode[/dim]",
+            title=f"[bold]Local Models ({len(tags)} installed)[/bold]", border_style=theme["border"]))
+        return state
+    name  = arg.split()[0]
+    match = next((t for t in tags if t == name or t.split(":")[0] == name), None)
+    if not match:
+        console.print(f"[yellow]'{name}' not installed.[/yellow] Available: {', '.join(tags) or '(none)'}")
+        console.print(f"[dim]Install with: ollama pull {name}[/dim]")
+        return state
+    state["model"] = f"ollama/{match}"
+    state["use_ollama"] = True
+    console.print(f"[{theme['success']}]✓ Local model → {match}[/{theme['success']}]  [dim](offline · free)[/dim]")
     return state
 
 
@@ -11294,7 +11342,7 @@ def run_repl(state):
                 elif cmd == "statusline": state = cmd_statusline(state, args)
                 elif cmd == "arena":      history = cmd_arena(state, args, history)
                 elif cmd == "broadcast":  cmd_broadcast(state, args)
-                elif cmd == "local":      state = cmd_local(state, args or "llama3")
+                elif cmd in ("local", "ollama"): state = cmd_local(state, args)
                 elif cmd == "mesh":
                     console.print(Panel(json.dumps(BLACKBOARD, indent=2), title="Agent Mesh Blackboard", border_style="magenta"))
                 elif cmd == "live-fif":

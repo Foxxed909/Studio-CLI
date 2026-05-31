@@ -4,7 +4,7 @@ No I/O, no side-effects; pure data and tiny pure functions only.
 """
 import re
 
-VERSION          = "9.7"
+VERSION          = "9.8"
 API_BASE         = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENROUTER_BASE  = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL    = "nvidia/nemotron-3-super-120b-a12b:free"

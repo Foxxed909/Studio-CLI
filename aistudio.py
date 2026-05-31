@@ -1455,6 +1455,9 @@ ALL_COMMANDS = [
     "/checkpoint","/cp","/checkpoints","/rewind","/mcp",
     "/workflow","/wf","/marketplace","/market",
     "/ascii","/banner","/confetti","/matrix","/fortune",
+    # v9.8 — CLI utilities
+    "/json","/regex","/diff-files","/wc","/case","/sortlines","/sort","/uniq",
+    "/slug","/color","/cron","/http","/roll","/pick",
 ]
 
 COMMAND_METADATA = {
@@ -9221,6 +9224,216 @@ def cmd_fortune(state, args):
     console.print(Panel(f"[{acc}]🥠  {random.choice(FORTUNES)}[/{acc}]", border_style=acc, padding=(0, 2)))
 
 
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  v9.8  —  CLI utility commands                                            ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+def cmd_json(state, args):
+    """/json <text|file> — validate & pretty-print JSON."""
+    theme = state.get("theme", THEMES["default"])
+    raw = (args or "").strip()
+    if not raw:
+        console.print("[yellow]Usage: /json <json-string|file.json>[/yellow]"); return
+    p = Path(raw)
+    if p.exists() and p.is_file():
+        raw = p.read_text(encoding="utf-8", errors="replace")
+    try:
+        obj = json.loads(raw)
+    except Exception as e:
+        console.print(f"[red]Invalid JSON: {e}[/red]"); return
+    pretty = json.dumps(obj, indent=2, ensure_ascii=False)
+    console.print(Panel(Syntax(pretty, "json", theme="monokai", word_wrap=True),
+        title="[bold]✓ Valid JSON[/bold]", border_style=theme["border"]))
+
+
+def cmd_regex(state, args):
+    """/regex <pattern> ::: <text> — test a regex against text."""
+    if ":::" not in (args or ""):
+        console.print("[yellow]Usage: /regex <pattern> ::: <text>[/yellow]"); return
+    pat, text = args.split(":::", 1)
+    pat, text = pat.strip(), text.strip()
+    theme = state.get("theme", THEMES["default"])
+    try:
+        rx = re.compile(pat)
+    except Exception as e:
+        console.print(f"[red]Bad pattern: {e}[/red]"); return
+    matches = list(rx.finditer(text))
+    if not matches:
+        console.print("[yellow]No matches.[/yellow]"); return
+    lines = []
+    for m in matches[:20]:
+        grp = f"  groups={m.groups()}" if m.groups() else ""
+        lines.append(f"  [{theme['accent']}]{m.group(0)!r}[/{theme['accent']}] @ {m.start()}-{m.end()}{grp}")
+    console.print(Panel("\n".join(lines), title=f"[bold]{len(matches)} match(es)[/bold]", border_style=theme["border"]))
+
+
+def cmd_diff_files(state, args):
+    """/diff-files <a> <b> — unified diff of two files."""
+    parts = shlex.split(args or "")
+    if len(parts) < 2:
+        console.print("[yellow]Usage: /diff-files <fileA> <fileB>[/yellow]"); return
+    theme = state.get("theme", THEMES["default"])
+    try:
+        a = Path(parts[0]).read_text(encoding="utf-8", errors="replace").splitlines()
+        b = Path(parts[1]).read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception as e:
+        console.print(f"[red]{e}[/red]"); return
+    diff = "\n".join(difflib.unified_diff(a, b, parts[0], parts[1], lineterm=""))
+    if not diff.strip():
+        console.print("[dim]Files are identical.[/dim]"); return
+    console.print(Panel(Syntax(diff[:8000], "diff", theme="monokai", word_wrap=True),
+        title="[bold]Diff[/bold]", border_style=theme["border"]))
+
+
+def cmd_wc(state, args):
+    """/wc [file|text] — count lines, words, chars (file, text, or last response)."""
+    raw = (args or "").strip()
+    p = Path(raw) if raw else None
+    if raw and p.exists() and p.is_file():
+        text, src = p.read_text(encoding="utf-8", errors="replace"), raw
+    elif raw:
+        text, src = raw, "input"
+    else:
+        text, src = state.get("_last_response", ""), "last response"
+    if not text:
+        console.print("[yellow]Nothing to count.[/yellow]"); return
+    theme = state.get("theme", THEMES["default"])
+    lines = text.count("\n") + (1 if text and not text.endswith("\n") else 0)
+    console.print(Panel(f"[dim]source:[/dim] {src}\n"
+        f"lines: [bold]{lines}[/bold]   words: [bold]{len(text.split())}[/bold]   "
+        f"chars: [bold]{len(text)}[/bold]", title="[bold]Count[/bold]", border_style=theme["border"]))
+
+
+def cmd_case(state, args):
+    """/case <upper|lower|title|snake|camel|kebab> <text>."""
+    parts = (args or "").split(None, 1)
+    if len(parts) < 2:
+        console.print("[yellow]Usage: /case <upper|lower|title|snake|camel|kebab> <text>[/yellow]"); return
+    mode, text = parts[0].lower(), parts[1]
+    words = [w for w in re.split(r"[\s_\-]+", text.strip()) if w]
+    if   mode == "upper": out = text.upper()
+    elif mode == "lower": out = text.lower()
+    elif mode == "title": out = text.title()
+    elif mode == "snake": out = "_".join(w.lower() for w in words)
+    elif mode == "kebab": out = "-".join(w.lower() for w in words)
+    elif mode == "camel": out = (words[0].lower() + "".join(w.capitalize() for w in words[1:])) if words else ""
+    else:
+        console.print("[yellow]Unknown mode.[/yellow]"); return
+    acc = state.get("theme", THEMES["default"])["accent"]
+    console.print(f"[{acc}]{out}[/{acc}]")
+
+
+def cmd_sortlines(state, args):
+    """/sortlines <items> — sort items alphabetically (; or newline separated)."""
+    text = (args or "").strip()
+    if not text:
+        console.print("[yellow]Usage: /sortlines banana; apple; cherry[/yellow]"); return
+    out = sorted((i.strip() for i in re.split(r"[;\n]", text) if i.strip()), key=str.lower)
+    console.print("\n".join(out))
+
+
+def cmd_uniq(state, args):
+    """/uniq <items> — remove duplicates, keep first-seen order (; or newline separated)."""
+    text = (args or "").strip()
+    if not text:
+        console.print("[yellow]Usage: /uniq a; b; a; c[/yellow]"); return
+    seen, out = set(), []
+    for i in re.split(r"[;\n]", text):
+        i = i.strip()
+        if i and i not in seen:
+            seen.add(i); out.append(i)
+    console.print("\n".join(out))
+
+
+def cmd_slug(state, args):
+    """/slug <text> — make a URL-friendly slug."""
+    text = (args or "").strip().lower()
+    if not text:
+        console.print("[yellow]Usage: /slug Some Title Here[/yellow]"); return
+    slug = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    acc = state.get("theme", THEMES["default"])["accent"]
+    console.print(f"[{acc}]{slug}[/{acc}]")
+
+
+def cmd_color(state, args):
+    """/color <#hex|r,g,b> — show swatch + hex/rgb/hsl conversions."""
+    import colorsys
+    raw = (args or "").strip()
+    if not raw:
+        console.print("[yellow]Usage: /color #22d3ee  or  /color 34,211,238[/yellow]"); return
+    try:
+        if raw.startswith("#") or re.fullmatch(r"[0-9a-fA-F]{6}", raw):
+            h = raw.lstrip("#"); r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+        else:
+            r, g, b = [int(x) for x in raw.split(",")][:3]
+    except Exception:
+        console.print("[red]Could not parse color.[/red]"); return
+    hh, ll, ss = colorsys.rgb_to_hls(r/255, g/255, b/255)
+    hexv = f"#{r:02x}{g:02x}{b:02x}"
+    console.print(Panel(f"[on {hexv}]            [/on {hexv}]\n\n"
+        f"hex: [bold]{hexv}[/bold]\nrgb: [bold]{r}, {g}, {b}[/bold]\n"
+        f"hsl: [bold]{round(hh*360)}°, {round(ss*100)}%, {round(ll*100)}%[/bold]",
+        title="[bold]Color[/bold]", border_style=hexv))
+
+
+def cmd_cron(state, args):
+    """/cron <m> <h> <dom> <mon> <dow> — explain a cron expression."""
+    parts = (args or "").split()
+    if len(parts) != 5:
+        console.print("[yellow]Usage: /cron 0 9 * * 1-5  (min hour day month weekday)[/yellow]"); return
+    labels = ["minute", "hour", "day-of-month", "month", "day-of-week"]
+    def desc(v, lab):
+        if v == "*":          return f"every {lab}"
+        if v.startswith("*/"): return f"every {v[2:]} {lab}s"
+        return f"{lab} {v}"
+    lines = [f"  [bold]{p}[/bold]  →  {desc(p, l)}" for p, l in zip(parts, labels)]
+    acc = state.get("theme", THEMES["default"])["accent"]
+    console.print(Panel("\n".join(lines), title="[bold]Cron[/bold]", border_style=acc))
+
+
+def cmd_http(state, args):
+    """/http <code> — explain an HTTP status code."""
+    code = (args or "").strip()
+    CODES = {"200":"OK","201":"Created","202":"Accepted","204":"No Content","301":"Moved Permanently",
+        "302":"Found","304":"Not Modified","307":"Temporary Redirect","308":"Permanent Redirect",
+        "400":"Bad Request","401":"Unauthorized","402":"Payment Required","403":"Forbidden",
+        "404":"Not Found","405":"Method Not Allowed","408":"Request Timeout","409":"Conflict",
+        "410":"Gone","418":"I'm a teapot","422":"Unprocessable Entity","429":"Too Many Requests",
+        "500":"Internal Server Error","501":"Not Implemented","502":"Bad Gateway",
+        "503":"Service Unavailable","504":"Gateway Timeout"}
+    if code not in CODES:
+        console.print(f"[yellow]Unlisted code. Known: {', '.join(sorted(CODES))}[/yellow]"); return
+    cls = {"1":"Informational","2":"Success","3":"Redirection","4":"Client Error","5":"Server Error"}.get(code[0], "")
+    acc = state.get("theme", THEMES["default"])["accent"]
+    console.print(Panel(f"[bold {acc}]{code} {CODES[code]}[/bold {acc}]\n[dim]{cls}[/dim]",
+        title="[bold]HTTP Status[/bold]", border_style=acc))
+
+
+def cmd_roll(state, args):
+    """/roll [NdM] — roll dice, e.g. /roll 2d6 (default 1d6)."""
+    import random
+    spec = (args or "1d6").strip().lower()
+    m = re.fullmatch(r"(\d*)d(\d+)", spec)
+    if not m:
+        console.print("[yellow]Usage: /roll 2d6[/yellow]"); return
+    n, sides = int(m.group(1) or 1), int(m.group(2))
+    if not (1 <= n <= 100 and 2 <= sides <= 1000):
+        console.print("[yellow]Out of range (1-100 dice, 2-1000 sides).[/yellow]"); return
+    rolls = [random.randint(1, sides) for _ in range(n)]
+    acc = state.get("theme", THEMES["default"])["accent"]
+    console.print(f"[{acc}]🎲 {spec}: {rolls} = [bold]{sum(rolls)}[/bold][/{acc}]")
+
+
+def cmd_pick(state, args):
+    """/pick a, b, c — randomly choose one option."""
+    import random
+    opts = [o.strip() for o in re.split(r"[,\n]", args or "") if o.strip()]
+    if len(opts) < 2:
+        console.print("[yellow]Usage: /pick coffee, tea, water[/yellow]"); return
+    acc = state.get("theme", THEMES["default"])["accent"]
+    console.print(f"[{acc}]🎯 {random.choice(opts)}[/{acc}]")
+
+
 def cmd_spell(state, args):
     """/spell <word> — NATO phonetic alphabet spelling."""
     NATO = {
@@ -11914,6 +12127,21 @@ def run_repl(state):
                 elif cmd == "confetti":         cmd_confetti(state, args)
                 elif cmd == "matrix":           cmd_matrix_fx(state, args)
                 elif cmd == "fortune":          cmd_fortune(state, args)
+
+                # ── v9.8 CLI utility commands ──────────────────────────────────
+                elif cmd == "json":             cmd_json(state, args)
+                elif cmd == "regex":            cmd_regex(state, args)
+                elif cmd in ("diff-files", "difffiles"): cmd_diff_files(state, args)
+                elif cmd == "wc":               cmd_wc(state, args)
+                elif cmd == "case":             cmd_case(state, args)
+                elif cmd in ("sortlines", "sort"): cmd_sortlines(state, args)
+                elif cmd == "uniq":             cmd_uniq(state, args)
+                elif cmd == "slug":             cmd_slug(state, args)
+                elif cmd == "color":            cmd_color(state, args)
+                elif cmd == "cron":             cmd_cron(state, args)
+                elif cmd == "http":             cmd_http(state, args)
+                elif cmd == "roll":             cmd_roll(state, args)
+                elif cmd == "pick":             cmd_pick(state, args)
 
                 else:
                     # Check user-defined aliases first

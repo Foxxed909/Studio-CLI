@@ -536,7 +536,22 @@ def test_mcp_config_and_graceful_connect():
     assert "demo" not in _mcp.load_mcp_config().get("servers", {}), "MCP remove failed"
 
 run("/checkpoint + /rewind round-trip",         test_checkpoint_rewind_roundtrip)
+def test_workflow_and_alias_args():
+    # arg substitution
+    assert aistudio._apply_alias_args("review {input} please", "main.py") == "review main.py please"
+    assert aistudio._apply_alias_args("summarize", "the docs") == "summarize the docs"
+    # workflow set / show / del round-trip
+    st = _st()
+    aistudio.cmd_workflow(st, "set wftest first step || second step", [])
+    assert "wftest" in aistudio._load_workflows(), "workflow set did not persist"
+    assert len(aistudio._load_workflows()["wftest"]) == 2
+    aistudio.cmd_workflow(st, "show wftest", [])
+    aistudio.cmd_workflow(st, "list", [])
+    aistudio.cmd_workflow(st, "del wftest", [])
+    assert "wftest" not in aistudio._load_workflows(), "workflow del failed"
+
 run("/mcp config mgmt + graceful connect",      test_mcp_config_and_graceful_connect)
+run("/workflow + alias {input} substitution",   test_workflow_and_alias_args)
 
 # ══════════════════════════════════════════════════════════════
 # Summary

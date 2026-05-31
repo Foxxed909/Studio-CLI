@@ -1453,6 +1453,7 @@ ALL_COMMANDS = [
     "/commit","/stage","/stash","/blame","/pr",
     "/init","/map","/scratch","/ollama",
     "/checkpoint","/cp","/checkpoints","/rewind","/mcp",
+    "/workflow","/wf",
     "/ascii","/banner","/confetti","/matrix","/fortune",
 ]
 
@@ -8040,6 +8041,90 @@ def _save_aliases(aliases: dict) -> None:
     (CONFIG_DIR / "aliases.json").write_text(json.dumps(aliases, indent=2), encoding="utf-8")
     _aliases_cache, _aliases_cache_ts = aliases, time.time()
 
+def _apply_alias_args(template, args):
+    """Substitute {input}/{args} in a custom-command template, else append trailing args."""
+    args = (args or "").strip()
+    if "{input}" in template or "{args}" in template:
+        return template.replace("{input}", args).replace("{args}", args)
+    return f"{template} {args}".strip() if args else template
+
+
+def _load_workflows() -> dict:
+    path = CONFIG_DIR / "workflows.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        return {}
+
+
+def _save_workflows(wf: dict) -> None:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    (CONFIG_DIR / "workflows.json").write_text(json.dumps(wf, indent=2), encoding="utf-8")
+
+
+def cmd_workflow(state, args, history):
+    """/workflow [list|set <name> step || step|del <name>|show <name>|run <name>] — chain prompts."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    wf    = _load_workflows()
+    parts = (args or "").strip().split(" ", 2)
+    op    = (parts[0].lower() if parts and parts[0] else "list")
+
+    if op in ("", "list"):
+        if not wf:
+            console.print("[dim]No workflows. /workflow set <name> step1 || step2 …[/dim]")
+            return history
+        body = "\n".join(f"  [{acc}]{n}[/{acc}]  [dim]{len(s)} steps[/dim]" for n, s in sorted(wf.items()))
+        console.print(Panel(body + "\n\n[dim]/workflow run <name>  ·  /workflow show <name>[/dim]",
+            title=f"[bold]Workflows ({len(wf)})[/bold]", border_style=theme["border"]))
+        return history
+
+    if op == "set":
+        if len(parts) < 3:
+            console.print("[yellow]Usage: /workflow set <name> <step1> || <step2> …[/yellow]")
+            return history
+        name  = parts[1]
+        steps = [s.strip() for s in parts[2].split("||") if s.strip()]
+        if not steps:
+            console.print("[yellow]Need at least one step (separate with ||).[/yellow]")
+            return history
+        wf[name] = steps; _save_workflows(wf)
+        console.print(f"[{theme['success']}]✓ Workflow '{name}' saved ({len(steps)} steps)[/{theme['success']}]")
+        return history
+
+    if op in ("del", "rm", "delete"):
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /workflow del <name>[/yellow]"); return history
+        if wf.pop(parts[1], None) is not None:
+            _save_workflows(wf); console.print(f"[{theme['success']}]✓ Deleted '{parts[1]}'[/{theme['success']}]")
+        else:
+            console.print(f"[yellow]No workflow '{parts[1]}'[/yellow]")
+        return history
+
+    if op == "show":
+        name = parts[1] if len(parts) > 1 else ""
+        if name not in wf:
+            console.print(f"[yellow]No workflow '{name}'[/yellow]"); return history
+        body = "\n".join(f"  [{acc}]{i+1}.[/{acc}] {s}" for i, s in enumerate(wf[name]))
+        console.print(Panel(body, title=f"[bold]Workflow · {name}[/bold]", border_style=theme["border"]))
+        return history
+
+    if op == "run":
+        name = parts[1] if len(parts) > 1 else ""
+        if name not in wf:
+            console.print(f"[yellow]No workflow '{name}' — see /workflow list[/yellow]"); return history
+        extra = parts[2] if len(parts) > 2 else ""
+        steps = wf[name]
+        for i, step in enumerate(steps, 1):
+            prompt = _apply_alias_args(step, extra)
+            console.print(f"\n[{acc}]◆ Step {i}/{len(steps)}[/{acc}] [dim]{step[:60]}[/dim]")
+            _, history = ai_respond(state, prompt, history)
+        return history
+
+    console.print("[yellow]/workflow [list|set|del|show|run][/yellow]")
+    return history
+
+
 def cmd_alias(state, args, history):
     """/alias [list|set <name> <text>|del <name>|<name>] — custom prompt shortcuts."""
     theme   = state.get("theme", THEMES["default"])
@@ -11603,6 +11688,8 @@ def run_repl(state):
                 elif cmd == "alias":
                     # Check if first word of args is a known alias expansion trigger
                     history = cmd_alias(state, args, history)
+                elif cmd in ("workflow", "wf"):
+                    history = cmd_workflow(state, args, history)
                 elif cmd == "multiline":  state = cmd_multiline(state, args)
                 elif cmd == "note":       cmd_note(state, args)
                 elif cmd == "regen":      history = cmd_regen(state, args, history)
@@ -11738,8 +11825,9 @@ def run_repl(state):
                     # Check user-defined aliases first
                     _user_aliases = _load_aliases()
                     if cmd in _user_aliases:
-                        console.print(f"  [dim]Alias → {_user_aliases[cmd][:60]}[/dim]")
-                        _, history = ai_respond(state, _user_aliases[cmd], history)
+                        _expanded = _apply_alias_args(_user_aliases[cmd], args)
+                        console.print(f"  [dim]Alias → {_expanded[:60]}[/dim]")
+                        _, history = ai_respond(state, _expanded, history)
                         _autosave_session(history)
                     else:
                         # 10. Auto-Corrector Feature

@@ -4307,6 +4307,14 @@ function toast(msg,duration=2800){
   t.innerHTML=`<span class="toast-msg">${esc(msg)}</span>`;
   wrap.appendChild(t);setTimeout(()=>t.remove(),duration);
 }
+// One-time v9.7 announcement (new themes + Speak + Studio Lab change)
+(function announce97(){
+  if(localStorage.getItem("studioAnnounce97")) return;
+  setTimeout(()=>{ try{
+    toast("✨ v9.7 — 16 new animated themes + unified Speak. Studio Lab is now internal-testers only.", 6500);
+    localStorage.setItem("studioAnnounce97","1");
+  }catch(e){} }, 1500);
+})();
 function toastConfirm(msg,okLabel,onOk){
   const wrap=document.getElementById("toastWrap");
   const t=document.createElement("div");t.className="toast confirm";

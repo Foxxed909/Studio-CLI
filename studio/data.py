@@ -172,6 +172,18 @@ CREDIT_COSTS = {
 
 # ── PLAN UPDATES (version-gated changelogs) ───────────────────────────────────
 PLAN_UPDATES = {
+    "9.7": {
+        "date":    "2026-05-31",
+        "plans":   ["free", "starter", "pro", "dev", "max", "ultra", "team", "enterprise"],
+        "changes": [
+            "16 new themes across 4 families: Cosmic II, Weather, Nature, Retro/Synth",
+            "Speak: /tts and /voice are now one command — /speak (say) + /speak listen",
+            "Git/VCS commands: /commit /stage /stash /blame /pr",
+            "New helpers: /map (repo map) /scratch /ascii /banner /confetti /matrix /fortune",
+            "Studio Lab is now internal-testers only (email allowlist or access code)",
+            "Coming soon: MCP Connectors, /init project memory, Checkpoints, Local models",
+        ],
+    },
     "9.3": {
         "date":    "2026-05-16",
         "plans":   ["pro", "max", "ultra", "dev", "team", "enterprise"],

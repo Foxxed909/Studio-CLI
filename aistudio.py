@@ -40,6 +40,7 @@ from studio.data    import (
     MODEL_PRICING, DEFAULT_PRICE_PER_1K, model_price_per_1k, _is_openrouter_model,
     STUDIO_CONTEXT, PERSONAS,
     THEMES, UI_STYLES, STREAM_MODES, STUDIO_MODEL_ALIASES,
+    CELESTIAL_STYLES,
     SUPPORTED_PROVIDERS, CHAT_MODES, VIBE_PRESETS,
     _STATUSLINE_DEFAULTS_LAZY,
     _CASUAL_WORDS, _BUILD_WORDS, _ANALYZE_WORDS, _FIF_WORDS,
@@ -662,6 +663,21 @@ def typewrite(text: str, delay: float = 0.025, style: str = ""):
             console.print(ch, end="")
         time.sleep(delay)
     console.print()
+
+
+def _safe_read_json(path, default):
+    """Read + parse a JSON file, returning `default` if it's missing,
+    empty, or corrupted. Never raises on bad data."""
+    try:
+        p = Path(path)
+        if not p.exists():
+            return default
+        raw = p.read_text(encoding="utf-8").strip()
+        if not raw:
+            return default
+        return json.loads(raw)
+    except (OSError, ValueError):
+        return default
 
 
 # ── THINKING ANIMATION ────────────────────────────
@@ -2189,25 +2205,26 @@ def track_usage(state, tokens_in, tokens_out, is_heavy=False, prompt=""):
     save_usage(usage)
     state["_usage"] = usage
 
-    # Real cost tracking — free models contribute $0 but tokens are always counted
-    prof = load_profile()
-    if prof:
-        active_model = state.get("model") or DEFAULT_MODEL
-        pricing = model_price_per_1k(active_model)
-        cost = ((tokens_in + tokens_out) / 1000) * pricing
-        prof["balance"] = round(prof.get("balance", 0) - cost, 6)
-        # Track per-model usage counts + token spend per model
-        model_usage = prof.setdefault("model_usage", {})
-        model_spend = prof.setdefault("model_spend", {})
-        model_usage[active_model] = model_usage.get(active_model, 0) + 1
-        model_spend[active_model] = round(model_spend.get(active_model, 0.0) + cost, 6)
-        # Update session stats
-        prof["total_msgs"]        = prof.get("total_msgs", 0) + 1
-        prof["total_tokens_in"]   = prof.get("total_tokens_in", 0) + tokens_in
-        prof["total_tokens_out"]  = prof.get("total_tokens_out", 0) + tokens_out
-        prof["last_seen"]         = datetime.now().isoformat()
-        save_profile(prof)
-        state["balance"] = prof["balance"]
+    # Real cost tracking — free models contribute $0 but tokens are always counted.
+    # If no profile exists yet, start a fresh one so usage is never silently dropped.
+    uid  = state.get("user_id", "default")
+    prof = load_profile(uid) or {}
+    active_model = state.get("model") or DEFAULT_MODEL
+    pricing = model_price_per_1k(active_model)
+    cost = ((tokens_in + tokens_out) / 1000) * pricing
+    prof["balance"] = round(prof.get("balance", 0) - cost, 6)
+    # Track per-model usage counts + token spend per model
+    model_usage = prof.setdefault("model_usage", {})
+    model_spend = prof.setdefault("model_spend", {})
+    model_usage[active_model] = model_usage.get(active_model, 0) + 1
+    model_spend[active_model] = round(model_spend.get(active_model, 0.0) + cost, 6)
+    # Update session stats
+    prof["total_msgs"]        = prof.get("total_msgs", 0) + 1
+    prof["total_tokens_in"]   = prof.get("total_tokens_in", 0) + tokens_in
+    prof["total_tokens_out"]  = prof.get("total_tokens_out", 0) + tokens_out
+    prof["last_seen"]         = datetime.now().isoformat()
+    save_profile(uid, prof)
+    state["balance"] = prof["balance"]
 
 
 def _clean_terminal_text(text):
@@ -3761,7 +3778,10 @@ def cmd_load(name):
         if saves: console.print("[yellow]Available:[/yellow] " + ", ".join(s.stem for s in saves))
         else:     console.print("[yellow]No saved conversations[/yellow]")
         return []
-    history = json.loads(path.read_text())
+    history = _safe_read_json(path, None)
+    if not isinstance(history, list):
+        console.print(f"[yellow]Could not read '{name}' — file is empty or corrupted[/yellow]")
+        return []
     console.print(f"[green]✓ Loaded '{name}' ({len(history)//2} exchanges)[/green]")
     return history
 
@@ -7451,7 +7471,9 @@ def nerf_user(state, user_id):
 
 def _save_to_inbox(user_id, msg):
     path = Path("logs/inbox.json")
-    inbox = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    inbox = _safe_read_json(path, [])
+    if not isinstance(inbox, list):
+        inbox = []
     inbox.append(msg)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(inbox, indent=2), encoding="utf-8")
@@ -7459,7 +7481,9 @@ def _save_to_inbox(user_id, msg):
 def audit_log(event_type, details):
     """Securely log all system, login, and payment events."""
     path = Path("logs/audit.json")
-    audit = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    audit = _safe_read_json(path, [])
+    if not isinstance(audit, list):
+        audit = []
     audit.append({"ts": time.time(), "type": event_type, "details": details})
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(audit, indent=2), encoding="utf-8")
@@ -8671,7 +8695,7 @@ def cmd_test_coverage(state, args, history):
         try:
             r = subprocess.run(
                 ["npx", "jest", "--coverage", "--silent", "--passWithNoTests"],
-                capture_output=True, text=True, timeout=120, cwd=ws, shell=True,
+                capture_output=True, text=True, timeout=120, cwd=ws,
             )
             cov_output = (r.stdout + r.stderr)[:4000]
         except Exception as e:
@@ -9457,6 +9481,70 @@ def _animate_banner(lines, color, delay=0.04):
         console.print(f"[{color}]{line}[/{color}]")
 
 
+# ── CELESTIAL CHROME ────────────────────────────────────────────────────────
+# Unified, theme-adaptive welcome screen shared by the celestial UI styles
+# (windynight, foggyskies, moon, shootingstars, blackhole, magnetar).
+# Each style supplies a title, tagline, and a decorative motif row; the rest of
+# the layout + colors are pulled from the active theme so a single renderer
+# stays consistent across the whole collection.
+_CELESTIAL_CHROME = {
+    "windynight":   {"icon": "🌬️", "title": "WINDY NIGHT",    "tag": "the night air moves",
+                     "motif": "╶╴ ～ ╴╶ ～  ╶╴ ～ ╴╶  ～ ╶╴ ～"},
+    "foggyskies":   {"icon": "🌫️", "title": "FOGGY SKIES",    "tag": "soft and low",
+                     "motif": "░▒▓ ▒░  ░▒▓▒░  ▒▓░ ▒  ░▒▓▒░"},
+    "moon":         {"icon": "🌙", "title": "MOON",            "tag": "a quiet glow",
+                     "motif": "·  ✦   ·  ◐   ·  ✦  ·   ✧   ·"},
+    "shootingstars":{"icon": "☄️", "title": "SHOOTING STARS", "tag": "make a wish",
+                     "motif": "·  ✧   ╲___   ·  ✦   ╲__   ·  ✧"},
+    "blackhole":    {"icon": "🕳️", "title": "BLACK HOLE",      "tag": "past the event horizon",
+                     "motif": "◜◝  ◯  ◞◟    ◜◝  ◯  ◞◟    ◜◝"},
+    "magnetar":     {"icon": "🧲", "title": "MAGNETAR",        "tag": "a pulsing field",
+                     "motif": "≈ ⌇ ≈ ⌇ ≈   ⌇ ≈ ⌇ ≈ ⌇   ≈ ⌇ ≈"},
+}
+
+# Prompt-arrow glyph per celestial style (ASCII-width-safe for ptk alignment).
+_CELESTIAL_GLYPH = {
+    "windynight":   "⤳",
+    "foggyskies":   "░",
+    "moon":         "☾",
+    "shootingstars":"✦",
+    "blackhole":    "◯",
+    "magnetar":     "⌇",
+}
+
+
+def _render_celestial_welcome(ui, theme, short, mode_str, ws_short, plan_cfg,
+                              perms, stream_m, msg_str, sess_n, username):
+    chrome   = _CELESTIAL_CHROME.get(ui, _CELESTIAL_CHROME["moon"])
+    border_c = theme["border"].replace("bold ", "")
+    acc      = theme["accent"]
+    banner   = theme["banner_color"]
+    sub      = theme["banner_sub"]
+    icon     = chrome["icon"]
+
+    body = (
+        f"  [{sub}]{chrome['motif']}[/{sub}]\n\n"
+        f"  [bold {acc}]Model[/bold {acc}]     [{theme['success']}]{short}[/{theme['success']}]"
+        f"  [dim]·  {mode_str}[/dim]\n"
+        f"  [bold {acc}]Dir[/bold {acc}]       [dim]{ws_short}[/dim]\n"
+        f"  [bold {acc}]Plan[/bold {acc}]      [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+        f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]\n"
+        f"  [bold {acc}]Stream[/bold {acc}]    [dim]{stream_m}[/dim]"
+        f"  [dim]·  perms {perms}[/dim]\n\n"
+        f"  [dim {sub}]/enter .   /models   /agent berry   /vibe   /help[/dim {sub}]"
+    )
+    console.print()
+    console.print(Panel(
+        body,
+        title=f"[bold {banner}]{icon}  {chrome['title']}[/bold {banner}]"
+              f"  [dim {sub}]╱  Studio CLI  ·  v{VERSION}[/dim {sub}]",
+        subtitle=f"[dim {sub}]{username}  ·  {chrome['tag']}[/dim {sub}]",
+        border_style=border_c,
+        padding=(0, 2),
+    ))
+    console.print()
+
+
 def render_welcome(state):
     """Render startup screen — plan-aware, ui-aware."""
     theme    = state.get("theme", THEMES["default"])
@@ -9788,6 +9876,14 @@ def render_welcome(state):
         )
         return
 
+    # ── CELESTIAL COLLECTION (unified redesigned chrome) ─────────────────────
+    if ui in CELESTIAL_STYLES:
+        _render_celestial_welcome(
+            ui, theme, short, mode_str, ws_short, plan_cfg,
+            perms, stream_m, msg_str, sess_n, username,
+        )
+        return
+
     # ── GEMINI (default) ────────────────────────────────────────────────────
     # Redesigned inline instead of delegating to get_banner
     console.print()
@@ -9850,24 +9946,36 @@ def activate_agent_session(state, aid):
 
 
 def _prompt_html(theme, ui_style):
+    # Use ptk's <style fg="..."> form so hex colors (e.g. "#818cf8") are valid —
+    # a bare <#818cf8> tag is not well-formed XML and raises ExpatError.
     pname = theme["prompt_name"]
     pc    = _ptk_style_token(theme["prompt_user"])
     ac    = _ptk_style_token(theme["prompt_arrow"])
+
+    def u(content):  # prompt-user color
+        return f'<style fg="{pc}">{content}</style>'
+
+    def a(content):  # arrow color
+        return f'<style fg="{ac}">{content}</style>'
+
     if ui_style == "claude":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>▸ </{ac}>")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('▸ ')}")
     if ui_style == "codex":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>$&gt; </{ac}>")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('$&gt; ')}")
     if ui_style == "studio":
-        return HTML(f"<{pc}><b>◆ {pname}</b></{pc}> <{ac}>›</{ac}> ")
+        return HTML(f"{u(f'<b>◆ {pname}</b>')} {a('›')} ")
     if ui_style == "ghost":
-        return HTML(f"<{pc}>◌ </{pc}>")
+        return HTML(u("◌ "))
     if ui_style == "nova":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>⚡ </{ac}>")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('⚡ ')}")
     if ui_style == "foxxia":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>🦊 </{ac}>")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('🦊 ')}")
     if ui_style == "rain":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>░ </{ac}>")
-    return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>›</{ac}> ")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('░ ')}")
+    if ui_style in CELESTIAL_STYLES:
+        glyph = _CELESTIAL_GLYPH.get(ui_style, "✦")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a(f'{glyph} ')}")
+    return HTML(f"{u(f'<b>{pname}</b>')} {a('›')} ")
 
 
 _toolbar_disk_cache: dict = {"ts": 0.0, "mem_n": 0, "prof": None, "trial": None, "branch": ""}
@@ -10105,6 +10213,17 @@ def _prompt_box(theme, ui_style, state):
             ("fg:#00ff41",       top),
             ("fg:#00ff41",       mid),
             ("fg:#00ffff bold",  "░ "),
+        ])
+    elif ui_style in CELESTIAL_STYLES:
+        glyph = _CELESTIAL_GLYPH.get(ui_style, "✦")
+        icon  = _CELESTIAL_CHROME.get(ui_style, {}).get("icon", "✦")
+        fill  = max(2, 50 - len(label) - len(model_short) - len(mode_tag))
+        top   = f" ╭─ {icon} {label}{mode_tag} {'─'*fill} {model_short} ─╮\n"
+        mid   = " │ "
+        return FormattedText([
+            (f"fg:{pc}",      top),
+            (f"fg:{pc}",      mid),
+            (f"fg:{ac} bold", f"{glyph} "),
         ])
     else:
         fill  = max(2, 55 - len(label) - len(model_short))

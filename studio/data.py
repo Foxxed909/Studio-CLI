@@ -4,7 +4,7 @@ No I/O, no side-effects; pure data and tiny pure functions only.
 """
 import re
 
-VERSION          = "9.5"
+VERSION          = "9.6"
 API_BASE         = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENROUTER_BASE  = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL    = "nvidia/nemotron-3-super-120b-a12b:free"
@@ -385,10 +385,21 @@ THEMES = {
     "godson":      {"name":"God Own Son ✝",           "banner_color":"bold #fde68a",  "accent":"#fde68a",       "prompt_user":"#fde68a",     "prompt_arrow":"#b45309",         "border":"#b45309",   "success":"#fde68a",  "error":"bold red","warning":"#fbbf24","dim":"dim",  "banner_sub":"#b45309",     "icon":"✝",  "prompt_name":"godson"},
     "downcli":     {"name":"Down CLI ▼",              "banner_color":"bold #9ca3af",  "accent":"#6b7280",       "prompt_user":"#9ca3af",     "prompt_arrow":"#6b7280",         "border":"#374151",   "success":"#9ca3af",  "error":"bold red","warning":"#d1d5db","dim":"dim",  "banner_sub":"#6b7280",     "icon":"▼",  "prompt_name":"down"},
     "badhappening":{"name":"Bad Happening ⚠",         "banner_color":"bold #ea580c",  "accent":"#84cc16",       "prompt_user":"#ea580c",     "prompt_arrow":"#84cc16",         "border":"#ea580c",   "success":"#84cc16",  "error":"bold red","warning":"#fbbf24","dim":"dim",  "banner_sub":"#84cc16",     "icon":"⚠",  "prompt_name":"bad"},
+    # ── Celestial collection (v-redesign) ────────────────────────────────────
+    "windynight":  {"name":"Windy Night 🌬️",          "banner_color":"bold #818cf8",  "accent":"#a5b4fc",       "prompt_user":"#818cf8",     "prompt_arrow":"#6366f1",         "border":"#4f46e5",   "success":"#a5b4fc",  "error":"#f87171", "warning":"#fbbf24","dim":"dim",  "banner_sub":"#6366f1",     "icon":"🌬️", "prompt_name":"windy"},
+    "foggyskies":  {"name":"Foggy Skies 🌫️",          "banner_color":"bold #cbd5e1",  "accent":"#94a3b8",       "prompt_user":"#cbd5e1",     "prompt_arrow":"#64748b",         "border":"#64748b",   "success":"#a3e635",  "error":"#f87171", "warning":"#fbbf24","dim":"dim",  "banner_sub":"#94a3b8",     "icon":"🌫️", "prompt_name":"fog"},
+    "moon":        {"name":"Moon 🌙",                  "banner_color":"bold #e5e7eb",  "accent":"#d1d5db",       "prompt_user":"#e5e7eb",     "prompt_arrow":"#9ca3af",         "border":"#9ca3af",   "success":"#d1d5db",  "error":"#f87171", "warning":"#fde68a","dim":"dim",  "banner_sub":"#9ca3af",     "icon":"🌙", "prompt_name":"moon"},
+    "shootingstars":{"name":"Shooting Stars ☄️",       "banner_color":"bold #93c5fd",  "accent":"#c4b5fd",       "prompt_user":"#93c5fd",     "prompt_arrow":"#a78bfa",         "border":"#1e3a8a",   "success":"#67e8f9",  "error":"#f87171", "warning":"#fde68a","dim":"dim",  "banner_sub":"#a78bfa",     "icon":"☄️", "prompt_name":"stars"},
+    "blackhole":   {"name":"Black Hole 🕳️",           "banner_color":"bold #fb923c",  "accent":"#f59e0b",       "prompt_user":"#fb923c",     "prompt_arrow":"#b45309",         "border":"#7c2d12",   "success":"#fbbf24",  "error":"bold red","warning":"#fb923c","dim":"dim",  "banner_sub":"#b45309",     "icon":"🕳️", "prompt_name":"hole"},
+    "magnetar":    {"name":"Magnetar 🧲",              "banner_color":"bold #e879f9",  "accent":"#d946ef",       "prompt_user":"#e879f9",     "prompt_arrow":"#c026d3",         "border":"#701a75",   "success":"#f0abfc",  "error":"bold red","warning":"#fbbf24","dim":"dim",  "banner_sub":"#c026d3",     "icon":"🧲", "prompt_name":"magnetar"},
 }
 
 UI_STYLES    = ("claude", "gemini", "codex", "studio", "ghost", "nova", "foxxia", "strawberry",
-                "darkred", "sophia", "godson", "downcli", "badhappening", "rain")
+                "darkred", "sophia", "godson", "downcli", "badhappening", "rain",
+                "windynight", "foggyskies", "moon", "shootingstars", "blackhole", "magnetar")
+
+# UI styles that share the unified "celestial" chrome (theme-adaptive header/prompt)
+CELESTIAL_STYLES = ("windynight", "foggyskies", "moon", "shootingstars", "blackhole", "magnetar")
 STREAM_MODES = ("off", "auto", "on", "type")
 
 STUDIO_MODEL_ALIASES = {
@@ -457,6 +468,12 @@ VIBE_PRESETS = {
     "godson":      {"ui": "godson",      "theme": "godson"},
     "downcli":     {"ui": "downcli",     "theme": "downcli"},
     "badhappening":{"ui": "badhappening","theme": "badhappening"},
+    "windynight":   {"ui": "windynight",   "theme": "windynight"},
+    "foggyskies":   {"ui": "foggyskies",   "theme": "foggyskies"},
+    "moon":         {"ui": "moon",         "theme": "moon"},
+    "shootingstars":{"ui": "shootingstars","theme": "shootingstars"},
+    "blackhole":    {"ui": "blackhole",    "theme": "blackhole"},
+    "magnetar":     {"ui": "magnetar",     "theme": "magnetar"},
 }
 
 # ── MODE DETECTION ────────────────────────────────────────────────────────────

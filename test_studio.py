@@ -361,6 +361,92 @@ run("typewrite strips Rich markup tags",          test_typewrite_strips_rich_mar
 run("_make_toolbar TTL cache avoids extra reads", test_toolbar_cache_avoids_repeated_reads)
 
 # ══════════════════════════════════════════════════════════════
+# 19. Redesign + new bug-fix regressions
+# ══════════════════════════════════════════════════════════════
+print("\n[19 ] Redesign + bug-fix regressions")
+
+from prompt_toolkit.formatted_text import to_formatted_text
+
+CELESTIAL = ("windynight", "foggyskies", "moon", "shootingstars", "blackhole", "magnetar")
+_THEME_KEYS = {"name","banner_color","accent","prompt_user","prompt_arrow","border",
+               "success","error","warning","dim","banner_sub","icon","prompt_name"}
+
+def test_safe_read_json():
+    # missing file → default
+    assert aistudio._safe_read_json("definitely_missing_xyz.json", "D") == "D"
+    p = Path("logs/_t_srj.json"); p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("{not valid json", encoding="utf-8")          # corrupt → default
+    assert aistudio._safe_read_json(p, []) == []
+    p.write_text("", encoding="utf-8")                          # empty → default
+    assert aistudio._safe_read_json(p, {"a": 1}) == {"a": 1}
+    p.write_text('{"ok": true}', encoding="utf-8")              # valid → parsed
+    assert aistudio._safe_read_json(p, None) == {"ok": True}
+    p.unlink()
+
+def test_cmd_load_corrupt_is_graceful():
+    name = "_t_corrupt_convo"
+    p = aistudio.CONVOS_DIR / f"{name}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("{this is not json", encoding="utf-8")
+    try:
+        out = aistudio.cmd_load(name)          # must NOT raise
+        assert out == [], f"expected [] on corrupt file, got {out!r}"
+    finally:
+        p.unlink()
+
+def test_track_usage_creates_profile_when_missing():
+    saved = {}
+    def fake_save(uid, prof=None):
+        saved["uid"], saved["prof"] = uid, prof
+    with mock.patch("aistudio.load_profile", return_value=None), \
+         mock.patch("aistudio.save_profile", side_effect=fake_save), \
+         mock.patch("aistudio.load_usage", return_value={}), \
+         mock.patch("aistudio.save_usage"):
+        st = make_state()
+        aistudio.track_usage(st, 100, 50, prompt="hi")
+    assert isinstance(saved.get("prof"), dict), "profile not created when missing"
+    assert saved["prof"].get("total_msgs") == 1, "usage not tracked into fresh profile"
+
+def test_jest_not_shell_true():
+    src = inspect.getsource(aistudio)
+    idx = src.find('"jest", "--coverage"')
+    assert idx != -1, "jest invocation not found"
+    assert "shell=True" not in src[idx:idx+220], "jest still uses shell=True (drops flags on POSIX)"
+
+def test_new_themes_present_and_complete():
+    for t in CELESTIAL:
+        assert t in THEMES, f"missing celestial theme: {t}"
+        missing = _THEME_KEYS - set(THEMES[t])
+        assert not missing, f"{t} missing keys {missing}"
+
+def test_celestial_ui_styles_registered():
+    for ui in CELESTIAL:
+        assert ui in aistudio.UI_STYLES, f"{ui} not in UI_STYLES"
+        assert ui in aistudio.CELESTIAL_STYLES, f"{ui} not in CELESTIAL_STYLES"
+
+def test_all_prompts_build_for_every_ui():
+    # Regression: hex prompt colors used to crash _prompt_html (ExpatError)
+    for ui in aistudio.UI_STYLES:
+        th = THEMES.get(ui, THEMES["default"])
+        st = make_state(); st["ui_style"] = ui; st["theme"] = th
+        to_formatted_text(aistudio._prompt_html(th, ui))
+        to_formatted_text(aistudio._prompt_box(th, ui, st))
+
+def test_celestial_welcome_renders():
+    for ui in CELESTIAL:
+        st = make_state(); st["ui_style"] = ui; st["theme"] = THEMES[ui]
+        aistudio.render_welcome(st)     # must not raise
+
+run("_safe_read_json handles missing/empty/corrupt/valid", test_safe_read_json)
+run("cmd_load is graceful on corrupt conversation file",   test_cmd_load_corrupt_is_graceful)
+run("track_usage creates profile when missing",            test_track_usage_creates_profile_when_missing)
+run("jest coverage no longer uses shell=True",             test_jest_not_shell_true)
+run("celestial themes present + complete keys",            test_new_themes_present_and_complete)
+run("celestial UI styles registered",                      test_celestial_ui_styles_registered)
+run("all UI styles build prompts (hex HTML fix)",          test_all_prompts_build_for_every_ui)
+run("celestial welcome screens render",                    test_celestial_welcome_renders)
+
+# ══════════════════════════════════════════════════════════════
 # Summary
 # ══════════════════════════════════════════════════════════════
 passed = sum(1 for r in results if r[0] == PASS)

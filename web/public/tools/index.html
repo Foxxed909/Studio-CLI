@@ -1,0 +1,31 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Studio Tools</title><style>
+:root{--bg:#06070b;--surface:#0f1117;--surface2:#161a22;--border:rgba(148,163,184,.16);
+--text:#e7ebf0;--text2:#9aa4b2;--acc:#22d3ee;--danger:#f87171;--ok:#4ade80}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(130% 100% at 50% 0,#0d1422,#06070b 60%);
+color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);
+position:sticky;top:0;background:rgba(6,7,11,.7);backdrop-filter:blur(8px);z-index:5}
+.logo{font-weight:800;font-size:16px;display:flex;gap:8px;align-items:center}
+.back{color:var(--text2);text-decoration:none;font-size:13px;border:1px solid var(--border);padding:7px 13px;border-radius:9px}
+.back:hover{color:var(--text);border-color:var(--acc)}
+main{max-width:880px;margin:0 auto;padding:26px 20px 70px}
+h1{font-size:23px;margin:4px 0 2px}.sub{color:var(--text2);margin:0 0 22px;font-size:13.5px}
+textarea,input[type=text]{width:100%;background:#0a0d13;border:1px solid var(--border);border-radius:10px;
+color:var(--text);padding:11px 13px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace;outline:none}
+textarea{min-height:120px;resize:vertical}textarea:focus,input:focus{border-color:var(--acc)}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+button.b{background:var(--acc);color:#04121a;border:0;border-radius:9px;padding:9px 16px;font-weight:600;cursor:pointer;font-size:13px}
+button.s{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:9px 16px;cursor:pointer;font-size:13px}
+button.s:hover{border-color:var(--acc)}
+.out{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:13px;margin-top:12px;
+white-space:pre-wrap;word-break:break-word;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;min-height:40px}
+label{font-size:12px;color:var(--text2);display:block;margin:10px 0 4px}
+.err{color:var(--danger)}.ok{color:var(--ok)}.acc{color:var(--acc)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:640px){.grid{grid-template-columns:1fr}}
+.swatch{height:60px;border-radius:10px;border:1px solid var(--border)}
+mark{background:rgba(34,211,238,.3);color:#fff;border-radius:3px}
+.card{display:flex;gap:12px;align-items:center;background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:15px;text-decoration:none;color:var(--text);transition:.15s}.card:hover{border-color:var(--acc);transform:translateY(-2px)}.ic{font-size:24px}.nm{font-weight:700;font-size:14px}.ds{font-size:12px;color:var(--text2)}.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}</style></head><body>
+<header><div class="logo">🧰 Studio Tools</div><a class="back" href="/index.html">← Back to Studio</a></header>
+<main><h1>Developer Tools</h1><p class="sub">12 fast, private, offline mini-tools — nothing leaves your browser.</p>
+<div class="cards"><a class="card" href="/tools/json.html"><div class="ic">🗂</div><div><div class="nm">JSON Formatter</div><div class="ds">Validate & pretty-print JSON</div></div></a><a class="card" href="/tools/regex.html"><div class="ic">🔍</div><div><div class="nm">Regex Tester</div><div class="ds">Test patterns with live highlighting</div></div></a><a class="card" href="/tools/diff.html"><div class="ic">📑</div><div><div class="nm">Diff Viewer</div><div class="ds">Compare two texts line-by-line</div></div></a><a class="card" href="/tools/base64.html"><div class="ic">🔡</div><div><div class="nm">Base64</div><div class="ds">Encode / decode (UTF-8 safe)</div></div></a><a class="card" href="/tools/hash.html"><div class="ic">🔐</div><div><div class="nm">Hash</div><div class="ds">SHA-1 / 256 / 512 via Web Crypto</div></div></a><a class="card" href="/tools/uuid.html"><div class="ic">🆔</div><div><div class="nm">UUID</div><div class="ds">Generate v4 identifiers</div></div></a><a class="card" href="/tools/color.html"><div class="ic">🎨</div><div><div class="nm">Color Tool</div><div class="ds">Hex / RGB / HSL converter</div></div></a><a class="card" href="/tools/jwt.html"><div class="ic">🪪</div><div><div class="nm">JWT Decoder</div><div class="ds">Inspect token header & payload</div></div></a><a class="card" href="/tools/markdown.html"><div class="ic">📝</div><div><div class="nm">Markdown Preview</div><div class="ds">Live Markdown → HTML</div></div></a><a class="card" href="/tools/cron.html"><div class="ic">⏰</div><div><div class="nm">Cron Explainer</div><div class="ds">Decode cron schedules</div></div></a><a class="card" href="/tools/timestamp.html"><div class="ic">🕒</div><div><div class="nm">Timestamp</div><div class="ds">Unix ↔ human dates</div></div></a><a class="card" href="/tools/case.html"><div class="ic">🔠</div><div><div class="nm">Case Converter</div><div class="ds">UPPER / snake / camel / kebab</div></div></a></div></main></body></html>

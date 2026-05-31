@@ -564,7 +564,32 @@ def test_marketplace_install_and_export_import():
     aistudio.cmd_marketplace(st, f"import {exports[-1]}")    # re-import must not crash
 
 run("/workflow + alias {input} substitution",   test_workflow_and_alias_args)
+def test_v98_cli_utilities():
+    st = _st()
+    # functional assertions (capture via no-crash + ALL_COMMANDS registration)
+    import io, contextlib
+    def out(fn, arg):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            getattr(aistudio, fn)(st, arg)
+        return buf.getvalue()
+    # case conversions
+    assert "hello_world" in out("cmd_case", "snake Hello World")
+    assert "my-cool-title" in out("cmd_slug", "My Cool Title!")
+    # sort + uniq
+    so = out("cmd_sortlines", "banana; apple; cherry"); assert so.index("apple") < so.index("banana")
+    assert out("cmd_uniq", "a; b; a; c").count("a") == 1
+    # http + cron + color + json don't crash
+    for fn, arg in [("cmd_http","404"),("cmd_cron","0 9 * * 1-5"),("cmd_color","#22d3ee"),
+                    ("cmd_json",'{"x":1}'),("cmd_roll","2d6"),("cmd_pick","a, b"),
+                    ("cmd_wc","hello world"),("cmd_regex",r"\d+ ::: abc 12")]:
+        out(fn, arg)
+    for c in ["/json","/regex","/diff-files","/wc","/case","/sortlines","/uniq",
+              "/slug","/color","/cron","/http","/roll","/pick"]:
+        assert c in aistudio.ALL_COMMANDS, f"{c} missing from ALL_COMMANDS"
+
 run("/marketplace install + export/import",      test_marketplace_install_and_export_import)
+run("v9.8 CLI utility commands",                 test_v98_cli_utilities)
 
 # ══════════════════════════════════════════════════════════════
 # Summary

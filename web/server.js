@@ -1154,6 +1154,65 @@ app.get("/testing", (_req, res) => res.sendFile(path.join(__dirname, "public", "
 app.get("/landing",  (_req, res) => res.sendFile(path.join(__dirname, "public", "landing.html")));
 app.get("/pricing",  (_req, res) => res.sendFile(path.join(__dirname, "public", "pricing.html")));
 
+// ── Feedback / Inbox (in-memory + best-effort file persistence) ───────────────
+const FEEDBACK = [];
+const FEEDBACK_FILE = path.join(__dirname, "..", "logs", "feedback.json");
+try {
+  const fs = require("fs");
+  if (fs.existsSync(FEEDBACK_FILE)) {
+    const d = JSON.parse(fs.readFileSync(FEEDBACK_FILE, "utf8"));
+    if (Array.isArray(d)) FEEDBACK.push(...d.slice(-200));
+  }
+} catch (_) {}
+function saveFeedback() {
+  try {
+    const fs = require("fs");
+    const dir = path.dirname(FEEDBACK_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(FEEDBACK_FILE, JSON.stringify(FEEDBACK.slice(-200), null, 2));
+  } catch (_) {}
+}
+function feedbackInternalOK(req) {
+  try { if (isLocalRequest(req)) return true; } catch (_) {}
+  return req.get("X-Internal") === "ZERO-2026";
+}
+// Anyone can submit feedback
+app.post("/api/feedback", (req, res) => {
+  const { message, kind, email, page } = req.body || {};
+  const text = String(message || "").trim().slice(0, 2000);
+  if (!text) return res.status(400).json({ error: "Empty feedback" });
+  const item = {
+    id: "fb_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    kind: ["bug", "idea", "praise", "other"].includes(kind) ? kind : "other",
+    message: text,
+    email: String(email || "").slice(0, 120),
+    page: String(page || "").slice(0, 200),
+    ts: Date.now(),
+    read: false,
+  };
+  FEEDBACK.push(item);
+  if (FEEDBACK.length > 200) FEEDBACK.splice(0, FEEDBACK.length - 200);
+  saveFeedback();
+  res.json({ ok: true, id: item.id });
+});
+// Internal-only: read the inbox (localhost or X-Internal secret)
+app.get("/api/feedback", (req, res) => {
+  if (!feedbackInternalOK(req)) return res.status(403).json({ error: "internal only" });
+  res.json({
+    items: FEEDBACK.slice().reverse(),
+    count: FEEDBACK.length,
+    unread: FEEDBACK.filter(f => !f.read).length,
+  });
+});
+app.post("/api/feedback/read", (req, res) => {
+  if (!feedbackInternalOK(req)) return res.status(403).json({ error: "internal only" });
+  const { id, all } = req.body || {};
+  if (all) FEEDBACK.forEach(f => (f.read = true));
+  else { const it = FEEDBACK.find(f => f.id === id); if (it) it.read = true; }
+  saveFeedback();
+  res.json({ ok: true });
+});
+
 // Export for Vercel serverless
 module.exports = app;
 

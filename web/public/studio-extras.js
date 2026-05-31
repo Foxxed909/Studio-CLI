@@ -177,6 +177,20 @@
       };
       cin.addEventListener("input", upd); upd();
     }
+
+    // Inbox unread badge (internal testers only)
+    try {
+      var allow = ["jasminefoxx799@gmail.com", "studio@foxxia.dev"];
+      var email = (localStorage.getItem("studioEmail") || "").trim().toLowerCase();
+      var internal = localStorage.getItem("zeroAccess") === "1" || allow.indexOf(email) >= 0;
+      var badge = document.getElementById("inboxBadge");
+      if (internal && badge) {
+        fetch("/api/feedback", { headers: { "X-Internal": "ZERO-2026" } })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (d) { if (d && d.unread > 0) { badge.textContent = d.unread; badge.style.display = "inline-flex"; } })
+          .catch(function () {});
+      }
+    } catch (e) {}
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", build);

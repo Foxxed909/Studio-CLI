@@ -92,6 +92,48 @@
     toastMsg(document.body.classList.contains("studio-focus") ? "🧘 Focus mode on" : "Focus mode off");
   };
   window.qdShortcuts = function () { document.getElementById("scOv").classList.add("on"); };
+  window.qdFeedback = function () {
+    var ex = document.getElementById("qfb"); if (ex) { ex.style.display = "flex"; return; }
+    var ov = el("div", { id: "qfb" });
+    ov.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:80";
+    ov.innerHTML =
+      '<div style="max-width:420px;width:90%;background:var(--surface,#141416);border:1px solid var(--border,#333);border-radius:16px;padding:22px;color:var(--text,#ededee)">' +
+      '<h3 style="margin:0 0 4px">Send feedback</h3>' +
+      '<p style="color:var(--text2,#9aa4b2);font-size:13px;margin:0 0 14px">Bugs, ideas, or love — it lands in the team inbox.</p>' +
+      '<div style="display:flex;gap:6px;margin-bottom:10px">' +
+      ["bug", "idea", "praise", "other"].map(function (k, i) {
+        return '<button data-k="' + k + '" class="qfbk-b" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--border,#333);background:' +
+          (i === 0 ? "var(--acc,#22d3ee);color:#04121a" : "transparent;color:var(--text2,#9aa4b2)") +
+          ';cursor:pointer;font:inherit;font-size:12px;text-transform:capitalize">' + k + "</button>";
+      }).join("") + "</div>" +
+      '<textarea id="qfbm" rows="4" placeholder="What\'s on your mind?" style="width:100%;background:#0a0d13;border:1px solid var(--border,#333);border-radius:10px;color:var(--text,#ededee);padding:11px;font:inherit;font-size:14px;resize:vertical;outline:0"></textarea>' +
+      '<div id="qfbe" style="color:#f87171;font-size:12px;min-height:16px;margin-top:6px"></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">' +
+      '<button class="qfb-cancel" style="background:none;border:1px solid var(--border,#333);color:var(--text2,#9aa4b2);border-radius:9px;padding:9px 15px;cursor:pointer;font:inherit">Cancel</button>' +
+      '<button class="qfb-send" style="background:var(--ink,#ededee);color:var(--bg,#0a0a0b);border:0;border-radius:9px;padding:9px 18px;cursor:pointer;font:inherit;font-weight:600">Send</button>' +
+      "</div></div>";
+    document.body.appendChild(ov);
+    var kind = "bug";
+    ov.querySelectorAll(".qfbk-b").forEach(function (btn) {
+      btn.onclick = function () {
+        kind = btn.getAttribute("data-k");
+        ov.querySelectorAll(".qfbk-b").forEach(function (b) { b.style.background = "transparent"; b.style.color = "var(--text2,#9aa4b2)"; });
+        btn.style.background = "var(--acc,#22d3ee)"; btn.style.color = "#04121a";
+      };
+    });
+    ov.querySelector(".qfb-cancel").onclick = function () { ov.remove(); };
+    ov.addEventListener("click", function (e) { if (e.target === ov) ov.remove(); });
+    ov.querySelector(".qfb-send").onclick = function () {
+      var msg = ov.querySelector("#qfbm").value.trim();
+      if (!msg) { ov.querySelector("#qfbe").textContent = "Please write something first."; return; }
+      var email = ""; try { email = JSON.parse(localStorage.getItem("studioSettings") || "{}").email || ""; } catch (e) {}
+      fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg, kind: kind, email: email, page: location.pathname }) })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function () { ov.remove(); toastMsg("💬 Thanks — feedback sent!"); })
+        .catch(function () { ov.querySelector("#qfbe").textContent = "Couldn't send (is the server running?)."; });
+    };
+  };
 
   // ── build dock + shortcuts modal ────────────────────────────────────────────
   function build() {
@@ -103,6 +145,7 @@
      ["⬇", "Download as Markdown", "qdExport", "md"],
      ["🎲", "Shuffle theme", "qdShuffleTheme"],
      ["🧘", "Focus mode", "qdFocus"],
+     ["💬", "Send feedback", "qdFeedback"],
      ["⌨", "Shortcuts", "qdShortcuts"]].forEach(function (b) {
       var btn = el("button", { class: "qd-btn", title: b[1] }, b[0]);
       btn.onclick = function () { window[b[2]](b[3]); };

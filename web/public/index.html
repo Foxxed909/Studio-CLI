@@ -1765,6 +1765,10 @@ body.gm-ui-active .file-pre-name{min-width:0}
       Community
       <span class="sf-badge" id="cmOnlineBadge" style="display:none;margin-left:auto">0</span>
     </button>
+    <button class="sb-new-chat" onclick="openAgents()" id="agentsBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+      Agents
+    </button>
   </div>
   <div class="sidebar-search">
     <input id="convoSearch" placeholder="Search chats…" oninput="filterConvos(this.value)"/>
@@ -2176,6 +2180,18 @@ body.gm-ui-active .file-pre-name{min-width:0}
       <textarea class="lcp-fix-input" id="lcpFixInput" placeholder="Suggest a fix or change… e.g. 'make the button blue' or 'add a dark mode toggle'" rows="1" oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px'" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();lcpApplyFix();}"></textarea>
       <button class="lcp-fix-btn" id="lcpFixBtn" onclick="lcpApplyFix()">Apply Fix</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Agents Dashboard ──────────────────────────────────────────────────────── -->
+<div class="overlay" id="agentsOverlay" onclick="this.classList.remove('open')">
+  <div class="modal" onclick="event.stopPropagation()" style="max-width:680px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h3 style="margin:0">🤖 Agents</h3>
+      <button class="btn-sec" onclick="document.getElementById('agentsOverlay').classList.remove('open')">Close</button>
+    </div>
+    <p style="font-size:12.5px;color:var(--text2);margin:0 0 14px">Pick a specialist persona — it drives this chat's system prompt. Parity with the CLI roster.</p>
+    <div id="agentsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px"></div>
   </div>
 </div>
 
@@ -3234,8 +3250,47 @@ function buildPD(){
 function togglePD(e){e.stopPropagation();document.getElementById("pdWrap").classList.toggle("open");}
 function pickPersona(key){
   const s=loadSettings();s.persona=key;saveSettingsStore(s);
-  updatePill(key);document.getElementById("personaSel").value=key;updatePersonaDesc();
+  updatePill(key);const sel=document.getElementById("personaSel");if(sel)sel.value=key;updatePersonaDesc();
   document.getElementById("pdWrap").classList.remove("open");buildPD();
+}
+
+// ── Agents Dashboard (parity with CLI AGENT_ROSTER) ───────────────────────────
+const AGENT_ROSTER=[
+  {k:"lucifer",e:"🔥",n:"LUCIFER",r:"Lead Architect",s:["architecture","planning","design"]},
+  {k:"blackcanary",e:"🐦",n:"BlackCanary",r:"Frontend Queen",s:["html","css","react","ui/ux"]},
+  {k:"blacklord",e:"👁️",n:"BlackLord",r:"Backend Beast",s:["api","database","auth","server"]},
+  {k:"deathohmyson",e:"💀",n:"DeathOfMySon",r:"QA & Debugger",s:["debug","test","review","security"]},
+  {k:"wizzard",e:"🧙",n:"Wizzard",r:"AI/ML Sorcerer",s:["ai","ml","prompts","agents"]},
+  {k:"applaude",e:"✨",n:"Applaude",r:"Deploy & DevOps",s:["deploy","docker","ci/cd","infra"]},
+  {k:"ghost",e:"👻",n:"Ghost",r:"Security Expert",s:["security","xss","exploits"]},
+  {k:"nova",e:"⚡",n:"Nova",r:"Performance",s:["optimize","cache","benchmark"]},
+  {k:"berry",e:"🫐",n:"Berry",r:"General Assistant",s:["chat","help","write","ideas"]},
+  {k:"savannah",e:"🌿",n:"Savannah",r:"Unfiltered Advisor",s:["honest","direct","opinion"]},
+  {k:"cockroach",e:"🪳",n:"Cockroach",r:"Code Roaster",s:["roast","critique","quality"]},
+  {k:"silicon",e:"🔬",n:"Silicon",r:"Hacker & Pentester",s:["pentest","exploit","ctf","recon"]},
+];
+function openAgents(){
+  const cur=loadSettings().persona;
+  const grid=document.getElementById("agentsGrid");
+  grid.innerHTML=AGENT_ROSTER.map(a=>{
+    const active=a.k===cur;
+    const tags=a.s.map(t=>`<span style="font-size:10px;background:var(--acc-soft);color:var(--acc);border-radius:5px;padding:1px 6px">${esc(t)}</span>`).join(" ");
+    return `<button onclick="pickAgent('${a.k}')" style="text-align:left;cursor:pointer;background:var(--surface2);
+      border:1px solid ${active?'var(--acc)':'var(--border)'};border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">${a.e}</span>
+      <div><div style="font-weight:700;font-size:13px;color:var(--text)">${esc(a.n)}</div>
+      <div style="font-size:11px;color:var(--text2)">${esc(a.r)}</div></div>
+      ${active?'<span style="margin-left:auto;font-size:10px;color:var(--acc)">● active</span>':''}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${tags}</div></button>`;
+  }).join("");
+  document.getElementById("agentsOverlay").classList.add("open");
+  if(window.toggleSidebar&&window.innerWidth<=820){try{toggleSidebar();}catch(e){}}
+}
+function pickAgent(key){
+  pickPersona(key);
+  const a=AGENT_ROSTER.find(x=>x.k===key);
+  toast(`${a?a.e+" ":""}Agent set: ${a?a.n:key}`);
+  document.getElementById("agentsOverlay").classList.remove("open");
 }
 function updatePill(key){
   const p=personas[key]||personas["default"];if(!p)return;

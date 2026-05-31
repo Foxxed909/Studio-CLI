@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Marketplace</title>
+<style>
+  :root{--bg:#06070b;--surface:#0f1117;--surface2:#161a22;--border:rgba(148,163,184,.16);
+        --text:#e7ebf0;--text2:#9aa4b2;--acc:#22d3ee;}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(130% 100% at 50% 0,#0d1422,#06070b 60%);color:var(--text);
+       font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+  header{display:flex;align-items:center;justify-content:space-between;padding:18px 26px;
+         border-bottom:1px solid var(--border);position:sticky;top:0;backdrop-filter:blur(8px);
+         background:rgba(6,7,11,.7);z-index:5}
+  .logo{font-weight:800;font-size:17px;display:flex;align-items:center;gap:9px}
+  .back{color:var(--text2);text-decoration:none;font-size:13px;border:1px solid var(--border);
+        padding:8px 14px;border-radius:9px}
+  .back:hover{color:var(--text);border-color:var(--acc)}
+  main{max-width:1080px;margin:0 auto;padding:28px 22px 80px}
+  h1{font-size:26px;margin:6px 0 2px}
+  .sub{color:var(--text2);margin:0 0 26px;font-size:14px}
+  h2{font-size:16px;margin:34px 0 14px;display:flex;align-items:center;gap:8px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+  .card{background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;
+        cursor:pointer;transition:.15s;display:flex;flex-direction:column;gap:8px}
+  .card:hover{border-color:var(--acc);transform:translateY(-2px)}
+  .swatch{height:46px;border-radius:9px;position:relative;overflow:hidden}
+  .swatch .dot{position:absolute;right:8px;bottom:8px;width:14px;height:14px;border-radius:50%}
+  .name{font-weight:700;font-size:13.5px}
+  .role{font-size:11.5px;color:var(--text2)}
+  .tags{display:flex;flex-wrap:wrap;gap:4px}
+  .tag{font-size:10px;background:rgba(34,211,238,.12);color:var(--acc);border-radius:5px;padding:1px 6px}
+  .pack code{background:#0a0d13;border:1px solid var(--border);border-radius:6px;padding:2px 7px;
+             font-size:11.5px;color:var(--acc)}
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:#161a22;
+         border:1px solid var(--acc);color:var(--text);padding:11px 18px;border-radius:11px;
+         font-size:13px;opacity:0;transition:.2s;pointer-events:none}
+  .toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🛍️ Studio Marketplace</div>
+  <a class="back" href="/index.html">← Back to Studio</a>
+</header>
+<main>
+  <h1>Browse, apply &amp; share presets</h1>
+  <p class="sub">Themes, agent personas and command packs for StudioCLI. Click a theme or agent to apply it instantly.</p>
+
+  <h2>🎨 Themes <span style="color:var(--text2);font-weight:400;font-size:12px">— click to apply</span></h2>
+  <div class="grid" id="themeGrid"></div>
+
+  <h2>🤖 Agents <span style="color:var(--text2);font-weight:400;font-size:12px">— click to set persona</span></h2>
+  <div class="grid" id="agentGrid"></div>
+
+  <h2>⌨️ Command Packs <span style="color:var(--text2);font-weight:400;font-size:12px">— install from the CLI</span></h2>
+  <div class="grid" id="packGrid"></div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const THEMES=[
+  {k:"nebula",n:"Nebula",f:"Cosmic II",acc:"#f0abfc",g:"radial-gradient(circle at 50% 0,#2a1a4a,#080414)"},
+  {k:"supernova",n:"Supernova",f:"Cosmic II",acc:"#fb923c",g:"radial-gradient(circle at 50% 40%,#3a2410,#070402)"},
+  {k:"galaxy",n:"Galaxy",f:"Cosmic II",acc:"#c4b5fd",g:"radial-gradient(circle at 50% 50%,#1a1d4a,#050613)"},
+  {k:"eclipse",n:"Eclipse",f:"Cosmic II",acc:"#fcd34d",g:"radial-gradient(circle at 50% 40%,#1c1606,#000)"},
+  {k:"thunderstorm",n:"Thunderstorm",f:"Weather",acc:"#93c5fd",g:"radial-gradient(circle at 50% 0,#101a33,#05070f)"},
+  {k:"aurora-borealis",n:"Aurora",f:"Weather",acc:"#5eead4",g:"radial-gradient(circle at 50% 0,#06231c,#020807)"},
+  {k:"blizzard",n:"Blizzard",f:"Weather",acc:"#bae6fd",g:"radial-gradient(circle at 50% 0,#1a2a3a,#080f16)"},
+  {k:"sunrise",n:"Sunrise",f:"Weather",acc:"#fb923c",g:"radial-gradient(circle at 50% 100%,#3a2418,#0a0a14)"},
+  {k:"ocean-depths",n:"Ocean Depths",f:"Nature",acc:"#67e8f9",g:"radial-gradient(circle at 50% 0,#06283a,#01080f)"},
+  {k:"fireflies",n:"Fireflies",f:"Nature",acc:"#facc15",g:"radial-gradient(circle at 50% 60%,#0f1a0c,#050804)"},
+  {k:"volcano",n:"Volcano",f:"Nature",acc:"#fb923c",g:"radial-gradient(circle at 50% 100%,#2a0a06,#070202)"},
+  {k:"desert-night",n:"Desert Night",f:"Nature",acc:"#fbbf24",g:"radial-gradient(circle at 50% 20%,#1a1630,#0a0805)"},
+  {k:"vaporwave",n:"Vaporwave",f:"Retro",acc:"#f0abfc",g:"radial-gradient(circle at 50% 55%,#2a0d3a,#0d0620)"},
+  {k:"crt",n:"CRT",f:"Retro",acc:"#86efac",g:"radial-gradient(circle at 50% 50%,#031203,#000500)"},
+  {k:"amber",n:"Amber",f:"Retro",acc:"#fcd34d",g:"radial-gradient(circle at 50% 40%,#241803,#0a0701)"},
+  {k:"matrix-rain",n:"Matrix Rain",f:"Retro",acc:"#4ade80",g:"radial-gradient(circle at 50% 0,#03140a,#000500)"},
+];
+const AGENTS=[
+  {k:"lucifer",e:"🔥",n:"LUCIFER",r:"Lead Architect",s:["architecture","planning"]},
+  {k:"blackcanary",e:"🐦",n:"BlackCanary",r:"Frontend Queen",s:["ui/ux","react"]},
+  {k:"blacklord",e:"👁️",n:"BlackLord",r:"Backend Beast",s:["api","db","auth"]},
+  {k:"deathohmyson",e:"💀",n:"DeathOfMySon",r:"QA & Debugger",s:["debug","test"]},
+  {k:"wizzard",e:"🧙",n:"Wizzard",r:"AI/ML Sorcerer",s:["ai","prompts"]},
+  {k:"applaude",e:"✨",n:"Applaude",r:"Deploy & DevOps",s:["ci/cd","docker"]},
+  {k:"ghost",e:"👻",n:"Ghost",r:"Security Expert",s:["security","xss"]},
+  {k:"nova",e:"⚡",n:"Nova",r:"Performance",s:["optimize","cache"]},
+  {k:"silicon",e:"🔬",n:"Silicon",r:"Hacker & Pentester",s:["pentest","ctf"]},
+  {k:"cockroach",e:"🪳",n:"Cockroach",r:"Code Roaster",s:["roast","review"]},
+];
+const PACKS=[
+  {n:"git-pro",d:"Git power-command aliases",cmd:"/marketplace install git-pro"},
+  {n:"reviewer",d:"Three-step code-review workflow",cmd:"/marketplace install reviewer"},
+  {n:"writer",d:"Writing & explanation helpers",cmd:"/marketplace install writer"},
+];
+function toast(m){const t=document.getElementById("toast");t.textContent=m;t.classList.add("on");
+  setTimeout(()=>t.classList.remove("on"),2200);}
+function applyTheme(k){try{localStorage.setItem("studioTheme",k);}catch(e){}
+  toast("Theme applied — opening Studio…");setTimeout(()=>location.href="/index.html",700);}
+function applyAgent(k){try{const s=JSON.parse(localStorage.getItem("studioSettings")||"{}");
+  s.persona=k;localStorage.setItem("studioSettings",JSON.stringify(s));}catch(e){}
+  toast("Agent set — opening Studio…");setTimeout(()=>location.href="/index.html",700);}
+function copyCmd(c){navigator.clipboard?.writeText(c);toast("Copied: "+c);}
+
+document.getElementById("themeGrid").innerHTML=THEMES.map(t=>`
+  <div class="card" onclick="applyTheme('${t.k}')">
+    <div class="swatch" style="background:${t.g}"><span class="dot" style="background:${t.acc}"></span></div>
+    <div><div class="name">${t.n}</div><div class="role">${t.f}</div></div></div>`).join("");
+document.getElementById("agentGrid").innerHTML=AGENTS.map(a=>`
+  <div class="card" onclick="applyAgent('${a.k}')">
+    <div style="display:flex;align-items:center;gap:9px"><span style="font-size:22px">${a.e}</span>
+    <div><div class="name">${a.n}</div><div class="role">${a.r}</div></div></div>
+    <div class="tags">${a.s.map(x=>`<span class="tag">${x}</span>`).join("")}</div></div>`).join("");
+document.getElementById("packGrid").innerHTML=PACKS.map(p=>`
+  <div class="card pack" onclick="copyCmd('${p.cmd}')">
+    <div class="name">📦 ${p.n}</div><div class="role">${p.d}</div>
+    <code>${p.cmd}</code></div>`).join("");
+</script>
+</body>
+</html>

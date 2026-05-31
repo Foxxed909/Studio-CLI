@@ -361,6 +361,212 @@ run("typewrite strips Rich markup tags",          test_typewrite_strips_rich_mar
 run("_make_toolbar TTL cache avoids extra reads", test_toolbar_cache_avoids_repeated_reads)
 
 # ══════════════════════════════════════════════════════════════
+# 19. Redesign + new bug-fix regressions
+# ══════════════════════════════════════════════════════════════
+print("\n[19 ] Redesign + bug-fix regressions")
+
+from prompt_toolkit.formatted_text import to_formatted_text
+
+CELESTIAL = ("windynight", "foggyskies", "moon", "shootingstars", "blackhole", "magnetar")
+_THEME_KEYS = {"name","banner_color","accent","prompt_user","prompt_arrow","border",
+               "success","error","warning","dim","banner_sub","icon","prompt_name"}
+
+def test_safe_read_json():
+    # missing file → default
+    assert aistudio._safe_read_json("definitely_missing_xyz.json", "D") == "D"
+    p = Path("logs/_t_srj.json"); p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("{not valid json", encoding="utf-8")          # corrupt → default
+    assert aistudio._safe_read_json(p, []) == []
+    p.write_text("", encoding="utf-8")                          # empty → default
+    assert aistudio._safe_read_json(p, {"a": 1}) == {"a": 1}
+    p.write_text('{"ok": true}', encoding="utf-8")              # valid → parsed
+    assert aistudio._safe_read_json(p, None) == {"ok": True}
+    p.unlink()
+
+def test_cmd_load_corrupt_is_graceful():
+    name = "_t_corrupt_convo"
+    p = aistudio.CONVOS_DIR / f"{name}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text("{this is not json", encoding="utf-8")
+    try:
+        out = aistudio.cmd_load(name)          # must NOT raise
+        assert out == [], f"expected [] on corrupt file, got {out!r}"
+    finally:
+        p.unlink()
+
+def test_track_usage_creates_profile_when_missing():
+    saved = {}
+    def fake_save(uid, prof=None):
+        saved["uid"], saved["prof"] = uid, prof
+    with mock.patch("aistudio.load_profile", return_value=None), \
+         mock.patch("aistudio.save_profile", side_effect=fake_save), \
+         mock.patch("aistudio.load_usage", return_value={}), \
+         mock.patch("aistudio.save_usage"):
+        st = make_state()
+        aistudio.track_usage(st, 100, 50, prompt="hi")
+    assert isinstance(saved.get("prof"), dict), "profile not created when missing"
+    assert saved["prof"].get("total_msgs") == 1, "usage not tracked into fresh profile"
+
+def test_jest_not_shell_true():
+    src = inspect.getsource(aistudio)
+    idx = src.find('"jest", "--coverage"')
+    assert idx != -1, "jest invocation not found"
+    assert "shell=True" not in src[idx:idx+220], "jest still uses shell=True (drops flags on POSIX)"
+
+def test_new_themes_present_and_complete():
+    for t in CELESTIAL:
+        assert t in THEMES, f"missing celestial theme: {t}"
+        missing = _THEME_KEYS - set(THEMES[t])
+        assert not missing, f"{t} missing keys {missing}"
+
+def test_celestial_ui_styles_registered():
+    for ui in CELESTIAL:
+        assert ui in aistudio.UI_STYLES, f"{ui} not in UI_STYLES"
+        assert ui in aistudio.CELESTIAL_STYLES, f"{ui} not in CELESTIAL_STYLES"
+
+def test_all_prompts_build_for_every_ui():
+    # Regression: hex prompt colors used to crash _prompt_html (ExpatError)
+    for ui in aistudio.UI_STYLES:
+        th = THEMES.get(ui, THEMES["default"])
+        st = make_state(); st["ui_style"] = ui; st["theme"] = th
+        to_formatted_text(aistudio._prompt_html(th, ui))
+        to_formatted_text(aistudio._prompt_box(th, ui, st))
+
+def test_celestial_welcome_renders():
+    for ui in CELESTIAL:
+        st = make_state(); st["ui_style"] = ui; st["theme"] = THEMES[ui]
+        aistudio.render_welcome(st)     # must not raise
+
+run("_safe_read_json handles missing/empty/corrupt/valid", test_safe_read_json)
+run("cmd_load is graceful on corrupt conversation file",   test_cmd_load_corrupt_is_graceful)
+run("track_usage creates profile when missing",            test_track_usage_creates_profile_when_missing)
+run("jest coverage no longer uses shell=True",             test_jest_not_shell_true)
+run("celestial themes present + complete keys",            test_new_themes_present_and_complete)
+run("celestial UI styles registered",                      test_celestial_ui_styles_registered)
+run("all UI styles build prompts (hex HTML fix)",          test_all_prompts_build_for_every_ui)
+run("celestial welcome screens render",                    test_celestial_welcome_renders)
+
+# ══════════════════════════════════════════════════════════════
+# 20. v9.7 new commands (Speak merge, Git/VCS, Context, Fun)
+# ══════════════════════════════════════════════════════════════
+print("\n[20 ] v9.7 new commands")
+
+def _st():
+    s = make_state(); s["workspace_root"] = str(Path.cwd())
+    s["_last_response"] = "Hello from Studio."
+    return s
+
+def test_speak_no_crash():
+    # On non-Windows with no TTS engine it must degrade gracefully, never raise
+    aistudio.cmd_speak(_st(), "say hello world")
+    aistudio.cmd_speak(_st(), "")
+
+def test_speak_routes_to_voice_for_listen():
+    called = {}
+    with mock.patch("aistudio.cmd_voice", side_effect=lambda s, a: called.setdefault("a", a)):
+        aistudio.cmd_speak(_st(), "listen")
+    assert "a" in called, "/speak listen did not route to voice (STT)"
+
+def test_git_cmds_no_crash():
+    for fn, arg in [("cmd_stage", ""), ("cmd_stash", "list"),
+                    ("cmd_blame", "aistudio.py"), ("cmd_pr", "main"), ("cmd_map", "")]:
+        getattr(aistudio, fn)(_st(), arg)
+
+def test_fun_cmds_no_crash():
+    aistudio.cmd_banner(_st(), "Hi")
+    aistudio.cmd_ascii(_st(), "Hi")
+    aistudio.cmd_fortune(_st(), "")
+    aistudio.cmd_scratch(_st(), "harness note")
+    aistudio.cmd_scratch(_st(), "")
+
+def test_new_cmds_registered():
+    for c in ["/speak","/commit","/stage","/stash","/blame","/pr","/init","/map",
+              "/scratch","/ascii","/banner","/confetti","/matrix","/fortune"]:
+        assert c in aistudio.ALL_COMMANDS, f"{c} missing from ALL_COMMANDS"
+
+def test_init_generates_and_preserves_notes():
+    import tempfile
+    d = tempfile.mkdtemp()
+    Path(d, "app.py").write_text("print('hi')\n", encoding="utf-8")
+    Path(d, "package.json").write_text("{}", encoding="utf-8")
+    st = _st(); st["workspace_root"] = d
+    aistudio.cmd_init(st, d)
+    smd = Path(d, "STUDIO.md")
+    assert smd.exists(), "STUDIO.md not created"
+    txt = smd.read_text(encoding="utf-8")
+    assert "Project Memory" in txt and "STUDIO:NOTES" in txt
+    smd.write_text(txt + "\nMY CUSTOM NOTE 123\n", encoding="utf-8")
+    aistudio.cmd_init(st, d)               # regenerate
+    assert "MY CUSTOM NOTE 123" in smd.read_text(encoding="utf-8"), "user notes not preserved"
+
+run("speak degrades gracefully (no engine)",   test_speak_no_crash)
+run("speak listen routes to voice/STT",        test_speak_routes_to_voice_for_listen)
+run("git/context commands no crash",           test_git_cmds_no_crash)
+run("fun/visual commands no crash",            test_fun_cmds_no_crash)
+run("new v9.7 commands in ALL_COMMANDS",       test_new_cmds_registered)
+def test_local_models_graceful():
+    st = _st()
+    out = aistudio.cmd_local(st, "")        # Ollama not running in test env → install panel
+    assert isinstance(out, dict), "cmd_local must return state"
+    aistudio.cmd_local(st, "off")           # leaving local mode must not crash
+
+def test_checkpoint_rewind_roundtrip():
+    st = _st()
+    hist = [{"role": "user", "text": "hello"}, {"role": "model", "text": "hi there"}]
+    aistudio.cmd_checkpoint(st, "test-cp", hist)
+    aistudio.cmd_checkpoints(st)                       # must not crash
+    restored = aistudio.cmd_rewind(st, "last", [])     # restore most recent
+    assert restored == hist, "rewind did not restore the conversation"
+    # bad id returns the original history unchanged
+    same = aistudio.cmd_rewind(st, "nope-not-real", hist)
+    assert same == hist
+
+run("/init writes STUDIO.md + preserves notes", test_init_generates_and_preserves_notes)
+run("/local degrades gracefully w/o Ollama",    test_local_models_graceful)
+def test_mcp_config_and_graceful_connect():
+    from studio import mcp as _mcp
+    st = _st()
+    # add / list / tools(fail) / remove must not crash and must persist
+    aistudio.cmd_mcp(st, "add demo echo hello")
+    cfg = _mcp.load_mcp_config()
+    assert "demo" in cfg.get("servers", {}), "MCP add did not persist"
+    aistudio.cmd_mcp(st, "list")
+    aistudio.cmd_mcp(st, "tools nonexistent-server")   # graceful connect failure
+    aistudio.cmd_mcp(st, "remove demo")
+    assert "demo" not in _mcp.load_mcp_config().get("servers", {}), "MCP remove failed"
+
+run("/checkpoint + /rewind round-trip",         test_checkpoint_rewind_roundtrip)
+def test_workflow_and_alias_args():
+    # arg substitution
+    assert aistudio._apply_alias_args("review {input} please", "main.py") == "review main.py please"
+    assert aistudio._apply_alias_args("summarize", "the docs") == "summarize the docs"
+    # workflow set / show / del round-trip
+    st = _st()
+    aistudio.cmd_workflow(st, "set wftest first step || second step", [])
+    assert "wftest" in aistudio._load_workflows(), "workflow set did not persist"
+    assert len(aistudio._load_workflows()["wftest"]) == 2
+    aistudio.cmd_workflow(st, "show wftest", [])
+    aistudio.cmd_workflow(st, "list", [])
+    aistudio.cmd_workflow(st, "del wftest", [])
+    assert "wftest" not in aistudio._load_workflows(), "workflow del failed"
+
+run("/mcp config mgmt + graceful connect",      test_mcp_config_and_graceful_connect)
+def test_marketplace_install_and_export_import():
+    st = _st()
+    aistudio.cmd_marketplace(st, "browse")                 # must not crash
+    aistudio.cmd_marketplace(st, "install writer")          # installs aliases
+    assert "eli5" in aistudio._load_aliases(), "pack install did not add alias"
+    aistudio.cmd_marketplace(st, "install reviewer")        # installs a workflow
+    assert "review" in aistudio._load_workflows(), "pack install did not add workflow"
+    aistudio.cmd_marketplace(st, "export")                  # writes a preset file
+    exports = sorted((aistudio.CONFIG_DIR / "exports").glob("studio-preset-*.json"))
+    assert exports, "export produced no file"
+    aistudio.cmd_marketplace(st, f"import {exports[-1]}")    # re-import must not crash
+
+run("/workflow + alias {input} substitution",   test_workflow_and_alias_args)
+run("/marketplace install + export/import",      test_marketplace_install_and_export_import)
+
+# ══════════════════════════════════════════════════════════════
 # Summary
 # ══════════════════════════════════════════════════════════════
 passed = sum(1 for r in results if r[0] == PASS)

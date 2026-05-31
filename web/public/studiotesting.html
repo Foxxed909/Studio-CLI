@@ -655,13 +655,51 @@ body::after{
 <div class="toast" id="toast"></div>
 
 <script>
-// ── Plan gate ────────────────────────────────────────────────────────────────
-(function checkPlan(){
-  const plan = localStorage.getItem("studioPlan") || "free";
-  if(plan === "free"){
-    window.location.href = "/pricing.html?from=testing";
-  }
-})();
+// ── Studio Lab gate — internal testers only (v9.7) ───────────────────────────
+// Deprecated for general/paid use. Access requires an allow-listed email OR a
+// valid access code. Everyone else sees a notice (the page is kept, not removed).
+const LAB_ALLOWLIST = ["jasminefoxx799@gmail.com", "studio@foxxia.dev"];
+const LAB_ACCESS_CODE = "STUDIOLAB-2026";
+function _labAllowed(){
+  const email = (localStorage.getItem("studioEmail") || "").trim().toLowerCase();
+  const qp    = new URLSearchParams(location.search).get("code");
+  if(qp && qp === LAB_ACCESS_CODE) localStorage.setItem("studioLabAccess", "1");
+  return LAB_ALLOWLIST.includes(email) || localStorage.getItem("studioLabAccess") === "1";
+}
+const LAB_OK = _labAllowed();
+if(!LAB_OK){
+  const showNotice = () => {
+    document.title = "Studio Lab — internal only";
+    document.body.innerHTML =
+      '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;'
+      + 'background:radial-gradient(120% 100% at 50% 0,#0a1320,#05060a 60%);color:#cbd5e1;'
+      + 'font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px">'
+      + '<div style="max-width:520px;text-align:center;background:rgba(13,17,23,.6);'
+      + 'border:1px solid rgba(148,163,184,.18);border-radius:16px;padding:40px 32px">'
+      + '<div style="font-size:34px;margin-bottom:8px">⚗️</div>'
+      + '<h1 style="font-size:22px;margin:0 0 12px">Studio Lab is now internal-testers only</h1>'
+      + '<p style="color:#94a3b8;line-height:1.6;margin:0 0 18px">The experimental Lab has moved to a '
+      + 'private build and is no longer part of paid plans. Have an access code? Enter it below, '
+      + 'or request access at <a style="color:#67e8f9" href="mailto:studio@foxxia.dev">studio@foxxia.dev</a>.</p>'
+      + '<div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px">'
+      + '<input id="labCode" placeholder="Access code" style="padding:10px 12px;border-radius:9px;'
+      + 'border:1px solid rgba(148,163,184,.3);background:#0d1117;color:#e7ebf0;font-size:14px;width:200px">'
+      + '<button id="labEnter" style="padding:10px 18px;border-radius:9px;border:0;cursor:pointer;'
+      + 'background:#22d3ee;color:#04121a;font-weight:600">Enter</button></div>'
+      + '<div id="labErr" style="color:#f87171;font-size:13px;min-height:18px"></div>'
+      + '<a href="/index.html" style="color:#94a3b8;font-size:13px">← Back to Studio</a>'
+      + '</div></div>';
+    const go = () => {
+      const v = (document.getElementById("labCode").value || "").trim();
+      if(v === LAB_ACCESS_CODE){ localStorage.setItem("studioLabAccess", "1"); location.reload(); }
+      else { document.getElementById("labErr").textContent = "Invalid code."; }
+    };
+    document.getElementById("labEnter").onclick = go;
+    document.getElementById("labCode").addEventListener("keydown", e => { if(e.key === "Enter") go(); });
+  };
+  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", showNotice);
+  else showNotice();
+}
 
 // ── Markdown setup ───────────────────────────────────────────────────────────
 marked.setOptions({breaks:true,gfm:true});

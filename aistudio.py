@@ -40,6 +40,7 @@ from studio.data    import (
     MODEL_PRICING, DEFAULT_PRICE_PER_1K, model_price_per_1k, _is_openrouter_model,
     STUDIO_CONTEXT, PERSONAS,
     THEMES, UI_STYLES, STREAM_MODES, STUDIO_MODEL_ALIASES,
+    CELESTIAL_STYLES,
     SUPPORTED_PROVIDERS, CHAT_MODES, VIBE_PRESETS,
     _STATUSLINE_DEFAULTS_LAZY,
     _CASUAL_WORDS, _BUILD_WORDS, _ANALYZE_WORDS, _FIF_WORDS,
@@ -662,6 +663,21 @@ def typewrite(text: str, delay: float = 0.025, style: str = ""):
             console.print(ch, end="")
         time.sleep(delay)
     console.print()
+
+
+def _safe_read_json(path, default):
+    """Read + parse a JSON file, returning `default` if it's missing,
+    empty, or corrupted. Never raises on bad data."""
+    try:
+        p = Path(path)
+        if not p.exists():
+            return default
+        raw = p.read_text(encoding="utf-8").strip()
+        if not raw:
+            return default
+        return json.loads(raw)
+    except (OSError, ValueError):
+        return default
 
 
 # ── THINKING ANIMATION ────────────────────────────
@@ -1432,6 +1448,13 @@ ALL_COMMANDS = [
     # v9.6 — utility commands
     "/calc","/math","/uuid","/guid","/hash","/b64","/base64",
     "/ts","/timestamp","/now","/ping","/jwt","/lorem","/spell",
+    # v9.7 — Speak (merged), Git/VCS, Context, Fun/visual
+    "/speak",
+    "/commit","/stage","/stash","/blame","/pr",
+    "/init","/map","/scratch","/ollama",
+    "/checkpoint","/cp","/checkpoints","/rewind","/mcp",
+    "/workflow","/wf","/marketplace","/market",
+    "/ascii","/banner","/confetti","/matrix","/fortune",
 ]
 
 COMMAND_METADATA = {
@@ -1786,8 +1809,56 @@ def cmd_cost(state, args):
     console.print(Panel(rows, title="[bold]Session Cost[/bold]", border_style=theme["border"]))
 
 
-def cmd_local(state, model="llama3"):
-    state["model"] = f"ollama/{model}"
+def _ollama_tags():
+    """Return list of locally-installed Ollama model names, or None if unreachable."""
+    from urllib import request as _rq
+    url = OLLAMA_BASE.replace("/api/chat", "/api/tags")
+    try:
+        with _rq.urlopen(url, timeout=3) as resp:
+            data = json.loads(resp.read().decode())
+        return [m.get("name") for m in data.get("models", []) if m.get("name")]
+    except Exception:
+        return None
+
+
+def cmd_local(state, args=""):
+    """/local [model|off] — use a local Ollama model. No args lists installed models."""
+    theme = state.get("theme", THEMES["default"])
+    arg   = (args or "").strip()
+    if arg.lower() in ("off", "stop", "exit"):
+        state.pop("use_ollama", None)
+        console.print("[dim]Local mode off.[/dim]")
+        return state
+    tags = _ollama_tags()
+    if tags is None:
+        console.print(Panel(
+            "[yellow]Ollama not reachable at localhost:11434.[/yellow]\n\n"
+            "Install from [cyan]https://ollama.com[/cyan], then:\n"
+            "  [bold]ollama serve[/bold]            start the server\n"
+            "  [bold]ollama pull llama3.2[/bold]    download a model\n\n"
+            "Re-run [bold]/local[/bold] to pick one. Local models are free, offline, no API key.",
+            title="[bold]Local Models · Ollama[/bold]", border_style=theme["border"]))
+        return state
+    if not arg:
+        if not tags:
+            console.print("[yellow]No local models installed. Try: [bold]ollama pull llama3.2[/bold][/yellow]")
+            return state
+        cur = state.get("model", "")
+        console.print(Panel(
+            "\n".join(f"  [{theme['accent']}]{t}[/{theme['accent']}]"
+                      + (" [dim]← active[/dim]" if f"ollama/{t}" == cur else "") for t in tags)
+            + "\n\n[dim]/local <name> to use one  ·  /local off to leave local mode[/dim]",
+            title=f"[bold]Local Models ({len(tags)} installed)[/bold]", border_style=theme["border"]))
+        return state
+    name  = arg.split()[0]
+    match = next((t for t in tags if t == name or t.split(":")[0] == name), None)
+    if not match:
+        console.print(f"[yellow]'{name}' not installed.[/yellow] Available: {', '.join(tags) or '(none)'}")
+        console.print(f"[dim]Install with: ollama pull {name}[/dim]")
+        return state
+    state["model"] = f"ollama/{match}"
+    state["use_ollama"] = True
+    console.print(f"[{theme['success']}]✓ Local model → {match}[/{theme['success']}]  [dim](offline · free)[/dim]")
     return state
 
 
@@ -2062,6 +2133,15 @@ def build_system_prompt(state):
             extras.append(ctx_text)
         except Exception: pass
 
+    # ── STUDIO.md project memory (from /init) ──────────────────────────────────
+    try:
+        smd = Path(state.get("workspace_root") or ".") / "STUDIO.md"
+        if smd.exists():
+            extras.append("PROJECT MEMORY (STUDIO.md):\n\n"
+                          + smd.read_text(encoding="utf-8", errors="replace")[:4000])
+    except Exception:
+        pass
+
     # ── Pinned file ───────────────────────────────────────────────────────────
     pinned = state.get("pinned_file")
     if pinned:
@@ -2189,25 +2269,26 @@ def track_usage(state, tokens_in, tokens_out, is_heavy=False, prompt=""):
     save_usage(usage)
     state["_usage"] = usage
 
-    # Real cost tracking — free models contribute $0 but tokens are always counted
-    prof = load_profile()
-    if prof:
-        active_model = state.get("model") or DEFAULT_MODEL
-        pricing = model_price_per_1k(active_model)
-        cost = ((tokens_in + tokens_out) / 1000) * pricing
-        prof["balance"] = round(prof.get("balance", 0) - cost, 6)
-        # Track per-model usage counts + token spend per model
-        model_usage = prof.setdefault("model_usage", {})
-        model_spend = prof.setdefault("model_spend", {})
-        model_usage[active_model] = model_usage.get(active_model, 0) + 1
-        model_spend[active_model] = round(model_spend.get(active_model, 0.0) + cost, 6)
-        # Update session stats
-        prof["total_msgs"]        = prof.get("total_msgs", 0) + 1
-        prof["total_tokens_in"]   = prof.get("total_tokens_in", 0) + tokens_in
-        prof["total_tokens_out"]  = prof.get("total_tokens_out", 0) + tokens_out
-        prof["last_seen"]         = datetime.now().isoformat()
-        save_profile(prof)
-        state["balance"] = prof["balance"]
+    # Real cost tracking — free models contribute $0 but tokens are always counted.
+    # If no profile exists yet, start a fresh one so usage is never silently dropped.
+    uid  = state.get("user_id", "default")
+    prof = load_profile(uid) or {}
+    active_model = state.get("model") or DEFAULT_MODEL
+    pricing = model_price_per_1k(active_model)
+    cost = ((tokens_in + tokens_out) / 1000) * pricing
+    prof["balance"] = round(prof.get("balance", 0) - cost, 6)
+    # Track per-model usage counts + token spend per model
+    model_usage = prof.setdefault("model_usage", {})
+    model_spend = prof.setdefault("model_spend", {})
+    model_usage[active_model] = model_usage.get(active_model, 0) + 1
+    model_spend[active_model] = round(model_spend.get(active_model, 0.0) + cost, 6)
+    # Update session stats
+    prof["total_msgs"]        = prof.get("total_msgs", 0) + 1
+    prof["total_tokens_in"]   = prof.get("total_tokens_in", 0) + tokens_in
+    prof["total_tokens_out"]  = prof.get("total_tokens_out", 0) + tokens_out
+    prof["last_seen"]         = datetime.now().isoformat()
+    save_profile(uid, prof)
+    state["balance"] = prof["balance"]
 
 
 def _clean_terminal_text(text):
@@ -3761,7 +3842,10 @@ def cmd_load(name):
         if saves: console.print("[yellow]Available:[/yellow] " + ", ".join(s.stem for s in saves))
         else:     console.print("[yellow]No saved conversations[/yellow]")
         return []
-    history = json.loads(path.read_text())
+    history = _safe_read_json(path, None)
+    if not isinstance(history, list):
+        console.print(f"[yellow]Could not read '{name}' — file is empty or corrupted[/yellow]")
+        return []
     console.print(f"[green]✓ Loaded '{name}' ({len(history)//2} exchanges)[/green]")
     return history
 
@@ -7451,7 +7535,9 @@ def nerf_user(state, user_id):
 
 def _save_to_inbox(user_id, msg):
     path = Path("logs/inbox.json")
-    inbox = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    inbox = _safe_read_json(path, [])
+    if not isinstance(inbox, list):
+        inbox = []
     inbox.append(msg)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(inbox, indent=2), encoding="utf-8")
@@ -7459,7 +7545,9 @@ def _save_to_inbox(user_id, msg):
 def audit_log(event_type, details):
     """Securely log all system, login, and payment events."""
     path = Path("logs/audit.json")
-    audit = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+    audit = _safe_read_json(path, [])
+    if not isinstance(audit, list):
+        audit = []
     audit.append({"ts": time.time(), "type": event_type, "details": details})
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(audit, indent=2), encoding="utf-8")
@@ -7952,6 +8040,90 @@ def _save_aliases(aliases: dict) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     (CONFIG_DIR / "aliases.json").write_text(json.dumps(aliases, indent=2), encoding="utf-8")
     _aliases_cache, _aliases_cache_ts = aliases, time.time()
+
+def _apply_alias_args(template, args):
+    """Substitute {input}/{args} in a custom-command template, else append trailing args."""
+    args = (args or "").strip()
+    if "{input}" in template or "{args}" in template:
+        return template.replace("{input}", args).replace("{args}", args)
+    return f"{template} {args}".strip() if args else template
+
+
+def _load_workflows() -> dict:
+    path = CONFIG_DIR / "workflows.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        return {}
+
+
+def _save_workflows(wf: dict) -> None:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    (CONFIG_DIR / "workflows.json").write_text(json.dumps(wf, indent=2), encoding="utf-8")
+
+
+def cmd_workflow(state, args, history):
+    """/workflow [list|set <name> step || step|del <name>|show <name>|run <name>] — chain prompts."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    wf    = _load_workflows()
+    parts = (args or "").strip().split(" ", 2)
+    op    = (parts[0].lower() if parts and parts[0] else "list")
+
+    if op in ("", "list"):
+        if not wf:
+            console.print("[dim]No workflows. /workflow set <name> step1 || step2 …[/dim]")
+            return history
+        body = "\n".join(f"  [{acc}]{n}[/{acc}]  [dim]{len(s)} steps[/dim]" for n, s in sorted(wf.items()))
+        console.print(Panel(body + "\n\n[dim]/workflow run <name>  ·  /workflow show <name>[/dim]",
+            title=f"[bold]Workflows ({len(wf)})[/bold]", border_style=theme["border"]))
+        return history
+
+    if op == "set":
+        if len(parts) < 3:
+            console.print("[yellow]Usage: /workflow set <name> <step1> || <step2> …[/yellow]")
+            return history
+        name  = parts[1]
+        steps = [s.strip() for s in parts[2].split("||") if s.strip()]
+        if not steps:
+            console.print("[yellow]Need at least one step (separate with ||).[/yellow]")
+            return history
+        wf[name] = steps; _save_workflows(wf)
+        console.print(f"[{theme['success']}]✓ Workflow '{name}' saved ({len(steps)} steps)[/{theme['success']}]")
+        return history
+
+    if op in ("del", "rm", "delete"):
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /workflow del <name>[/yellow]"); return history
+        if wf.pop(parts[1], None) is not None:
+            _save_workflows(wf); console.print(f"[{theme['success']}]✓ Deleted '{parts[1]}'[/{theme['success']}]")
+        else:
+            console.print(f"[yellow]No workflow '{parts[1]}'[/yellow]")
+        return history
+
+    if op == "show":
+        name = parts[1] if len(parts) > 1 else ""
+        if name not in wf:
+            console.print(f"[yellow]No workflow '{name}'[/yellow]"); return history
+        body = "\n".join(f"  [{acc}]{i+1}.[/{acc}] {s}" for i, s in enumerate(wf[name]))
+        console.print(Panel(body, title=f"[bold]Workflow · {name}[/bold]", border_style=theme["border"]))
+        return history
+
+    if op == "run":
+        name = parts[1] if len(parts) > 1 else ""
+        if name not in wf:
+            console.print(f"[yellow]No workflow '{name}' — see /workflow list[/yellow]"); return history
+        extra = parts[2] if len(parts) > 2 else ""
+        steps = wf[name]
+        for i, step in enumerate(steps, 1):
+            prompt = _apply_alias_args(step, extra)
+            console.print(f"\n[{acc}]◆ Step {i}/{len(steps)}[/{acc}] [dim]{step[:60]}[/dim]")
+            _, history = ai_respond(state, prompt, history)
+        return history
+
+    console.print("[yellow]/workflow [list|set|del|show|run][/yellow]")
+    return history
+
 
 def cmd_alias(state, args, history):
     """/alias [list|set <name> <text>|del <name>|<name>] — custom prompt shortcuts."""
@@ -8497,6 +8669,558 @@ def cmd_lorem(state, args):
     console.print("[dim]Copied to clipboard[/dim]")
 
 
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  v9.7  —  Speak (merge /tts+/voice), Git/VCS, Context, Fun/visual         ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+def _speak_text(text):
+    """Cross-platform TTS. Returns True if a speech engine was invoked."""
+    clean = re.sub(r"\[.*?\]", "", text or "").replace("\n", " ").strip()[:500]
+    if not clean:
+        return False
+    try:
+        if sys.platform == "win32":
+            import base64
+            script = ("Add-Type -AssemblyName System.Speech; "
+                      "(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak(%s)" % json.dumps(clean))
+            enc = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+            subprocess.Popen(["PowerShell", "-NoProfile", "-EncodedCommand", enc])
+            return True
+        if sys.platform == "darwin":
+            subprocess.Popen(["say", clean]); return True
+        for eng in (["spd-say", clean], ["espeak", clean]):
+            if shutil.which(eng[0]):
+                subprocess.Popen(eng); return True
+    except Exception:
+        return False
+    return False
+
+
+def cmd_speak(state, args=None):
+    """/speak [say <text>] — speak aloud (TTS).  /speak listen — voice input (STT).
+    Unified Speak product — merges the old /tts and /voice."""
+    args  = (args or "").strip()
+    sub   = args.split()[0].lower() if args else ""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+
+    if sub in ("listen", "in", "stt", "mic"):
+        return cmd_voice(state, args[len(sub):].strip() or "start")
+    if sub in ("start", "stop"):
+        return cmd_voice(state, args)
+
+    text = args[3:].strip() if sub == "say" else state.get("_last_response", "")
+    if not text:
+        console.print("[yellow]Nothing to speak — send a message first, or /speak say <text>.[/yellow]")
+        return
+    console.print(f"[{acc}]🔊 Speaking…[/{acc}]")
+    if not _speak_text(text):
+        console.print("[dim]No TTS engine found (win: built-in · mac: say · linux: install espeak/spd-say).[/dim]")
+
+
+# ── Git / VCS ───────────────────────────────────────────────────────────────
+def cmd_stage(state, args):
+    """/stage [paths] — git add (default: all), then show short status."""
+    cwd    = state.get("workspace_root") or "."
+    border = state.get("theme", THEMES["default"])["border"]
+    target = (args or "").strip() or "-A"
+    _, err = _run_git(["add"] + shlex.split(target), cwd=cwd)
+    if err and "fatal" in err.lower():
+        console.print(f"[red]{err}[/red]"); return
+    st, _ = _run_git(["status", "--short"], cwd=cwd)
+    console.print(Panel(st or "[dim]working tree clean[/dim]",
+        title="[bold]Staged[/bold]", border_style=border))
+
+
+def cmd_commit(state, args):
+    """/commit [message] — commit staged changes. No message → summary from the diff."""
+    cwd = state.get("workspace_root") or "."
+    staged, _ = _run_git(["diff", "--cached", "--stat"], cwd=cwd)
+    if not staged.strip():
+        console.print("[yellow]Nothing staged. Use /stage first.[/yellow]"); return
+    msg = (args or "").strip()
+    if not msg:
+        names, _ = _run_git(["diff", "--cached", "--name-only"], cwd=cwd)
+        files = [n for n in names.splitlines() if n.strip()]
+        head  = ", ".join(files[:3]) + (f" +{len(files)-3} more" if len(files) > 3 else "")
+        msg   = f"update {head or 'project'}"
+        console.print(f"[dim]Auto message (pass your own to override):[/dim] [bold]{msg}[/bold]")
+    out, err = _run_git(["commit", "-m", msg], cwd=cwd)
+    console.print(out or err or "[dim](no output)[/dim]")
+
+
+def cmd_stash(state, args):
+    """/stash [pop|list|drop] — manage git stashes (default: push)."""
+    cwd = state.get("workspace_root") or "."
+    sub = (args or "").strip().lower() or "push"
+    mapping = {"push": ["stash", "push"], "save": ["stash", "push"],
+               "pop": ["stash", "pop"], "list": ["stash", "list"], "drop": ["stash", "drop"]}
+    out, err = _run_git(mapping.get(sub, ["stash", "push"]), cwd=cwd)
+    console.print(out or err or "[dim](no output)[/dim]")
+
+
+def cmd_blame(state, args):
+    """/blame <file> — show git blame (first 40 lines)."""
+    cwd = state.get("workspace_root") or "."
+    f   = (args or "").strip()
+    if not f:
+        console.print("[yellow]Usage: /blame <file>[/yellow]"); return
+    out, err = _run_git(["blame", "-L", "1,40", "--", f], cwd=cwd)
+    if err and not out:
+        console.print(f"[red]{err}[/red]"); return
+    console.print(Panel(out or "[dim](empty)[/dim]", title=f"[bold]Blame · {f}[/bold]",
+        border_style=state.get("theme", THEMES["default"])["border"]))
+
+
+def cmd_pr(state, args):
+    """/pr [base] — summarize this branch vs base (default: main) as a PR title + body."""
+    cwd  = state.get("workspace_root") or "."
+    base = (args or "").strip() or "main"
+    branch, _ = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
+    stat, _   = _run_git(["diff", "--stat", f"{base}...HEAD"], cwd=cwd)
+    log, _    = _run_git(["log", "--oneline", f"{base}..HEAD"], cwd=cwd)
+    if not (stat or log):
+        console.print(f"[yellow]No diff vs {base} (is the branch correct?).[/yellow]"); return
+    title = (log.splitlines()[-1].split(" ", 1)[-1] if log else f"{branch}")
+    body  = (f"## Summary\n\nChanges on `{branch}` vs `{base}`.\n\n"
+             f"## Commits\n{log or '(none)'}\n\n## Files\n{stat or '(none)'}")
+    console.print(Panel(f"[bold]{title}[/bold]\n\n{body}",
+        title="[bold]PR Draft[/bold]", border_style=state.get("theme", THEMES["default"])["border"]))
+
+
+# ── Context & navigation ──────────────────────────────────────────────────────
+def cmd_map(state, args):
+    """/map — quick repo map: top-level dirs + file counts by extension."""
+    import collections
+    root  = Path(state.get("workspace_root") or ".")
+    theme = state.get("theme", THEMES["default"])
+    skip  = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build", ".next"}
+    exts  = collections.Counter()
+    dirs  = collections.Counter()
+    total = 0
+    for p in root.rglob("*"):
+        if any(part in skip for part in p.parts):
+            continue
+        if p.is_file():
+            total += 1
+            exts[p.suffix or "(none)"] += 1
+            rel = p.relative_to(root).parts
+            dirs[rel[0] if len(rel) > 1 else "."] += 1
+        if total > 8000:
+            break
+    top_dirs = "\n".join(f"  [cyan]{d}/[/cyan]  [dim]{n} files[/dim]" for d, n in dirs.most_common(12))
+    top_exts = "  ".join(f"[yellow]{e}[/yellow]·{n}" for e, n in exts.most_common(10))
+    console.print(Panel(f"{top_dirs}\n\n[dim]Types:[/dim] {top_exts}\n[dim]Total files:[/dim] {total}",
+        title=f"[bold]Repo Map · {root.name}[/bold]", border_style=theme["border"]))
+
+
+def _build_studio_md(ctx):
+    """Render a STUDIO.md project-memory document from a scan_project() result."""
+    s     = ctx.get("stats", {})
+    size  = s.get("total_size", 0)
+    sz    = f"{size // 1024}KB" if size < 1048576 else f"{size // 1048576}MB"
+    stack = ", ".join(ctx.get("tech_stack") or []) or "—"
+    entries = ", ".join(ctx.get("entry_points") or []) or "—"
+    by_ext = sorted((ctx.get("stats", {}).get("by_ext") or {}).items(), key=lambda x: -x[1])
+    ext_line = "  ".join(f"`{e or '∅'}`×{n}" for e, n in by_ext[:10]) or "—"
+    tree = "\n".join(ctx.get("tree", "").split("\n")[:60])
+    key_files = sorted(ctx.get("files", {}).items(), key=lambda x: -x[1]["size"])[:12]
+    key_md = "\n".join(f"- `{f}` — {info['lines']} lines" for f, info in key_files) or "- (none)"
+    return (
+        f"# Project Memory — {Path(ctx['root']).name}\n\n"
+        f"> Auto-generated by StudioCLI `/init` on {datetime.now().strftime('%Y-%m-%d')}. "
+        f"Loaded as context each session. Edit freely — your notes are preserved below the marker.\n\n"
+        f"## Overview\n"
+        f"- **Root:** `{ctx['root']}`\n"
+        f"- **Tech stack:** {stack}\n"
+        f"- **Entry points:** {entries}\n"
+        f"- **Size:** {s.get('total_files', 0)} files · {s.get('total_lines', 0):,} lines · {sz}\n"
+        f"- **File types:** {ext_line}\n\n"
+        f"## Key files\n{key_md}\n\n"
+        f"## Structure\n```\n{tree}\n```\n\n"
+        f"<!-- STUDIO:NOTES — add your own project notes below; /init preserves this section -->\n"
+    )
+
+
+def cmd_init(state, args):
+    """/init — scan the project and write STUDIO.md project memory (loaded each session)."""
+    root  = (args or "").strip() or state.get("workspace_root") or "."
+    theme = state.get("theme", THEMES["default"])
+    console.print("[dim]Scanning project…[/dim]")
+    ctx = scan_project(root)
+    if "error" in ctx:
+        console.print(f"[red]{ctx['error']}[/red]"); return
+    out_path = Path(ctx["root"]) / "STUDIO.md"
+    body = _build_studio_md(ctx)
+    # Preserve any existing user notes section on regeneration
+    if out_path.exists():
+        try:
+            old = out_path.read_text(encoding="utf-8")
+            marker = "<!-- STUDIO:NOTES"
+            if marker in old:
+                notes = old.split(marker, 1)[1].split("-->", 1)[-1]
+                if notes.strip():
+                    body = body.rstrip() + "\n" + notes.lstrip("\n")
+        except Exception:
+            pass
+        console.print(f"[yellow]STUDIO.md exists — it will be refreshed (your notes are kept).[/yellow]")
+    out_path.write_text(body, encoding="utf-8")
+    state["studio_md"] = str(out_path)
+    console.print(Panel(
+        f"[{theme['success']}]✓ Wrote {out_path}[/{theme['success']}]\n\n"
+        f"[dim]Tech:[/dim] {', '.join(ctx.get('tech_stack') or []) or '—'}\n"
+        f"[dim]Files:[/dim] {ctx['stats']['total_files']}  ·  "
+        f"[dim]Lines:[/dim] {ctx['stats']['total_lines']:,}\n\n"
+        f"[dim]This file is loaded as project memory on future sessions. Edit the notes section freely.[/dim]",
+        title="[bold]Project Memory · /init[/bold]", border_style=theme["border"]))
+
+
+# ── Checkpoints & Rewind ──────────────────────────────────────────────────────
+def _checkpoints_dir():
+    d = CONFIG_DIR / "checkpoints"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def cmd_checkpoint(state, args, history):
+    """/checkpoint [label] — snapshot the conversation + uncommitted file changes."""
+    theme = state.get("theme", THEMES["default"])
+    cid   = datetime.now().strftime("%Y%m%d-%H%M%S")
+    label = (args or "").strip() or "checkpoint"
+    cdir  = _checkpoints_dir() / cid
+    cdir.mkdir(parents=True, exist_ok=True)
+    (cdir / "history.json").write_text(json.dumps(history or [], indent=2), encoding="utf-8")
+    # Snapshot uncommitted changes as a patch (if inside a git repo)
+    cwd = state.get("workspace_root") or "."
+    diff, _ = _run_git(["diff", "HEAD"], cwd=cwd)
+    if diff.strip():
+        (cdir / "uncommitted.patch").write_text(diff, encoding="utf-8")
+    head, _ = _run_git(["rev-parse", "--short", "HEAD"], cwd=cwd)
+    (cdir / "meta.json").write_text(json.dumps({
+        "id": cid, "label": label, "ts": time.time(),
+        "model": state.get("model"), "msgs": len(history or []),
+        "git_head": head, "has_patch": bool(diff.strip()),
+    }, indent=2), encoding="utf-8")
+    console.print(f"[{theme['success']}]✓ Checkpoint [bold]{cid}[/bold] · {label}[/{theme['success']}]"
+                  f"  [dim]({len(history or [])} msgs"
+                  + (", +uncommitted diff" if diff.strip() else "") + ")[/dim]")
+
+
+def cmd_checkpoints(state):
+    """/checkpoints — list saved checkpoints."""
+    theme = state.get("theme", THEMES["default"])
+    cps = sorted(_checkpoints_dir().glob("*/meta.json"), reverse=True)
+    if not cps:
+        console.print("[dim]No checkpoints yet — /checkpoint [label] to make one.[/dim]")
+        return
+    rows = []
+    for mp in cps[:25]:
+        m = _safe_read_json(mp, {})
+        when = datetime.fromtimestamp(m.get("ts", 0)).strftime("%m-%d %H:%M")
+        rows.append(f"  [{theme['accent']}]{m.get('id','?')}[/{theme['accent']}]  "
+                    f"[dim]{when}[/dim]  {m.get('label','')}  "
+                    f"[dim]· {m.get('msgs',0)} msgs"
+                    + (" · +diff" if m.get("has_patch") else "") + "[/dim]")
+    console.print(Panel("\n".join(rows) + "\n\n[dim]/rewind <id> to restore (add 'files' to also apply the saved diff)[/dim]",
+        title=f"[bold]Checkpoints ({len(cps)})[/bold]", border_style=theme["border"]))
+
+
+def cmd_rewind(state, args, history):
+    """/rewind <id|last> [files] — restore conversation (and optionally files) from a checkpoint."""
+    theme = state.get("theme", THEMES["default"])
+    parts = (args or "").split()
+    if not parts:
+        console.print("[yellow]Usage: /rewind <id|last> [files][/yellow]  ·  see /checkpoints")
+        return history
+    sel       = parts[0]
+    do_files  = "files" in parts[1:]
+    all_cps   = sorted(_checkpoints_dir().glob("*/"), reverse=True)
+    if sel == "last":
+        target = all_cps[0] if all_cps else None
+    else:
+        target = next((c for c in all_cps if c.name == sel or c.name.startswith(sel)), None)
+    if not target:
+        console.print(f"[yellow]Checkpoint '{sel}' not found — see /checkpoints[/yellow]")
+        return history
+    new_hist = _safe_read_json(target / "history.json", None)
+    if not isinstance(new_hist, list):
+        console.print("[red]Checkpoint history is unreadable.[/red]")
+        return history
+    msg = f"[{theme['success']}]✓ Rewound to {target.name}[/{theme['success']}]  [dim]({len(new_hist)} msgs)[/dim]"
+    if do_files:
+        patch = target / "uncommitted.patch"
+        if patch.exists():
+            cwd = state.get("workspace_root") or "."
+            out, err = _run_git(["apply", "--3way", str(patch)], cwd=cwd)
+            msg += ("\n[green]✓ Applied saved file diff[/green]" if not err
+                    else f"\n[yellow]Could not apply diff: {err}[/yellow]")
+        else:
+            msg += "\n[dim](no file diff stored in this checkpoint)[/dim]"
+    console.print(msg)
+    return new_hist
+
+
+# ── Studio Marketplace ────────────────────────────────────────────────────────
+_MARKET_PACKS = {
+    "git-pro": {
+        "desc": "Git power-command aliases",
+        "aliases": {
+            "wip":   "Write a one-line WIP commit message for the current staged changes.",
+            "explain-diff": "Explain what this git diff does in plain English: {input}",
+        },
+        "workflows": {},
+    },
+    "reviewer": {
+        "desc": "Three-step code-review workflow",
+        "aliases": {},
+        "workflows": {
+            "review": [
+                "Review the following code for correctness bugs: {input}",
+                "Now point out performance and readability improvements.",
+                "Summarize your review as a concise PR description.",
+            ],
+        },
+    },
+    "writer": {
+        "desc": "Writing & explanation helpers",
+        "aliases": {
+            "tighten": "Tighten this prose without losing meaning: {input}",
+            "eli5":    "Explain like I'm 5: {input}",
+        },
+        "workflows": {},
+    },
+}
+
+
+def cmd_marketplace(state, args):
+    """/marketplace [browse|install <pack>|export|import <file>] — share presets."""
+    theme  = state.get("theme", THEMES["default"])
+    acc    = theme.get("accent", "cyan")
+    parts  = (args or "").split()
+    op     = parts[0].lower() if parts else "browse"
+    expdir = CONFIG_DIR / "exports"
+
+    if op in ("browse", "list", ""):
+        rows = [f"  [{acc}]{name}[/{acc}]  [dim]{p['desc']}[/dim]  "
+                f"[dim]({len(p['aliases'])} cmds, {len(p['workflows'])} workflows)[/dim]"
+                for name, p in _MARKET_PACKS.items()]
+        catalog = (f"[bold]Packs[/bold] [dim](/marketplace install <name>)[/dim]\n" + "\n".join(rows)
+                   + f"\n\n[bold]Your library[/bold]\n"
+                   f"  [dim]Themes:[/dim] {len(THEMES)}   "
+                   f"[dim]Agents:[/dim] {len(AGENT_ROSTER)}   "
+                   f"[dim]Aliases:[/dim] {len(_load_aliases())}   "
+                   f"[dim]Workflows:[/dim] {len(_load_workflows())}\n\n"
+                   f"[dim]/marketplace export  ·  /marketplace import <file>[/dim]")
+        console.print(Panel(catalog, title="[bold]🛍️  Studio Marketplace[/bold]", border_style=theme["border"]))
+        return
+
+    if op == "install":
+        if len(parts) < 2 or parts[1] not in _MARKET_PACKS:
+            console.print(f"[yellow]Usage: /marketplace install <{'|'.join(_MARKET_PACKS)}>[/yellow]")
+            return
+        pack = _MARKET_PACKS[parts[1]]
+        al = _load_aliases(); al.update(pack["aliases"]); _save_aliases(al)
+        wf = _load_workflows(); wf.update(pack["workflows"]); _save_workflows(wf)
+        console.print(f"[{theme['success']}]✓ Installed '{parts[1]}'[/{theme['success']}]  "
+                      f"[dim](+{len(pack['aliases'])} aliases, +{len(pack['workflows'])} workflows)[/dim]")
+        return
+
+    if op == "export":
+        expdir.mkdir(parents=True, exist_ok=True)
+        out = expdir / f"studio-preset-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+        bundle = {
+            "kind": "studio-preset", "version": VERSION,
+            "theme": state.get("ui_style"),
+            "aliases": _load_aliases(),
+            "workflows": _load_workflows(),
+        }
+        out.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+        console.print(f"[{theme['success']}]✓ Exported your preset → {out}[/{theme['success']}]")
+        return
+
+    if op == "import":
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /marketplace import <file.json>[/yellow]"); return
+        data = _safe_read_json(Path(parts[1]), None)
+        if not isinstance(data, dict):
+            console.print(f"[red]Could not read preset: {parts[1]}[/red]"); return
+        al = _load_aliases(); al.update(data.get("aliases", {}) or {}); _save_aliases(al)
+        wf = _load_workflows(); wf.update(data.get("workflows", {}) or {}); _save_workflows(wf)
+        console.print(f"[{theme['success']}]✓ Imported preset[/{theme['success']}]  "
+                      f"[dim](+{len(data.get('aliases',{}))} aliases, +{len(data.get('workflows',{}))} workflows)[/dim]")
+        return
+
+    console.print("[yellow]/marketplace [browse|install <pack>|export|import <file>][/yellow]")
+
+
+# ── MCP / Connectors Hub ──────────────────────────────────────────────────────
+def cmd_mcp(state, args):
+    """/mcp [list|add|remove|tools|call] — manage MCP connector servers."""
+    from studio import mcp as _mcp
+    theme   = state.get("theme", THEMES["default"])
+    parts   = (args or "").split()
+    sub     = parts[0].lower() if parts else "list"
+    cfg     = _mcp.load_mcp_config()
+    servers = cfg.get("servers", {})
+
+    if sub in ("list", "ls", "status"):
+        if not servers:
+            console.print(Panel(
+                "[dim]No MCP servers configured.[/dim]\n\n"
+                "Add one:  [bold]/mcp add <name> <command> [args…][/bold]\n"
+                "Example:  [bold]/mcp add fs npx -y @modelcontextprotocol/server-filesystem .[/bold]\n\n"
+                "Then:     [bold]/mcp tools <name>[/bold]  ·  [bold]/mcp call <name> <tool> {json}[/bold]",
+                title="[bold]MCP · Connectors Hub[/bold]", border_style=theme["border"]))
+            return
+        rows = []
+        for n, spec in servers.items():
+            cmdline = " ".join([spec.get("command", "")] + spec.get("args", []))
+            rows.append(f"  [{theme['accent']}]{n}[/{theme['accent']}]  [dim]{cmdline[:60]}[/dim]")
+        console.print(Panel("\n".join(rows) + "\n\n[dim]/mcp tools <name> to inspect[/dim]",
+            title=f"[bold]MCP Servers ({len(servers)})[/bold]", border_style=theme["border"]))
+        return
+
+    if sub == "add":
+        if len(parts) < 3:
+            console.print("[yellow]Usage: /mcp add <name> <command> [args…][/yellow]"); return
+        name, command, sargs = parts[1], parts[2], parts[3:]
+        servers[name] = {"command": command, "args": sargs, "env": {}}
+        cfg["servers"] = servers
+        if _mcp.save_mcp_config(cfg):
+            console.print(f"[{theme['success']}]✓ Added MCP server '{name}'[/{theme['success']}]"
+                          f"  [dim]({command} {' '.join(sargs)})[/dim]")
+        else:
+            console.print("[red]Could not write mcp.json[/red]")
+        return
+
+    if sub in ("remove", "rm", "delete"):
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /mcp remove <name>[/yellow]"); return
+        if servers.pop(parts[1], None) is not None:
+            cfg["servers"] = servers; _mcp.save_mcp_config(cfg)
+            console.print(f"[{theme['success']}]✓ Removed '{parts[1]}'[/{theme['success']}]")
+        else:
+            console.print(f"[yellow]No server named '{parts[1]}'[/yellow]")
+        return
+
+    if sub == "tools":
+        if len(parts) < 2:
+            console.print("[yellow]Usage: /mcp tools <name>[/yellow]"); return
+        name = parts[1]
+        console.print(f"[dim]Connecting to '{name}'…[/dim]")
+        try:
+            with _mcp.connect(name, cfg) as cli:
+                tools = cli.list_tools()
+        except Exception as e:
+            console.print(f"[red]Could not connect to '{name}': {e}[/red]"); return
+        if not tools:
+            console.print(f"[yellow]'{name}' exposes no tools.[/yellow]"); return
+        body = "\n".join(
+            f"  [{theme['accent']}]{t.get('name')}[/{theme['accent']}] — "
+            f"[dim]{((t.get('description') or '').splitlines() or [''])[0][:70]}[/dim]" for t in tools)
+        console.print(Panel(body, title=f"[bold]{name} · {len(tools)} tools[/bold]", border_style=theme["border"]))
+        return
+
+    if sub == "call":
+        if len(parts) < 3:
+            console.print("[yellow]Usage: /mcp call <name> <tool> [json-args][/yellow]"); return
+        name, tool = parts[1], parts[2]
+        raw = args.split(None, 3)[3] if len(parts) > 3 else "{}"
+        try:
+            targs = json.loads(raw) if raw.strip() else {}
+        except Exception:
+            console.print("[red]Tool args must be valid JSON.[/red]"); return
+        console.print(f"[dim]Calling {name}.{tool}…[/dim]")
+        try:
+            with _mcp.connect(name, cfg) as cli:
+                res = cli.call_tool(tool, targs)
+        except Exception as e:
+            console.print(f"[red]Call failed: {e}[/red]"); return
+        out = "".join(b.get("text", "") for b in (res.get("content") or []) if b.get("type") == "text")
+        console.print(Panel(out or json.dumps(res, indent=2)[:2000],
+            title=f"[bold]{name}.{tool}[/bold]", border_style=theme["border"]))
+        return
+
+    console.print("[yellow]/mcp [list|add|remove|tools|call][/yellow]")
+
+
+def cmd_scratch(state, args):
+    """/scratch [text] — append a quick scratch note (or show the pad with no args)."""
+    pad = CONFIG_DIR / "scratch.txt"
+    CONFIG_DIR.mkdir(exist_ok=True)
+    text = (args or "").strip()
+    if text:
+        with pad.open("a", encoding="utf-8") as fh:
+            fh.write(f"[{datetime.now().strftime('%H:%M')}] {text}\n")
+        console.print("[green]✓ added to scratch[/green]")
+    else:
+        body = pad.read_text(encoding="utf-8") if pad.exists() else ""
+        console.print(Panel(body or "[dim](empty — /scratch <text> to add)[/dim]",
+            title="[bold]Scratch Pad[/bold]", border_style=state.get("theme", THEMES["default"])["border"]))
+
+
+# ── Fun / visual ──────────────────────────────────────────────────────────────
+def cmd_ascii(state, args):
+    """/ascii <text> — big ASCII-art text (pyfiglet if available, else styled fallback)."""
+    text = (args or "").strip() or "STUDIO"
+    acc  = state.get("theme", THEMES["default"])["accent"]
+    try:
+        import pyfiglet
+        art = pyfiglet.figlet_format(text[:24])
+        console.print(f"[{acc}]{art}[/{acc}]")
+    except Exception:
+        spaced = "  ".join(text.upper())
+        console.print(Panel(f"[bold {acc}]{spaced}[/bold {acc}]", border_style=acc, padding=(1, 3)))
+
+
+def cmd_banner(state, args):
+    """/banner <text> — themed banner panel."""
+    text  = (args or "").strip() or f"AI Studio CLI v{VERSION}"
+    theme = state.get("theme", THEMES["default"])
+    console.print(Panel(f"[bold {theme['banner_color']}]{theme.get('icon','✦')}  {text}[/bold {theme['banner_color']}]",
+        border_style=theme["border"], padding=(1, 4)))
+
+
+def cmd_confetti(state, args):
+    """/confetti — a little celebration."""
+    import random
+    bits = ["🎉", "✨", "🎊", "⭐", "💫", "🌟", "🎈", "🪅"]
+    for _ in range(6):
+        console.print(" ".join(random.choice(bits) for _ in range(random.randint(6, 14))))
+        time.sleep(0.08)
+    console.print("[bold]🎉  woohoo![/bold]")
+
+
+def cmd_matrix_fx(state, args):
+    """/matrix — brief Matrix-style digital rain."""
+    import random
+    chars = "ｱｲｳｴｵabcdef0123456789ﾊﾋﾌﾍﾎ"
+    width = min(60, shutil.get_terminal_size((80, 20)).columns - 2)
+    for _ in range(14):
+        row = "".join(random.choice(chars) if random.random() > 0.25 else " " for _ in range(width))
+        console.print(f"[green]{row}[/green]")
+        time.sleep(0.06)
+
+
+def cmd_fortune(state, args):
+    """/fortune — a random dev fortune."""
+    import random
+    FORTUNES = [
+        "Weeks of coding can save you hours of planning.",
+        "There are two hard things in CS: cache invalidation, naming, and off-by-one errors.",
+        "It works on my machine. ™",
+        "Premature optimization is the root of all evil. — Knuth",
+        "Code as if the person maintaining it is a violent psychopath who knows where you live.",
+        "The best error message is the one that never shows up.",
+        "Simplicity is prerequisite for reliability. — Dijkstra",
+        "Talk is cheap. Show me the code. — Torvalds",
+        "First, solve the problem. Then, write the code.",
+        "Ship it. 🚢",
+    ]
+    acc = state.get("theme", THEMES["default"])["accent"]
+    console.print(Panel(f"[{acc}]🥠  {random.choice(FORTUNES)}[/{acc}]", border_style=acc, padding=(0, 2)))
+
+
 def cmd_spell(state, args):
     """/spell <word> — NATO phonetic alphabet spelling."""
     NATO = {
@@ -8671,7 +9395,7 @@ def cmd_test_coverage(state, args, history):
         try:
             r = subprocess.run(
                 ["npx", "jest", "--coverage", "--silent", "--passWithNoTests"],
-                capture_output=True, text=True, timeout=120, cwd=ws, shell=True,
+                capture_output=True, text=True, timeout=120, cwd=ws,
             )
             cov_output = (r.stdout + r.stderr)[:4000]
         except Exception as e:
@@ -9457,6 +10181,94 @@ def _animate_banner(lines, color, delay=0.04):
         console.print(f"[{color}]{line}[/{color}]")
 
 
+# ── CELESTIAL CHROME ────────────────────────────────────────────────────────
+# Unified, theme-adaptive welcome screen shared by the celestial UI styles
+# (windynight, foggyskies, moon, shootingstars, blackhole, magnetar).
+# Each style supplies a title, tagline, and a decorative motif row; the rest of
+# the layout + colors are pulled from the active theme so a single renderer
+# stays consistent across the whole collection.
+_CELESTIAL_CHROME = {
+    "windynight":   {"icon": "🌬️", "title": "WINDY NIGHT",    "tag": "the night air moves",
+                     "motif": "╶╴ ～ ╴╶ ～  ╶╴ ～ ╴╶  ～ ╶╴ ～"},
+    "foggyskies":   {"icon": "🌫️", "title": "FOGGY SKIES",    "tag": "soft and low",
+                     "motif": "░▒▓ ▒░  ░▒▓▒░  ▒▓░ ▒  ░▒▓▒░"},
+    "moon":         {"icon": "🌙", "title": "MOON",            "tag": "a quiet glow",
+                     "motif": "·  ✦   ·  ◐   ·  ✦  ·   ✧   ·"},
+    "shootingstars":{"icon": "☄️", "title": "SHOOTING STARS", "tag": "make a wish",
+                     "motif": "·  ✧   ╲___   ·  ✦   ╲__   ·  ✧"},
+    "blackhole":    {"icon": "🕳️", "title": "BLACK HOLE",      "tag": "past the event horizon",
+                     "motif": "◜◝  ◯  ◞◟    ◜◝  ◯  ◞◟    ◜◝"},
+    "magnetar":     {"icon": "🧲", "title": "MAGNETAR",        "tag": "a pulsing field",
+                     "motif": "≈ ⌇ ≈ ⌇ ≈   ⌇ ≈ ⌇ ≈ ⌇   ≈ ⌇ ≈"},
+    # Cosmic II
+    "nebula":       {"icon": "🌌", "title": "NEBULA",         "tag": "cosmic dust",            "motif": "✦ · ✧  ☁ ✦  · ✧ ·  ✦ ☁ ✧"},
+    "supernova":    {"icon": "💥", "title": "SUPERNOVA",      "tag": "a star's last light",    "motif": "· ✦ ✸ ✦ ·   ✸   · ✦ ✸ ✦ ·"},
+    "galaxy":       {"icon": "🌀", "title": "GALAXY",         "tag": "a billion suns",         "motif": "✦ ˚ · ✶ ˚ ✦ · ✶ ˚ · ✦ ✶"},
+    "eclipse":      {"icon": "🌑", "title": "ECLIPSE",        "tag": "the corona",             "motif": "· ◌ ◍ ● ◍ ◌ ·   ✦   · ◌ ●"},
+    # Weather
+    "thunderstorm": {"icon": "⛈️", "title": "THUNDERSTORM",   "tag": "the sky cracks",         "motif": "╱ ⚡ ╲ ┊ ╱ ⚡ ┊ ╲ ⚡ ╱ ┊"},
+    "borealis":     {"icon": "🌠", "title": "AURORA BOREALIS","tag": "ribbons of light",       "motif": "～≈～ ≋ ～≈～ ≋ ～≈～ ≋ ～"},
+    "blizzard":     {"icon": "❄️", "title": "BLIZZARD",       "tag": "whiteout",               "motif": "❄ · ❅ ·  ❄ ❅ · ❄ ·  ❅ ❄"},
+    "sunrise":      {"icon": "🌅", "title": "SUNRISE",        "tag": "first light",            "motif": "· ☀ ·   ▁▂▃▂▁   · ☀ ·"},
+    # Nature
+    "oceandepths":  {"icon": "🌊", "title": "OCEAN DEPTHS",   "tag": "bioluminescence",        "motif": "° · ｡ ○ ° ｡ · ○ ° · ｡ ○"},
+    "fireflies":    {"icon": "✨", "title": "FIREFLIES",      "tag": "tiny lanterns",          "motif": "· ✦ · ˚ ✦ ·  ✦ ˚ · ✦ ·"},
+    "volcano":      {"icon": "🌋", "title": "VOLCANO",        "tag": "molten",                 "motif": "˚ ∴ ✦ ∴ ˚   ∴ ✦ ∴   ˚ ∴"},
+    "desertnight":  {"icon": "🏜️", "title": "DESERT NIGHT",   "tag": "dunes & stars",          "motif": "· ✦ · ︵︵ · ✦ · ︵ · ✦"},
+    # Retro / Synth
+    "vaporwave":    {"icon": "🌴", "title": "VAPORWAVE",      "tag": "a e s t h e t i c",      "motif": "▘▝ ░ ▞ ░ ▝▘ ░ ▞ ░ ▝▘"},
+    "crt":          {"icon": "📺", "title": "CRT",            "tag": "phosphor glow",          "motif": "▒▓ ▒░ ▓▒ ░▒ ▓▒░ ▒▓ ░"},
+    "amber":        {"icon": "🟠", "title": "AMBER",          "tag": "warm glow",              "motif": "· ▰ ▱ ▰ ·   ▱ ▰ ▱   · ▰"},
+    "matrixrain":   {"icon": "🟩", "title": "MATRIX RAIN",    "tag": "follow the white rabbit","motif": "│╎ █ ╎│ ░ ╎ █ ╎ ░ │ █"},
+}
+
+# Prompt-arrow glyph per celestial style (ASCII-width-safe for ptk alignment).
+_CELESTIAL_GLYPH = {
+    "windynight":   "⤳",
+    "foggyskies":   "░",
+    "moon":         "☾",
+    "shootingstars":"✦",
+    "blackhole":    "◯",
+    "magnetar":     "⌇",
+    "nebula":"✧","supernova":"✸","galaxy":"✶","eclipse":"●",
+    "thunderstorm":"⚡","borealis":"≈","blizzard":"❄","sunrise":"☀",
+    "oceandepths":"°","fireflies":"✦","volcano":"∴","desertnight":"✦",
+    "vaporwave":"▞","crt":"▒","amber":"▰","matrixrain":"█",
+}
+
+
+def _render_celestial_welcome(ui, theme, short, mode_str, ws_short, plan_cfg,
+                              perms, stream_m, msg_str, sess_n, username):
+    chrome   = _CELESTIAL_CHROME.get(ui, _CELESTIAL_CHROME["moon"])
+    border_c = theme["border"].replace("bold ", "")
+    acc      = theme["accent"]
+    banner   = theme["banner_color"]
+    sub      = theme["banner_sub"]
+    icon     = chrome["icon"]
+
+    body = (
+        f"  [{sub}]{chrome['motif']}[/{sub}]\n\n"
+        f"  [bold {acc}]Model[/bold {acc}]     [{theme['success']}]{short}[/{theme['success']}]"
+        f"  [dim]·  {mode_str}[/dim]\n"
+        f"  [bold {acc}]Dir[/bold {acc}]       [dim]{ws_short}[/dim]\n"
+        f"  [bold {acc}]Plan[/bold {acc}]      [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
+        f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]\n"
+        f"  [bold {acc}]Stream[/bold {acc}]    [dim]{stream_m}[/dim]"
+        f"  [dim]·  perms {perms}[/dim]\n\n"
+        f"  [dim {sub}]/enter .   /models   /agent berry   /vibe   /help[/dim {sub}]"
+    )
+    console.print()
+    console.print(Panel(
+        body,
+        title=f"[bold {banner}]{icon}  {chrome['title']}[/bold {banner}]"
+              f"  [dim {sub}]╱  Studio CLI  ·  v{VERSION}[/dim {sub}]",
+        subtitle=f"[dim {sub}]{username}  ·  {chrome['tag']}[/dim {sub}]",
+        border_style=border_c,
+        padding=(0, 2),
+    ))
+    console.print()
+
+
 def render_welcome(state):
     """Render startup screen — plan-aware, ui-aware."""
     theme    = state.get("theme", THEMES["default"])
@@ -9788,6 +10600,14 @@ def render_welcome(state):
         )
         return
 
+    # ── CELESTIAL COLLECTION (unified redesigned chrome) ─────────────────────
+    if ui in CELESTIAL_STYLES:
+        _render_celestial_welcome(
+            ui, theme, short, mode_str, ws_short, plan_cfg,
+            perms, stream_m, msg_str, sess_n, username,
+        )
+        return
+
     # ── GEMINI (default) ────────────────────────────────────────────────────
     # Redesigned inline instead of delegating to get_banner
     console.print()
@@ -9850,24 +10670,36 @@ def activate_agent_session(state, aid):
 
 
 def _prompt_html(theme, ui_style):
+    # Use ptk's <style fg="..."> form so hex colors (e.g. "#818cf8") are valid —
+    # a bare <#818cf8> tag is not well-formed XML and raises ExpatError.
     pname = theme["prompt_name"]
     pc    = _ptk_style_token(theme["prompt_user"])
     ac    = _ptk_style_token(theme["prompt_arrow"])
+
+    def u(content):  # prompt-user color
+        return f'<style fg="{pc}">{content}</style>'
+
+    def a(content):  # arrow color
+        return f'<style fg="{ac}">{content}</style>'
+
     if ui_style == "claude":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>▸ </{ac}>")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('▸ ')}")
     if ui_style == "codex":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>$&gt; </{ac}>")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('$&gt; ')}")
     if ui_style == "studio":
-        return HTML(f"<{pc}><b>◆ {pname}</b></{pc}> <{ac}>›</{ac}> ")
+        return HTML(f"{u(f'<b>◆ {pname}</b>')} {a('›')} ")
     if ui_style == "ghost":
-        return HTML(f"<{pc}>◌ </{pc}>")
+        return HTML(u("◌ "))
     if ui_style == "nova":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>⚡ </{ac}>")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('⚡ ')}")
     if ui_style == "foxxia":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>🦊 </{ac}>")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('🦊 ')}")
     if ui_style == "rain":
-        return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>░ </{ac}>")
-    return HTML(f"<{pc}><b>{pname}</b></{pc}> <{ac}>›</{ac}> ")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a('░ ')}")
+    if ui_style in CELESTIAL_STYLES:
+        glyph = _CELESTIAL_GLYPH.get(ui_style, "✦")
+        return HTML(f"{u(f'<b>{pname}</b>')} {a(f'{glyph} ')}")
+    return HTML(f"{u(f'<b>{pname}</b>')} {a('›')} ")
 
 
 _toolbar_disk_cache: dict = {"ts": 0.0, "mem_n": 0, "prof": None, "trial": None, "branch": ""}
@@ -10105,6 +10937,17 @@ def _prompt_box(theme, ui_style, state):
             ("fg:#00ff41",       top),
             ("fg:#00ff41",       mid),
             ("fg:#00ffff bold",  "░ "),
+        ])
+    elif ui_style in CELESTIAL_STYLES:
+        glyph = _CELESTIAL_GLYPH.get(ui_style, "✦")
+        icon  = _CELESTIAL_CHROME.get(ui_style, {}).get("icon", "✦")
+        fill  = max(2, 50 - len(label) - len(model_short) - len(mode_tag))
+        top   = f" ╭─ {icon} {label}{mode_tag} {'─'*fill} {model_short} ─╮\n"
+        mid   = " │ "
+        return FormattedText([
+            (f"fg:{pc}",      top),
+            (f"fg:{pc}",      mid),
+            (f"fg:{ac} bold", f"{glyph} "),
         ])
     else:
         fill  = max(2, 55 - len(label) - len(model_short))
@@ -10834,8 +11677,8 @@ def run_repl(state):
                             title="Image Models", border_style="cyan"))
                 elif cmd == "todo":           cmd_todo(state)
                 elif cmd == "bench":          cmd_bench(state)
-                elif cmd == "tts":            cmd_tts(state, args)
-                elif cmd == "voice":          cmd_voice(state, args)
+                elif cmd in ("speak", "tts"): cmd_speak(state, args)
+                elif cmd == "voice":          cmd_speak(state, "listen " + (args or ""))
                 elif cmd == "export":         cmd_export(state, history)
                 elif cmd == "balance":        cmd_balance(state)
                 elif cmd == "cost":           cmd_cost(state, args)
@@ -10854,7 +11697,7 @@ def run_repl(state):
                 elif cmd == "statusline": state = cmd_statusline(state, args)
                 elif cmd == "arena":      history = cmd_arena(state, args, history)
                 elif cmd == "broadcast":  cmd_broadcast(state, args)
-                elif cmd == "local":      state = cmd_local(state, args or "llama3")
+                elif cmd in ("local", "ollama"): state = cmd_local(state, args)
                 elif cmd == "mesh":
                     console.print(Panel(json.dumps(BLACKBOARD, indent=2), title="Agent Mesh Blackboard", border_style="magenta"))
                 elif cmd == "live-fif":
@@ -10883,7 +11726,7 @@ def run_repl(state):
                 elif cmd == "upgrade":        cmd_upgrade(state, args)
                 elif cmd == "plan":           cmd_plan(state)
                 elif cmd == "permissions":    state = cmd_permissions(state)
-                elif cmd == "beta":
+                elif cmd in ("beta", "experimental"):
                     _beta_sub = (args or "").strip().lower().split(" ", 1)[0]
                     if _beta_sub in ("docx", "xlsx", "screenshot", "image", "img", "vision", "video", "feedback"):
                         history = cmd_beta_features(state, args, history)
@@ -10930,7 +11773,7 @@ def run_repl(state):
 
                 # ── v5.8 new commands ─────────────────────────────────────────
                 elif cmd in ("profile", "me"):           cmd_profile_view(state)
-                elif cmd in ("insights", "stats"):       cmd_insights(state)
+                elif cmd in ("insights", "stats", "analytics"): cmd_insights(state)
                 elif cmd == "vault":                     cmd_vault(state, args)
                 elif cmd == "team":                      cmd_team(state, args)
 
@@ -10938,6 +11781,8 @@ def run_repl(state):
                 elif cmd == "alias":
                     # Check if first word of args is a known alias expansion trigger
                     history = cmd_alias(state, args, history)
+                elif cmd in ("workflow", "wf"):
+                    history = cmd_workflow(state, args, history)
                 elif cmd == "multiline":  state = cmd_multiline(state, args)
                 elif cmd == "note":       cmd_note(state, args)
                 elif cmd == "regen":      history = cmd_regen(state, args, history)
@@ -11050,12 +11895,33 @@ def run_repl(state):
                 elif cmd == "lorem":            cmd_lorem(state, args)
                 elif cmd == "spell":            cmd_spell(state, args)
 
+                # ── v9.7 Git/VCS · Context · Fun/visual ────────────────────────
+                elif cmd == "init":             cmd_init(state, args)
+                elif cmd in ("checkpoint", "cp"): cmd_checkpoint(state, args, history)
+                elif cmd == "checkpoints":      cmd_checkpoints(state)
+                elif cmd == "rewind":           history = cmd_rewind(state, args, history)
+                elif cmd == "mcp":              cmd_mcp(state, args)
+                elif cmd in ("marketplace", "market"): cmd_marketplace(state, args)
+                elif cmd == "commit":           cmd_commit(state, args)
+                elif cmd == "stage":            cmd_stage(state, args)
+                elif cmd == "stash":            cmd_stash(state, args)
+                elif cmd == "blame":            cmd_blame(state, args)
+                elif cmd == "pr":               cmd_pr(state, args)
+                elif cmd == "map":              cmd_map(state, args)
+                elif cmd == "scratch":          cmd_scratch(state, args)
+                elif cmd == "ascii":            cmd_ascii(state, args)
+                elif cmd == "banner":           cmd_banner(state, args)
+                elif cmd == "confetti":         cmd_confetti(state, args)
+                elif cmd == "matrix":           cmd_matrix_fx(state, args)
+                elif cmd == "fortune":          cmd_fortune(state, args)
+
                 else:
                     # Check user-defined aliases first
                     _user_aliases = _load_aliases()
                     if cmd in _user_aliases:
-                        console.print(f"  [dim]Alias → {_user_aliases[cmd][:60]}[/dim]")
-                        _, history = ai_respond(state, _user_aliases[cmd], history)
+                        _expanded = _apply_alias_args(_user_aliases[cmd], args)
+                        console.print(f"  [dim]Alias → {_expanded[:60]}[/dim]")
+                        _, history = ai_respond(state, _expanded, history)
                         _autosave_session(history)
                     else:
                         # 10. Auto-Corrector Feature

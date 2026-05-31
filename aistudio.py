@@ -1448,6 +1448,11 @@ ALL_COMMANDS = [
     # v9.6 — utility commands
     "/calc","/math","/uuid","/guid","/hash","/b64","/base64",
     "/ts","/timestamp","/now","/ping","/jwt","/lorem","/spell",
+    # v9.7 — Speak (merged), Git/VCS, Context, Fun/visual
+    "/speak",
+    "/commit","/stage","/stash","/blame","/pr",
+    "/map","/scratch",
+    "/ascii","/banner","/confetti","/matrix","/fortune",
 ]
 
 COMMAND_METADATA = {
@@ -8521,6 +8526,228 @@ def cmd_lorem(state, args):
     console.print("[dim]Copied to clipboard[/dim]")
 
 
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║  v9.7  —  Speak (merge /tts+/voice), Git/VCS, Context, Fun/visual         ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+def _speak_text(text):
+    """Cross-platform TTS. Returns True if a speech engine was invoked."""
+    clean = re.sub(r"\[.*?\]", "", text or "").replace("\n", " ").strip()[:500]
+    if not clean:
+        return False
+    try:
+        if sys.platform == "win32":
+            import base64
+            script = ("Add-Type -AssemblyName System.Speech; "
+                      "(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak(%s)" % json.dumps(clean))
+            enc = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+            subprocess.Popen(["PowerShell", "-NoProfile", "-EncodedCommand", enc])
+            return True
+        if sys.platform == "darwin":
+            subprocess.Popen(["say", clean]); return True
+        for eng in (["spd-say", clean], ["espeak", clean]):
+            if shutil.which(eng[0]):
+                subprocess.Popen(eng); return True
+    except Exception:
+        return False
+    return False
+
+
+def cmd_speak(state, args=None):
+    """/speak [say <text>] — speak aloud (TTS).  /speak listen — voice input (STT).
+    Unified Speak product — merges the old /tts and /voice."""
+    args  = (args or "").strip()
+    sub   = args.split()[0].lower() if args else ""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+
+    if sub in ("listen", "in", "stt", "mic"):
+        return cmd_voice(state, args[len(sub):].strip() or "start")
+    if sub in ("start", "stop"):
+        return cmd_voice(state, args)
+
+    text = args[3:].strip() if sub == "say" else state.get("_last_response", "")
+    if not text:
+        console.print("[yellow]Nothing to speak — send a message first, or /speak say <text>.[/yellow]")
+        return
+    console.print(f"[{acc}]🔊 Speaking…[/{acc}]")
+    if not _speak_text(text):
+        console.print("[dim]No TTS engine found (win: built-in · mac: say · linux: install espeak/spd-say).[/dim]")
+
+
+# ── Git / VCS ───────────────────────────────────────────────────────────────
+def cmd_stage(state, args):
+    """/stage [paths] — git add (default: all), then show short status."""
+    cwd    = state.get("workspace_root") or "."
+    border = state.get("theme", THEMES["default"])["border"]
+    target = (args or "").strip() or "-A"
+    _, err = _run_git(["add"] + shlex.split(target), cwd=cwd)
+    if err and "fatal" in err.lower():
+        console.print(f"[red]{err}[/red]"); return
+    st, _ = _run_git(["status", "--short"], cwd=cwd)
+    console.print(Panel(st or "[dim]working tree clean[/dim]",
+        title="[bold]Staged[/bold]", border_style=border))
+
+
+def cmd_commit(state, args):
+    """/commit [message] — commit staged changes. No message → summary from the diff."""
+    cwd = state.get("workspace_root") or "."
+    staged, _ = _run_git(["diff", "--cached", "--stat"], cwd=cwd)
+    if not staged.strip():
+        console.print("[yellow]Nothing staged. Use /stage first.[/yellow]"); return
+    msg = (args or "").strip()
+    if not msg:
+        names, _ = _run_git(["diff", "--cached", "--name-only"], cwd=cwd)
+        files = [n for n in names.splitlines() if n.strip()]
+        head  = ", ".join(files[:3]) + (f" +{len(files)-3} more" if len(files) > 3 else "")
+        msg   = f"update {head or 'project'}"
+        console.print(f"[dim]Auto message (pass your own to override):[/dim] [bold]{msg}[/bold]")
+    out, err = _run_git(["commit", "-m", msg], cwd=cwd)
+    console.print(out or err or "[dim](no output)[/dim]")
+
+
+def cmd_stash(state, args):
+    """/stash [pop|list|drop] — manage git stashes (default: push)."""
+    cwd = state.get("workspace_root") or "."
+    sub = (args or "").strip().lower() or "push"
+    mapping = {"push": ["stash", "push"], "save": ["stash", "push"],
+               "pop": ["stash", "pop"], "list": ["stash", "list"], "drop": ["stash", "drop"]}
+    out, err = _run_git(mapping.get(sub, ["stash", "push"]), cwd=cwd)
+    console.print(out or err or "[dim](no output)[/dim]")
+
+
+def cmd_blame(state, args):
+    """/blame <file> — show git blame (first 40 lines)."""
+    cwd = state.get("workspace_root") or "."
+    f   = (args or "").strip()
+    if not f:
+        console.print("[yellow]Usage: /blame <file>[/yellow]"); return
+    out, err = _run_git(["blame", "-L", "1,40", "--", f], cwd=cwd)
+    if err and not out:
+        console.print(f"[red]{err}[/red]"); return
+    console.print(Panel(out or "[dim](empty)[/dim]", title=f"[bold]Blame · {f}[/bold]",
+        border_style=state.get("theme", THEMES["default"])["border"]))
+
+
+def cmd_pr(state, args):
+    """/pr [base] — summarize this branch vs base (default: main) as a PR title + body."""
+    cwd  = state.get("workspace_root") or "."
+    base = (args or "").strip() or "main"
+    branch, _ = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
+    stat, _   = _run_git(["diff", "--stat", f"{base}...HEAD"], cwd=cwd)
+    log, _    = _run_git(["log", "--oneline", f"{base}..HEAD"], cwd=cwd)
+    if not (stat or log):
+        console.print(f"[yellow]No diff vs {base} (is the branch correct?).[/yellow]"); return
+    title = (log.splitlines()[-1].split(" ", 1)[-1] if log else f"{branch}")
+    body  = (f"## Summary\n\nChanges on `{branch}` vs `{base}`.\n\n"
+             f"## Commits\n{log or '(none)'}\n\n## Files\n{stat or '(none)'}")
+    console.print(Panel(f"[bold]{title}[/bold]\n\n{body}",
+        title="[bold]PR Draft[/bold]", border_style=state.get("theme", THEMES["default"])["border"]))
+
+
+# ── Context & navigation ──────────────────────────────────────────────────────
+def cmd_map(state, args):
+    """/map — quick repo map: top-level dirs + file counts by extension."""
+    import collections
+    root  = Path(state.get("workspace_root") or ".")
+    theme = state.get("theme", THEMES["default"])
+    skip  = {".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build", ".next"}
+    exts  = collections.Counter()
+    dirs  = collections.Counter()
+    total = 0
+    for p in root.rglob("*"):
+        if any(part in skip for part in p.parts):
+            continue
+        if p.is_file():
+            total += 1
+            exts[p.suffix or "(none)"] += 1
+            rel = p.relative_to(root).parts
+            dirs[rel[0] if len(rel) > 1 else "."] += 1
+        if total > 8000:
+            break
+    top_dirs = "\n".join(f"  [cyan]{d}/[/cyan]  [dim]{n} files[/dim]" for d, n in dirs.most_common(12))
+    top_exts = "  ".join(f"[yellow]{e}[/yellow]·{n}" for e, n in exts.most_common(10))
+    console.print(Panel(f"{top_dirs}\n\n[dim]Types:[/dim] {top_exts}\n[dim]Total files:[/dim] {total}",
+        title=f"[bold]Repo Map · {root.name}[/bold]", border_style=theme["border"]))
+
+
+def cmd_scratch(state, args):
+    """/scratch [text] — append a quick scratch note (or show the pad with no args)."""
+    pad = CONFIG_DIR / "scratch.txt"
+    CONFIG_DIR.mkdir(exist_ok=True)
+    text = (args or "").strip()
+    if text:
+        with pad.open("a", encoding="utf-8") as fh:
+            fh.write(f"[{datetime.now().strftime('%H:%M')}] {text}\n")
+        console.print("[green]✓ added to scratch[/green]")
+    else:
+        body = pad.read_text(encoding="utf-8") if pad.exists() else ""
+        console.print(Panel(body or "[dim](empty — /scratch <text> to add)[/dim]",
+            title="[bold]Scratch Pad[/bold]", border_style=state.get("theme", THEMES["default"])["border"]))
+
+
+# ── Fun / visual ──────────────────────────────────────────────────────────────
+def cmd_ascii(state, args):
+    """/ascii <text> — big ASCII-art text (pyfiglet if available, else styled fallback)."""
+    text = (args or "").strip() or "STUDIO"
+    acc  = state.get("theme", THEMES["default"])["accent"]
+    try:
+        import pyfiglet
+        art = pyfiglet.figlet_format(text[:24])
+        console.print(f"[{acc}]{art}[/{acc}]")
+    except Exception:
+        spaced = "  ".join(text.upper())
+        console.print(Panel(f"[bold {acc}]{spaced}[/bold {acc}]", border_style=acc, padding=(1, 3)))
+
+
+def cmd_banner(state, args):
+    """/banner <text> — themed banner panel."""
+    text  = (args or "").strip() or f"AI Studio CLI v{VERSION}"
+    theme = state.get("theme", THEMES["default"])
+    console.print(Panel(f"[bold {theme['banner_color']}]{theme.get('icon','✦')}  {text}[/bold {theme['banner_color']}]",
+        border_style=theme["border"], padding=(1, 4)))
+
+
+def cmd_confetti(state, args):
+    """/confetti — a little celebration."""
+    import random
+    bits = ["🎉", "✨", "🎊", "⭐", "💫", "🌟", "🎈", "🪅"]
+    for _ in range(6):
+        console.print(" ".join(random.choice(bits) for _ in range(random.randint(6, 14))))
+        time.sleep(0.08)
+    console.print("[bold]🎉  woohoo![/bold]")
+
+
+def cmd_matrix_fx(state, args):
+    """/matrix — brief Matrix-style digital rain."""
+    import random
+    chars = "ｱｲｳｴｵabcdef0123456789ﾊﾋﾌﾍﾎ"
+    width = min(60, shutil.get_terminal_size((80, 20)).columns - 2)
+    for _ in range(14):
+        row = "".join(random.choice(chars) if random.random() > 0.25 else " " for _ in range(width))
+        console.print(f"[green]{row}[/green]")
+        time.sleep(0.06)
+
+
+def cmd_fortune(state, args):
+    """/fortune — a random dev fortune."""
+    import random
+    FORTUNES = [
+        "Weeks of coding can save you hours of planning.",
+        "There are two hard things in CS: cache invalidation, naming, and off-by-one errors.",
+        "It works on my machine. ™",
+        "Premature optimization is the root of all evil. — Knuth",
+        "Code as if the person maintaining it is a violent psychopath who knows where you live.",
+        "The best error message is the one that never shows up.",
+        "Simplicity is prerequisite for reliability. — Dijkstra",
+        "Talk is cheap. Show me the code. — Torvalds",
+        "First, solve the problem. Then, write the code.",
+        "Ship it. 🚢",
+    ]
+    acc = state.get("theme", THEMES["default"])["accent"]
+    console.print(Panel(f"[{acc}]🥠  {random.choice(FORTUNES)}[/{acc}]", border_style=acc, padding=(0, 2)))
+
+
 def cmd_spell(state, args):
     """/spell <word> — NATO phonetic alphabet spelling."""
     NATO = {
@@ -10953,8 +11180,8 @@ def run_repl(state):
                             title="Image Models", border_style="cyan"))
                 elif cmd == "todo":           cmd_todo(state)
                 elif cmd == "bench":          cmd_bench(state)
-                elif cmd == "tts":            cmd_tts(state, args)
-                elif cmd == "voice":          cmd_voice(state, args)
+                elif cmd in ("speak", "tts"): cmd_speak(state, args)
+                elif cmd == "voice":          cmd_speak(state, "listen " + (args or ""))
                 elif cmd == "export":         cmd_export(state, history)
                 elif cmd == "balance":        cmd_balance(state)
                 elif cmd == "cost":           cmd_cost(state, args)
@@ -11168,6 +11395,20 @@ def run_repl(state):
                 elif cmd == "jwt":              cmd_jwt(state, args)
                 elif cmd == "lorem":            cmd_lorem(state, args)
                 elif cmd == "spell":            cmd_spell(state, args)
+
+                # ── v9.7 Git/VCS · Context · Fun/visual ────────────────────────
+                elif cmd == "commit":           cmd_commit(state, args)
+                elif cmd == "stage":            cmd_stage(state, args)
+                elif cmd == "stash":            cmd_stash(state, args)
+                elif cmd == "blame":            cmd_blame(state, args)
+                elif cmd == "pr":               cmd_pr(state, args)
+                elif cmd == "map":              cmd_map(state, args)
+                elif cmd == "scratch":          cmd_scratch(state, args)
+                elif cmd == "ascii":            cmd_ascii(state, args)
+                elif cmd == "banner":           cmd_banner(state, args)
+                elif cmd == "confetti":         cmd_confetti(state, args)
+                elif cmd == "matrix":           cmd_matrix_fx(state, args)
+                elif cmd == "fortune":          cmd_fortune(state, args)
 
                 else:
                     # Check user-defined aliases first

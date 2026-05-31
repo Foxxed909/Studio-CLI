@@ -447,6 +447,50 @@ run("all UI styles build prompts (hex HTML fix)",          test_all_prompts_buil
 run("celestial welcome screens render",                    test_celestial_welcome_renders)
 
 # ══════════════════════════════════════════════════════════════
+# 20. v9.7 new commands (Speak merge, Git/VCS, Context, Fun)
+# ══════════════════════════════════════════════════════════════
+print("\n[20 ] v9.7 new commands")
+
+def _st():
+    s = make_state(); s["workspace_root"] = str(Path.cwd())
+    s["_last_response"] = "Hello from Studio."
+    return s
+
+def test_speak_no_crash():
+    # On non-Windows with no TTS engine it must degrade gracefully, never raise
+    aistudio.cmd_speak(_st(), "say hello world")
+    aistudio.cmd_speak(_st(), "")
+
+def test_speak_routes_to_voice_for_listen():
+    called = {}
+    with mock.patch("aistudio.cmd_voice", side_effect=lambda s, a: called.setdefault("a", a)):
+        aistudio.cmd_speak(_st(), "listen")
+    assert "a" in called, "/speak listen did not route to voice (STT)"
+
+def test_git_cmds_no_crash():
+    for fn, arg in [("cmd_stage", ""), ("cmd_stash", "list"),
+                    ("cmd_blame", "aistudio.py"), ("cmd_pr", "main"), ("cmd_map", "")]:
+        getattr(aistudio, fn)(_st(), arg)
+
+def test_fun_cmds_no_crash():
+    aistudio.cmd_banner(_st(), "Hi")
+    aistudio.cmd_ascii(_st(), "Hi")
+    aistudio.cmd_fortune(_st(), "")
+    aistudio.cmd_scratch(_st(), "harness note")
+    aistudio.cmd_scratch(_st(), "")
+
+def test_new_cmds_registered():
+    for c in ["/speak","/commit","/stage","/stash","/blame","/pr","/map",
+              "/scratch","/ascii","/banner","/confetti","/matrix","/fortune"]:
+        assert c in aistudio.ALL_COMMANDS, f"{c} missing from ALL_COMMANDS"
+
+run("speak degrades gracefully (no engine)",   test_speak_no_crash)
+run("speak listen routes to voice/STT",        test_speak_routes_to_voice_for_listen)
+run("git/context commands no crash",           test_git_cmds_no_crash)
+run("fun/visual commands no crash",            test_fun_cmds_no_crash)
+run("new v9.7 commands in ALL_COMMANDS",       test_new_cmds_registered)
+
+# ══════════════════════════════════════════════════════════════
 # Summary
 # ══════════════════════════════════════════════════════════════
 passed = sum(1 for r in results if r[0] == PASS)

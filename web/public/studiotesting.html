@@ -927,19 +927,31 @@ _r.code=(code,lang)=>{const hl=lang&&hljs.getLanguage(lang)?hljs.highlight(code,
 function md(t){return DOMPurify.sanitize(marked.parse(t,{renderer:_r}))}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
-// ── Models ────────────────────────────────────────────────────────────────────
-const MODELS=[
-  {id:'nvidia/nemotron-3-super-120b-a12b:free',name:'Nemotron 120B',badge:'free'},
-  {id:'openai/gpt-oss-120b:free',name:'GPT OSS 120B',badge:'free'},
+// ── Models — seeded from server /api/config on init ──────────────────────────
+let MODELS=[
   {id:'meta-llama/llama-3.3-70b-instruct:free',name:'Llama 3.3 70B',badge:'free'},
-  {id:'qwen/qwen3-coder:free',name:'Qwen3 Coder',badge:'free'},
+  {id:'openai/gpt-oss-120b:free',name:'GPT OSS 120B',badge:'free'},
   {id:'google/gemma-3-27b-it:free',name:'Gemma 3 27B',badge:'free'},
   {id:'openai/gpt-4o',name:'GPT-4o',badge:'pro'},
-  {id:'openai/gpt-4o-mini',name:'GPT-4o Mini',badge:'pro'},
   {id:'anthropic/claude-sonnet-4-6',name:'Claude Sonnet 4.6',badge:'pro'},
-  {id:'google/gemini-2.5-pro',name:'Gemini 2.5 Pro',badge:'pro'},
-  {id:'mistralai/mistral-large',name:'Mistral Large',badge:'pro'},
 ];
+async function loadModelsFromServer(){
+  try{
+    const r=await fetch('/api/config');
+    if(!r.ok) return;
+    const cfg=await r.json();
+    const free=(cfg.models?.free||[]).map(m=>({id:m.id,name:m.name,badge:'free'}));
+    const paid=(cfg.models?.paid||[]).map(m=>({id:m.id,name:m.name,badge:'pro'}));
+    if(free.length||paid.length){
+      MODELS=[...free,...paid];
+      selectedModel=MODELS[0].id;
+      batchModel=MODELS[0].id;
+      // Update labels if DOM is ready
+      const bml=document.getElementById('batchModelLabel');
+      if(bml)bml.textContent=MODELS[0].name;
+    }
+  }catch(e){/* server unreachable — use seeded defaults above */}
+}
 
 // Mode config
 const MODES={
@@ -1610,6 +1622,7 @@ document.addEventListener('keydown',e=>{
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded',()=>{
+  loadModelsFromServer(); // pull live model list from server; falls back to seeded defaults
   loadThreads();
   renderSidebar();
   renderComposeModeRow();

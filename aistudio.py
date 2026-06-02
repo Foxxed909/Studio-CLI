@@ -4238,6 +4238,8 @@ def cmd_balance(state):
     ) if top_spend else ""
 
     body = (
+        f"  [dim]All spend figures are local estimates only — not real account balance.[/dim]\n"
+        f"\n"
         f"  [bold]Account[/bold]          [{plan_cfg['color']}]{prof.get('user', 'User')}[/{plan_cfg['color']}]"
         f"  [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]\n"
         f"\n"
@@ -4245,8 +4247,8 @@ def cmd_balance(state):
         f"  [bold]API Tier[/bold]         [dim]{api_type}[/dim]\n"
         f"  [bold]Active Rate[/bold]      [dim]{rate_label}[/dim]\n"
         f"\n"
-        f"  [bold]Session Spend[/bold]    {'[green]$0.000000[/green]' if rate == 0 else f'[yellow]-${session_cost:.6f}[/yellow]'}  [dim](estimated)[/dim]\n"
-        f"  [bold]Lifetime Spend[/bold]   [{'green' if lifetime_spend == 0 else 'yellow'}]${lifetime_spend:.6f}[/{'green' if lifetime_spend == 0 else 'yellow'}]  [dim](estimated)[/dim]\n"
+        f"  [bold]Session Usage[/bold]    {'[green]$0.000000[/green]' if rate == 0 else f'[yellow]~${session_cost:.6f}[/yellow]'}  [dim](estimated local)[/dim]\n"
+        f"  [bold]Lifetime Usage[/bold]   [{'green' if lifetime_spend == 0 else 'yellow'}]~${lifetime_spend:.6f}[/{'green' if lifetime_spend == 0 else 'yellow'}]  [dim](estimated local)[/dim]\n"
         f"\n"
         f"  [bold]Tokens (session)[/bold] [dim]{total_in:,} in  /  {total_out:,} out[/dim]\n"
         f"{free_note}"
@@ -4266,7 +4268,7 @@ def cmd_balance(state):
     console.print()
     console.print(Panel(
         body,
-        title=f"[bold {accent}]  Balance & API  [/bold {accent}]",
+        title=f"[bold {accent}]  Usage & API  [/bold {accent}]",
         border_style=border,
         padding=(1, 2)
     ))
@@ -5423,18 +5425,15 @@ def cmd_team(state, args):
         console.print(f"  [dim]{len(members)} member(s) · /team invite <email> to add more[/dim]")
 
     elif action == "invite":
-        if len(parts) < 2:
-            console.print("[yellow]Usage: /team invite <email> [role][/yellow]")
-            return
-        email = parts[1]
-        role  = parts[2] if len(parts) > 2 else "member"
-        if any(m.get("email") == email for m in members):
-            console.print(f"[yellow]{email} is already on the team.[/yellow]")
-            return
-        members.append({"email": email, "role": role, "joined": datetime.now().isoformat(), "active": True})
-        _team_save(members)
-        console.print(f"  [{acc}]✓ Invited {email} as {role}[/{acc}]")
-        console.print(f"  [dim]They'll receive an invitation email (requires backend). Ref stored locally.[/dim]")
+        console.print(Panel(
+            "  [yellow]Team invitations require the web dashboard (coming soon).[/yellow]\n\n"
+            "  Email delivery and member access control are backend features\n"
+            "  that aren't wired up yet. Local-only member lists are stored\n"
+            "  but no invitation email is sent.\n\n"
+            "  [dim]Use /team list to see locally recorded members.[/dim]",
+            title="Team Invitations", border_style=acc, padding=(0, 2)
+        ))
+        return
 
     elif action == "remove":
         if len(parts) < 2:

@@ -10,10 +10,10 @@ Python CLI tool that brings Google Gemini into the terminal.
 - No external HTTP library — uses `urllib` directly
 
 ## Version format
-`VERSION = "X.Y"` at top of `aistudio.py` — bump minor for features, major for rewrites.
+`VERSION = "X.Y"` lives in `studio/data.py` and is imported into `aistudio.py`. Bump minor for features, major for rewrites.
 
 ## Key architecture
-- Single-file: everything lives in `aistudio.py`
+- Core logic in `aistudio.py` (12k+ lines) + `studio/` package (data, session, providers, project, agents, mcp, paths)
 - `Agent` class handles API calls and context
 - `run_repl()` is the main loop
 - Commands are `cmd_*` functions (e.g. `cmd_write`, `cmd_patch`, `cmd_run`)
@@ -38,8 +38,8 @@ All are fully Panel-based — no raw f-string width arithmetic with Rich markup 
 - `typewrite()` must NOT embed Rich markup — prints char-by-char, markup is never interpreted as a whole
 
 ## Known gotchas
-- `_patch_autonomous_writes()` only patches functions that look up `check_write_allowed` as a global
-- `typewrite()` + Rich markup = literal output (tags printed verbatim)
+- `_patch_autonomous_writes()` + `_unpatch_autonomous_writes()` swap the global `check_write_allowed` — called by `cmd_autonomous` on toggle
+- `typewrite()` uses `sys.stdout.write` with ANSI codes — do NOT pass Rich markup (it gets stripped, but the style lookup uses a small static dict `_TYPEWRITE_ANSI`)
 - Ghost UI prompt is single-line `FormattedText` — no top/bottom border, avoids Windows Terminal cursor split
 
 ## Install

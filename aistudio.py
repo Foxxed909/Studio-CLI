@@ -653,16 +653,33 @@ def cmd_tokens(state, args, last_turn=None):
     ))
 
 
+_TYPEWRITE_ANSI = {
+    "bold":       "\033[1m",
+    "dim":        "\033[2m",
+    "italic":     "\033[3m",
+    "cyan":       "\033[36m",
+    "green":      "\033[32m",
+    "yellow":     "\033[33m",
+    "red":        "\033[31m",
+    "magenta":    "\033[35m",
+    "bold cyan":  "\033[1;36m",
+    "bold green": "\033[1;32m",
+}
+_TYPEWRITE_RESET = "\033[0m"
+
 def typewrite(text: str, delay: float = 0.025, style: str = ""):
     # Strip any Rich markup tags from text — they'd print literally char-by-char
     clean = _RICH_TAG_RE.sub("", text)
+    ansi_open  = _TYPEWRITE_ANSI.get(style, "")
+    ansi_close = _TYPEWRITE_RESET if ansi_open else ""
+    if ansi_open:
+        sys.stdout.write(ansi_open)
     for ch in clean:
-        if style:
-            console.print(f"[{style}]{ch}[/{style}]", end="")
-        else:
-            console.print(ch, end="")
+        sys.stdout.write(ch)
+        sys.stdout.flush()
         time.sleep(delay)
-    console.print()
+    sys.stdout.write(ansi_close + "\n")
+    sys.stdout.flush()
 
 
 def _safe_read_json(path, default):
@@ -3610,9 +3627,9 @@ def cmd_git(state, args, history):
         return history
 
     if args == "commit":
-        diff = subprocess.run("git diff --cached", shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        diff = subprocess.run(["git", "diff", "--cached"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         if not diff:
-            diff = subprocess.run("git diff", shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+            diff = subprocess.run(["git", "diff"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         if not diff: console.print("[yellow]No changes to commit[/yellow]"); return history
         prompt   = f"Write a concise git commit message for these changes:\n\n{diff[:3000]}\n\nFormat: type(scope): description\nJust the message, nothing else."
         response, history = ai_respond(state, prompt, history)
@@ -3624,8 +3641,8 @@ def cmd_git(state, args, history):
         return history
 
     if args == "explain":
-        log  = subprocess.run("git log --oneline -10", shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
-        diff = subprocess.run("git diff HEAD~1", shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace").stdout[:3000]
+        log  = subprocess.run(["git", "log", "--oneline", "-10"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        diff = subprocess.run(["git", "diff", "HEAD~1"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout[:3000]
         prompt = f"Explain these recent git changes:\n\nLog:\n{log}\n\nDiff:\n{diff}"
         _, history = ai_respond(state, prompt, history)
         return history
@@ -3696,7 +3713,7 @@ def cmd_undo(state, args):
     console.print(Panel(
         f"[bold]Restore:[/bold] [cyan]{bak}[/cyan] → [cyan]{target}[/cyan]",
         border_style=theme["border"]))
-    if console.input("[bold]Undo this change? (y/n): [/bold]").strip().lower() == "y":
+    if check_write_allowed(state, str(target), "restore"):
         shutil.copy2(str(bak), str(target))
         console.print(f"[{theme['success']}]✓ Restored {target}[/{theme['success']}]")
 
@@ -3727,7 +3744,7 @@ def cmd_fix(state, path, history):
             clean = strip_fences(response)
             console.print(f"\n[bold]Preview (first 15 lines):[/bold]")
             console.print(Syntax("\n".join(clean.split("\n")[:15]), ext, theme="monokai"))
-            if console.input(f"\n[bold]Write to [cyan]{p}[/cyan]? (y/n): [/bold]").strip().lower() == "y":
+            if check_write_allowed(state, str(p)):
                 backup = Path(str(p) + ".bak")
                 backup.write_text(content, encoding="utf-8")
                 write_file_state(state, str(p), clean)
@@ -4160,8 +4177,7 @@ def cmd_tts(state, args=None):
     import base64
     script = f'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak({json.dumps(msg)})'
     encoded_script = base64.b64encode(script.encode('utf-16-le')).decode('ascii')
-    tts_cmd = f'PowerShell -NoProfile -EncodedCommand {encoded_script}'
-    subprocess.Popen(tts_cmd, shell=True)
+    subprocess.Popen(["PowerShell", "-NoProfile", "-EncodedCommand", encoded_script])
 
 def cmd_stats(state):
     """Show detailed usage statistics."""
@@ -4475,6 +4491,7 @@ def cmd_autonomous(state, args, history):
     args = (args or "").strip()
     if args.lower() in ("off", "0", "false", "stop"):
         state["autonomous"] = False
+        _unpatch_autonomous_writes()
         console.print("[green]✓ Autonomous mode OFF — permission checks restored.[/green]")
         return history
     if args.lower() in ("on", "1", "true", "start", ""):
@@ -4493,12 +4510,13 @@ def cmd_autonomous(state, args, history):
                 console.print("[dim]Cancelled.[/dim]")
                 return history
         state["autonomous"] = True
-        # Patch check_write_allowed for this session
+        _patch_autonomous_writes(state)
         console.print("[bold yellow]⚡ Autonomous mode ON[/bold yellow]  [dim]— all writes auto-approved[/dim]")
         return history
     # If a task is provided after /autonomous <task>, run it directly
     task = args
     state["autonomous"] = True
+    _patch_autonomous_writes(state)
     console.print(f"[bold yellow]⚡ Autonomous[/bold yellow]  running: [dim]{task}[/dim]")
     _, history = ai_respond(state, task, history)
     return history
@@ -4704,6 +4722,14 @@ def _patch_autonomous_writes(state):
         return _orig_check_write_allowed(*args, **kwargs)
 
     check_write_allowed = _auto_check
+
+
+def _unpatch_autonomous_writes():
+    """Restore check_write_allowed to the original when autonomous mode is turned off."""
+    global check_write_allowed, _orig_check_write_allowed
+    if _orig_check_write_allowed is not None:
+        check_write_allowed = _orig_check_write_allowed
+        _orig_check_write_allowed = None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -5952,6 +5978,7 @@ def cmd_snapshot(state, args, history):
 
 def cmd_open_web(state, args):
     """/open-web [port] — open StudioCLI web UI in default browser."""
+    import socket as _socket
     theme = state.get("theme", THEMES["default"])
     acc   = theme.get("accent", "cyan")
     port  = args.strip() if args else "3456"
@@ -5960,6 +5987,16 @@ def cmd_open_web(state, args):
     except ValueError:
         port_n = 3456
     url = f"http://localhost:{port_n}"
+    # Check if the web server is actually running before opening the browser
+    _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    _s.settimeout(1)
+    _alive = _s.connect_ex(("127.0.0.1", port_n)) == 0
+    _s.close()
+    if not _alive:
+        console.print(f"[yellow]⚠ Web server not running on port {port_n}.[/yellow]")
+        console.print(f"  Start it with: [bold cyan]cd web && node server.js[/bold cyan]")
+        console.print(f"  Then run [bold]/open-web[/bold] again.")
+        return
     try:
         webbrowser.open(url)
         console.print(f"  [{acc}]✦ Opening {url} in your browser…[/{acc}]")
@@ -12306,6 +12343,8 @@ def cmd_edit(state, path, history):
         console.print(f"[dim]Opening {p}...[/dim]")
         modified = open_editor(original, p.suffix or ".txt")
         if modified==original: console.print("[yellow]No changes.[/yellow]"); return history
+        if not check_write_allowed(state, str(p)):
+            return history
         write_file_state(state, str(p), modified)
         if console.input("[bold]Ask AI to review? (y/n): [/bold]").strip().lower()=="y":
             _, history = ai_respond(state, f"I edited `{p}`:\n\n```\n{modified}\n```\n\nReview it.", history)

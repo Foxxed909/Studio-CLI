@@ -335,6 +335,35 @@ def claim_upgrade_slot(user_id, target_plan):
     return True, ""
 
 
+# ── WEEKLY USAGE TRACKING ─────────────────────────────────────────────────────
+def _current_week_start() -> str:
+    from datetime import date, timedelta
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    return monday.isoformat()
+
+
+def load_weekly_usage(user_id="default") -> tuple[int, str]:
+    """Return (msgs_this_week, week_start_iso). Resets automatically on new week."""
+    prof = load_profile(user_id) or {}
+    week_start = _current_week_start()
+    if prof.get("week_start") != week_start:
+        return 0, week_start
+    return prof.get("week_msgs", 0), week_start
+
+
+def increment_weekly_msgs(user_id="default") -> int:
+    """Increment weekly message count, resetting if a new week has started."""
+    prof = load_profile(user_id) or {}
+    week_start = _current_week_start()
+    if prof.get("week_start") != week_start:
+        prof["week_start"] = week_start
+        prof["week_msgs"] = 0
+    prof["week_msgs"] = prof.get("week_msgs", 0) + 1
+    save_profile(user_id, prof)
+    return prof["week_msgs"]
+
+
 # ── USAGE TRACKING ────────────────────────────────────────────────────────────
 def load_usage():
     try:

@@ -830,7 +830,7 @@ def _run_enterprise_negotiation(state, plan: str, is_onboarding: bool = False) -
         base_prices = {0: 200, 10: 400, 50: 900, 200: 2000}
     else:
         base_prices = {0: 149, 10: 149, 50: 499, 200: 1499}
-    our_price = next(v for k, v in sorted(base_prices.items(), reverse=True) if seat_n >= k)
+    our_price = next((v for k, v in sorted(base_prices.items(), reverse=True) if seat_n >= k), list(base_prices.values())[0])
 
     ref_id = f"{'TM' if plan == 'team' else 'ENT'}-{abs(hash(name + email + seats)) % 99999:05d}"
 
@@ -1670,7 +1670,6 @@ def cmd_recap(state, args, history):
 
 def cmd_gitdiff(state, args):
     """Show the current git working-tree diff in a syntax-highlighted panel."""
-    import subprocess
     theme = state.get("theme", THEMES["default"])
     cwd   = state.get("workspace_root") or "."
     try:
@@ -1698,7 +1697,6 @@ def cmd_gitdiff(state, args):
 
 def cmd_branch(state, args):
     """Show current git branch, log, and status summary."""
-    import subprocess
     theme = state.get("theme", THEMES["default"])
     cwd   = state.get("workspace_root") or "."
     try:
@@ -12662,222 +12660,6 @@ def main():
             )
             sys.exit(1)
         raise
-
-
-# ═══════════════════════════════════════════════════════════
-# AGENT SYSTEM + PROJECT SCANNER
-# ═══════════════════════════════════════════════════════════
-
-def scan_project(path):
-    root  = Path(path).resolve()
-    if not root.exists():
-        return {"error": f"Not found: {path}"}
-    files       = {}
-    tree_lines  = []
-    total_chars = 0
-    stats       = {"total_files":0,"total_lines":0,"total_size":0,"by_ext":{}}
-
-    def walk(cur, prefix="", depth=0):
-        nonlocal total_chars
-        if depth > 7: return
-        try:
-            items = sorted(cur.iterdir(), key=lambda x:(x.is_file(), x.name.lower()))
-        except PermissionError:
-            return
-        for i, item in enumerate(items):
-            last = i == len(items)-1
-            conn = "└── " if last else "├── "
-            ext2 = "    " if last else "│   "
-            if item.is_dir():
-                if item.name in SKIP_DIRS: continue
-                tree_lines.append(f"{prefix}{conn}📁 {item.name}/")
-                walk(item, prefix+ext2, depth+1)
-            else:
-                ext = item.suffix.lower()
-                sz  = item.stat().st_size
-                stats["total_files"] += 1
-                stats["total_size"]  += sz
-                stats["by_ext"][ext]  = stats["by_ext"].get(ext,0)+1
-                sl = f"{sz}B" if sz<1024 else f"{sz//1024}KB"
-                tree_lines.append(f"{prefix}{conn}📄 {item.name} ({sl})")
-                if ext in CODE_EXTS and sz < 500000 and total_chars < MAX_TOTAL_CHARS:
-                    try:
-                        content = item.read_text(encoding="utf-8", errors="replace")
-                        lns     = len(content.splitlines())
-                        stats["total_lines"] += lns
-                        rel = str(item.relative_to(root))
-                        if len(content) > MAX_FILE_CHARS:
-                            content = content[:MAX_FILE_CHARS] + f"\n...[{lns} lines, truncated]"
-                        files[rel] = {"content":content,"lines":lns,"ext":ext,"size":sz}
-                        total_chars += len(content)
-                    except Exception:
-                        pass
-
-    walk(root)
-
-    all_names   = " ".join(files.keys())
-    all_content = " ".join(v.get("content","")[:500] for v in files.values())
-    checks      = [
-        ("package.json" in all_names, "Node.js"),
-        ("requirements.txt" in all_names or "pyproject.toml" in all_names, "Python"),
-        (any(".ts" in f for f in files), "TypeScript"),
-        (any(".tsx" in f or ".jsx" in f for f in files), "React"),
-        (any(".vue" in f for f in files), "Vue.js"),
-        ("next.config" in all_names, "Next.js"),
-        ("vite.config" in all_names, "Vite"),
-        ("tailwind" in all_content.lower(), "Tailwind CSS"),
-        ("prisma" in all_content.lower(), "Prisma"),
-        ("supabase" in all_content.lower(), "Supabase"),
-        ("express" in all_content.lower(), "Express"),
-        ("fastapi" in all_content.lower(), "FastAPI"),
-        ("django" in all_content.lower(), "Django"),
-        ("docker" in all_names.lower(), "Docker"),
-        ("openai" in all_content.lower(), "OpenAI"),
-    ]
-    stack   = [name for cond, name in checks if cond]
-    prios   = ["main.py","app.py","index.py","server.py","index.js","main.js",
-               "app.js","index.ts","index.html","App.tsx","App.jsx"]
-    entries = [p for p in prios if any(f.endswith(p) or f==p for f in files)]
-
-    return {
-        "root":         str(root),
-        "tree":         "\n".join(tree_lines),
-        "files":        files,
-        "stats":        stats,
-        "tech_stack":   stack,
-        "entry_points": entries[:5],
-        "total_chars":  total_chars,
-    }
-
-
-def format_project_context(ctx, max_files=15):
-    if "error" in ctx:
-        return f"Error: {ctx['error']}"
-    parts = [f"PROJECT ROOT: {ctx['root']}"]
-    if ctx.get("tech_stack"):
-        parts.append("TECH STACK: " + ", ".join(ctx["tech_stack"]))
-    s  = ctx["stats"]
-    sz = f"{s['total_size']//1024}KB" if s["total_size"]<1048576 else f"{s['total_size']//1048576}MB"
-    parts.append(f"STATS: {s['total_files']} files · {s['total_lines']:,} lines · {sz}")
-    if ctx.get("entry_points"):
-        parts.append("ENTRY POINTS: " + ", ".join(ctx["entry_points"]))
-    tree_preview = "\n".join(ctx["tree"].split("\n")[:50])
-    parts.append(f"DIRECTORY TREE:\n{tree_preview}")
-    for fname, info in sorted(ctx["files"].items(), key=lambda x: -x[1]["size"])[:max_files]:
-        parts.append(f"\nFILE: {fname} ({info['lines']} lines)\n\n{info['content']}")
-    return "\n".join(parts)
-
-
-def pick_best_agent(task):
-    task_lower = task.lower()
-    scores     = {aid: sum(1 for kw in info["specialties"] if kw in task_lower)
-                  for aid, info in AGENT_ROSTER.items()}
-    best = max(scores, key=scores.get)
-    return best if scores[best] > 0 else "lucifer"
-
-
-def auto_assign_agents(task):
-    task_lower = task.lower()
-    assigned   = [aid for aid, info in AGENT_ROSTER.items()
-                  if any(kw in task_lower for kw in info["specialties"])]
-    return (assigned or ["lucifer"])[:3]
-
-
-BLACKBOARD      = {} # Shared memory for Agent Mesh
-
-def call_ollama(model, history, prompt, system_prompt=None, stream=False):
-    """Local Ollama provider — supports non-streaming and live NDJSON streaming."""
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    for m in history:
-        messages.append({"role": m["role"], "content": m["text"]})
-    messages.append({"role": "user", "content": prompt})
-
-    payload = json.dumps({"model": model, "messages": messages, "stream": stream}).encode()
-    req = request.Request(
-        OLLAMA_BASE, data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-
-    if stream:
-        def _ollama_stream():
-            try:
-                with request.urlopen(req, timeout=300) as resp:
-                    for raw in resp:
-                        line = raw.decode("utf-8", errors="replace").strip()
-                        if not line:
-                            continue
-                        try:
-                            obj = json.loads(line)
-                        except Exception:
-                            continue
-                        content = (obj.get("message") or {}).get("content") or ""
-                        if content:
-                            yield content, None, None
-                        if obj.get("done"):
-                            break
-                yield None, None, None
-            except Exception as exc:
-                yield None, str(exc), None
-        return _ollama_stream()
-
-    # Non-streaming
-    try:
-        with request.urlopen(req, timeout=120) as resp:
-            res = json.loads(resp.read().decode())
-        return res["message"]["content"], None
-    except Exception as exc:
-        return None, str(exc)
-
-class Agent:
-    def __init__(self, agent_id, state, project_ctx=None, blackboard=None):
-        self.id   = agent_id
-        info      = AGENT_ROSTER.get(agent_id, {})
-        self.name = info.get("name", agent_id.title())
-        self.emoji= info.get("emoji", "🤖")
-        self.color= info.get("color", "bold cyan")
-        self.role = info.get("role", "Agent")
-        self.state= state.copy()
-        self.blackboard = blackboard if blackboard is not None else BLACKBOARD
-        self.state["system_prompt"] = info.get("persona", "You are a helpful AI agent.")
-        if project_ctx and "error" not in project_ctx:
-            self.state["system_prompt"] += (
-                f"\n\nProject Context: {project_ctx.get('root','')}"
-                f"\nShared Blackboard: {json.dumps(self.blackboard)}"
-                f"\nYou can delegate tasks to other agents using [AGENT:id]task[/AGENT]. Available: {', '.join(AGENT_ROSTER.keys())}"
-            )
-        self.history     = []
-        self.project_ctx = project_ctx
-
-    def run(self, task, console_obj, ai_respond_fn):
-        console_obj.print(f"\n[{self.color}]{self.emoji} {self.name}[/{self.color}] [dim]{self.role} — working...[/dim]")
-        
-        # Prepend project context for first message
-        full_task = task
-        if self.project_ctx and not self.history:
-            ctx_str   = format_project_context(self.project_ctx, max_files=10)
-            full_task = ctx_str + "\n\n---\n\nTask: " + task
-
-        text, self.history = ai_respond_fn(self.state, full_task, self.history)
-        if not text: return ""
-
-        # AGENT MESH: Check for handoff tags
-        mesh_p = re.compile(r"\[AGENT:(.+?)\](.*?)\[/AGENT\]", re.DOTALL)
-        for m in mesh_p.finditer(text):
-            target_id = m.group(1).strip().lower()
-            sub_task  = m.group(2).strip()
-            if target_id in AGENT_ROSTER and target_id != self.id:
-                console_obj.print(f"  [dim]↳ Handoff to [bold]{target_id}[/bold]...[/dim]")
-                sub_agent = Agent(target_id, self.state, self.project_ctx, self.blackboard)
-                sub_res   = sub_agent.run(sub_task, console_obj, ai_respond_fn)
-                # Feed the result back to the original agent history
-                self.history.append({"role":"user", "text":f"Result from {target_id}: {sub_res}"})
-                text, self.history = ai_respond_fn(self.state, "Continue based on the result above.", self.history)
-
-        return text or ""
-
 
 if __name__ == "__main__":
     main()

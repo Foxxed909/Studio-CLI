@@ -95,7 +95,7 @@ def load_hf_key():
 
 def save_hf_key(k):
     CONFIG_DIR.mkdir(exist_ok=True)
-    HF_KEY_FILE.write_text(k.strip())
+    _atomic_write(HF_KEY_FILE, k.strip())
 
 
 def load_all_keys():

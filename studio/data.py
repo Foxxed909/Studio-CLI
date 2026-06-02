@@ -235,8 +235,6 @@ WEB_SEARCH_MODELS = {
     "fast":          "perplexity/sonar-small-online",
 }
 
-_STATUSLINE_DEFAULTS_LAZY = {"model", "plan", "stream", "branch", "tokens", "timer", "mode", "agent", "fast"}
-
 EFFORTS = {
     "low":    "Standard precision",
     "medium": "Balanced reasoning",

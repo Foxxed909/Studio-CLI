@@ -424,7 +424,8 @@ THEMES = {
     "crt":         {"name":"CRT 📺",           "banner_color":"bold #4ade80","accent":"#86efac","prompt_user":"#4ade80","prompt_arrow":"#22c55e","border":"#166534","success":"#86efac","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#22c55e","icon":"📺","prompt_name":"crt"},
     "amber":       {"name":"Amber 🟠",         "banner_color":"bold #fbbf24","accent":"#fcd34d","prompt_user":"#fbbf24","prompt_arrow":"#f59e0b","border":"#b45309","success":"#fcd34d","error":"bold red","warning":"#f59e0b","dim":"dim","banner_sub":"#f59e0b","icon":"🟠","prompt_name":"amber"},
     "matrixrain":  {"name":"Matrix Rain 🟩",   "banner_color":"bold #22c55e","accent":"#4ade80","prompt_user":"#22c55e","prompt_arrow":"#16a34a","border":"#14532d","success":"#4ade80","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#16a34a","icon":"🟩","prompt_name":"matrix"},
-    "claude":     {"name":"Claude ◆",  "banner_color":"bold #d97706",  "accent":"#d97706",  "prompt_user":"#d97706",  "prompt_arrow":"#f59e0b",  "border":"#92400e",  "success":"#4ade80",  "error":"#f87171", "warning":"#fbbf24","dim":"dim", "banner_sub":"#f59e0b", "icon":"◆",  "prompt_name":"claude"},
+    # ── Claude signature theme ───────────────────────────────────────────────
+    "claude":      {"name":"Claude ◆",         "banner_color":"bold #d97706",  "accent":"#d97706",  "prompt_user":"#d97706",  "prompt_arrow":"#f59e0b", "border":"#92400e", "success":"#4ade80",  "error":"#f87171","warning":"#fbbf24","dim":"dim", "banner_sub":"#f59e0b","icon":"◆",  "prompt_name":"claude"},
 }
 
 _CELESTIAL_BASE  = ("windynight", "foggyskies", "moon", "shootingstars", "blackhole", "magnetar")

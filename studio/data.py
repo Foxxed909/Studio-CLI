@@ -426,6 +426,11 @@ THEMES = {
     "matrixrain":  {"name":"Matrix Rain 🟩",   "banner_color":"bold #22c55e","accent":"#4ade80","prompt_user":"#22c55e","prompt_arrow":"#16a34a","border":"#14532d","success":"#4ade80","error":"bold red","warning":"#fbbf24","dim":"dim","banner_sub":"#16a34a","icon":"🟩","prompt_name":"matrix"},
     # ── Claude signature theme ───────────────────────────────────────────────
     "claude":      {"name":"Claude ◆",         "banner_color":"bold #d97706",  "accent":"#d97706",  "prompt_user":"#d97706",  "prompt_arrow":"#f59e0b", "border":"#92400e", "success":"#4ade80",  "error":"#f87171","warning":"#fbbf24","dim":"dim", "banner_sub":"#f59e0b","icon":"◆",  "prompt_name":"claude"},
+    # ── New themes ───────────────────────────────────────────────────────────
+    "coffee":      {"name":"Coffee ☕",         "banner_color":"bold #92400e",  "accent":"#b45309",  "prompt_user":"#92400e",  "prompt_arrow":"#d97706", "border":"#78350f", "success":"#a3e635",  "error":"#f87171","warning":"#fbbf24","dim":"dim", "banner_sub":"#d97706","icon":"☕", "prompt_name":"coffee"},
+    "lavender":    {"name":"Lavender 💜",       "banner_color":"bold #c4b5fd",  "accent":"#a78bfa",  "prompt_user":"#c4b5fd",  "prompt_arrow":"#7c3aed", "border":"#4c1d95", "success":"#86efac",  "error":"#f87171","warning":"#fde68a","dim":"dim", "banner_sub":"#7c3aed","icon":"💜", "prompt_name":"lavender"},
+    "ink":         {"name":"Ink 🖊",            "banner_color":"bold #e2e8f0",  "accent":"#94a3b8",  "prompt_user":"#e2e8f0",  "prompt_arrow":"#64748b", "border":"#334155", "success":"#86efac",  "error":"#f87171","warning":"#fbbf24","dim":"dim", "banner_sub":"#64748b","icon":"🖊",  "prompt_name":"ink"},
+    "terminal":    {"name":"Terminal 🖥",       "banner_color":"bold #00ff00",  "accent":"#00ff00",  "prompt_user":"#00ff00",  "prompt_arrow":"#00cc00", "border":"#003300", "success":"#00ff00",  "error":"#ff0000","warning":"#ffff00","dim":"dim", "banner_sub":"#00cc00","icon":"$",  "prompt_name":"terminal"},
 }
 
 _CELESTIAL_BASE  = ("windynight", "foggyskies", "moon", "shootingstars", "blackhole", "magnetar")
@@ -438,7 +443,7 @@ _THEME_FAMILY_STYLES = (
 )
 
 UI_STYLES    = ("claude", "gemini", "codex", "studio", "ghost", "nova", "foxxia", "strawberry",
-                "darkred", "sophia", "godson", "downcli", "badhappening", "rain",
+                "darkred", "sophia", "godson", "downcli", "badhappening", "rain", "zen",
                 *_CELESTIAL_BASE, *_THEME_FAMILY_STYLES)
 
 # UI styles that share the unified "celestial" chrome (theme-adaptive header/prompt)
@@ -488,6 +493,7 @@ CHAT_MODES = {
 _STATUSLINE_DEFAULTS_LAZY = {"model", "plan", "stream", "branch", "tokens", "timer", "mode", "agent", "fast"}
 
 VIBE_PRESETS = {
+    # ── Core vibes ───────────────────────────────────────────────────────────
     "claude":    {"ui": "claude",  "theme": "claude"},
     "foxxia":    {"ui": "foxxia",  "theme": "ember"},
     "nova":      {"ui": "nova",    "theme": "neon"},
@@ -512,6 +518,20 @@ VIBE_PRESETS = {
     "godson":      {"ui": "godson",      "theme": "godson"},
     "downcli":     {"ui": "downcli",     "theme": "downcli"},
     "badhappening":{"ui": "badhappening","theme": "badhappening"},
+    # ── Previously missing vibes ─────────────────────────────────────────────
+    "default":     {"ui": "studio",      "theme": "default"},
+    "gold":        {"ui": "studio",      "theme": "gold"},
+    "nord":        {"ui": "gemini",      "theme": "nord"},
+    "strawberry":  {"ui": "strawberry",  "theme": "strawberry"},
+    # ── New combo vibes ──────────────────────────────────────────────────────
+    "obsidian":    {"ui": "ghost",       "theme": "carbon"},
+    "sunset":      {"ui": "foxxia",      "theme": "supernova"},
+    "arctic":      {"ui": "codex",       "theme": "blizzard"},
+    "heatwave":    {"ui": "nova",        "theme": "volcano"},
+    "zen":         {"ui": "zen",         "theme": "ink"},
+    "coffee":      {"ui": "claude",      "theme": "coffee"},
+    "lavender":    {"ui": "claude",      "theme": "lavender"},
+    "terminal":    {"ui": "zen",         "theme": "terminal"},
     "windynight":   {"ui": "windynight",   "theme": "windynight"},
     "foggyskies":   {"ui": "foggyskies",   "theme": "foggyskies"},
     "moon":         {"ui": "moon",         "theme": "moon"},

@@ -1152,12 +1152,20 @@ def cmd_ui(state, args):
             title="UI Style", border_style=(state.get("theme") or THEMES["default"])["border"],
         ))
         return state
-    name = args.strip().lower()
+    parts = args.strip().lower().split(None, 1)
+    name  = parts[0]
     if name not in UI_STYLES:
         console.print(f"[yellow]Unknown UI style. Try: {', '.join(UI_STYLES)}[/yellow]")
         return state
     state["ui_style"] = name
     save_ui_style(name)
+    # zen optional char: /ui zen $ or /ui zen @ or /ui zen €
+    if name == "zen" and len(parts) > 1:
+        char = parts[1].strip()[:1]
+        if char:
+            state["_zen_char"] = char
+            console.print(f"[green]✓ UI → zen  prompt char: [{char}][/green]")
+            return state
     console.print(f"[green]✓ UI → {name}[/green]")
     return state
 
@@ -1928,6 +1936,19 @@ def cmd_session_name(state, args):
     return state
 
 
+def cmd_dense(state):
+    """/dense — Toggle dense mode: shorter, tighter AI replies with no filler."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    current = state.get("dense_mode", False)
+    state["dense_mode"] = not current
+    if state["dense_mode"]:
+        console.print(f"  [{acc}]✓ Dense mode ON[/{acc}]  [dim]— replies will be concise and direct[/dim]")
+    else:
+        console.print(f"  [{acc}]✓ Dense mode OFF[/{acc}]  [dim]— replies back to normal length[/dim]")
+    return state
+
+
 def cmd_quicknote(state, args):
     """Save a quick text note: /qnote <text>. View all with /qnotes."""
     args = (args or "").strip()
@@ -2308,6 +2329,10 @@ def build_system_prompt(state):
     if mode_instr and chat_mode not in ("casual", "build", "fif"):
         extras.append(mode_instr)
 
+    # Dense mode: strip filler, enforce compact replies
+    if state.get("dense_mode"):
+        extras.append("DENSE MODE: Be maximally concise. No preamble, no restatement, no filler phrases. Cut to the answer. If it fits in one sentence, use one sentence.")
+
     # Fast mode: cap reply length
     if state.get("fast_mode"):
         extras.append("FAST MODE ACTIVE: Reply in 80 words or fewer. Skip preamble, cut filler. Direct answer only.")
@@ -2572,6 +2597,8 @@ def _assistant_heading(state, provider_label, is_heavy=False, toks=0):
         return f"\n{sep}\n[{color}]{label}[/{color}]  {meta}\n"
     if ui == "claude":
         return f"\n[dim {accent}]{'─' * 48}[/dim {accent}]\n[{accent}]◆[/{accent}] [{color}]{label}[/{color}]  {meta}\n"
+    if ui == "zen":
+        return f"\n"
     if ui == "codex":
         return f"\n{sep}\n[{color}]>[/{color}] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "ghost":
@@ -5202,31 +5229,6 @@ def call_gemini_cli(prompt, sys_prompt=None):
 
 
 # ── VIBE COMMAND ────────────────────────────────────────────────
-VIBE_PRESETS = {
-    "foxxia":    {"ui": "foxxia",  "theme": "ember"},
-    "nova":      {"ui": "nova",    "theme": "neon"},
-    "ghost":     {"ui": "ghost",   "theme": "void"},
-    "matrix":    {"ui": "codex",   "theme": "matrix"},
-    "hacker":    {"ui": "codex",   "theme": "hacker"},
-    "sakura":    {"ui": "claude",  "theme": "sakura"},
-    "ocean":     {"ui": "claude",  "theme": "ocean"},
-    "fire":      {"ui": "studio",  "theme": "fire"},
-    "midnight":  {"ui": "studio",  "theme": "midnight"},
-    "synthwave": {"ui": "studio",  "theme": "synthwave"},
-    "aurora":    {"ui": "gemini",  "theme": "aurora"},
-    "dracula":   {"ui": "gemini",  "theme": "dracula"},
-    "chatgpt":   {"ui": "ghost",   "theme": "midnight"},
-    "cobalt":    {"ui": "codex",   "theme": "cobalt"},
-    "carbon":    {"ui": "ghost",   "theme": "carbon"},
-    "crimson":   {"ui": "studio",  "theme": "crimson"},
-    "slate":     {"ui": "claude",  "theme": "slate"},
-    "strawberry":  {"ui": "strawberry",   "theme": "strawberry"},
-    "darkred":     {"ui": "darkred",      "theme": "darkred"},
-    "sophia":      {"ui": "sophia",       "theme": "sophia"},
-    "godson":      {"ui": "godson",       "theme": "godson"},
-    "downcli":     {"ui": "downcli",      "theme": "downcli"},
-    "badhappening":{"ui": "badhappening", "theme": "badhappening"},
-}
 
 
 def cmd_vibe(state, args):
@@ -10776,6 +10778,14 @@ def render_welcome(state):
         console.print()
         return
 
+    # ── ZEN ────────────────────────────────────────────────────────────────
+    if ui == "zen":
+        zen_char = state.get("_zen_char", "$")
+        console.print()
+        console.print(f"  [dim]{zen_char}[/dim]  [white]AI Studio CLI[/white]  [dim]v{VERSION}  ·  {plan_cfg['name']}  ·  {short}  ·  {ws_short}[/dim]")
+        console.print()
+        return
+
     # ── CODEX ──────────────────────────────────────────────────────────────
     if ui == "codex":
         git_branch = ""
@@ -11384,6 +11394,11 @@ def _prompt_box(theme, ui_style, state):
             ("fg:#4b5563",     f"{dots}  {model_short}\n"),
             (f"fg:{ac} bold",  " ❯  "),
         ])
+    elif ui_style == "zen":
+        zen_char = (state.get("_zen_char") if state else None) or "$"
+        return FormattedText([
+            ("fg:#4b5563",    f" {zen_char} "),
+        ])
     else:
         fill  = max(2, 55 - len(label) - len(model_short))
         top   = f" ╭─ {label} ─{'─'*fill} {model_short} ─╮\n"
@@ -11883,6 +11898,7 @@ def run_repl(state):
                 elif cmd == "smart-diff":   history = cmd_smart_diff(state, args, history)
                 elif cmd in ("word-count", "wordcount", "wcount"): cmd_word_count(state, args)
                 elif cmd == "session-name": state = cmd_session_name(state, args)
+                elif cmd == "dense":        state = cmd_dense(state)
 
                 # ── Chat management
                 elif cmd == "history": cmd_show_history(history)
@@ -12200,6 +12216,7 @@ def run_repl(state):
                 elif cmd == "count":       cmd_count(state, args) if args else console.print("[yellow]Usage: /count <pattern> <file>[/yellow]")
                 elif cmd == "timeit":      history = cmd_timeit(state, args, history) if args else (console.print("[yellow]Usage: /timeit <question>[/yellow]"), history)[1]
                 elif cmd == "free-tips": cmd_free_tips(state)
+                elif cmd == "dense":        state = cmd_dense(state)
 
                 # ── v5.6 new commands ─────────────────────────────────────────
                 elif cmd == "summarize":  history = cmd_summarize(state, history)

@@ -159,6 +159,21 @@ PLANS = {
     },
 }
 
+# ── WEEKLY MESSAGE LIMITS ─────────────────────────────────────────────────────
+WEEKLY_LIMITS = {
+    "free":       50,
+    "starter":    500,
+    "pro":        3000,
+    "dev":        10000,
+    "max":        50000,
+    "ultra":      999999,
+    "team":       999999,
+    "enterprise": 999999,
+}
+
+# ── HANDOFF MODELS (fastest free model for session summaries) ─────────────────
+HANDOFF_FREE_MODEL = "meta-llama/llama-3.2-3b-instruct:free"
+
 # ── CREDIT COSTS ──────────────────────────────────────────────────────────────
 CREDIT_COSTS = {
     "message":       1,
@@ -234,8 +249,6 @@ WEB_SEARCH_MODELS = {
     "deep":          "perplexity/sonar-pro",
     "fast":          "perplexity/sonar-small-online",
 }
-
-_STATUSLINE_DEFAULTS_LAZY = {"model", "plan", "stream", "branch", "tokens", "timer", "mode", "agent", "fast"}
 
 EFFORTS = {
     "low":    "Standard precision",

@@ -48,6 +48,7 @@ from studio.data    import (
     detect_input_mode,
     AGENT_ROSTER, SKIP_DIRS, CODE_EXTS, MAX_FILE_CHARS, MAX_TOTAL_CHARS,
     _RICH_TAG_RE, _ptk_style_token,
+    WEEKLY_LIMITS, HANDOFF_FREE_MODEL,
 )
 from studio.providers import (
     call_gemini, call_openrouter, call_openrouter_stream,
@@ -65,6 +66,7 @@ from studio.session import (
     check_msg_limit, reset_msg_counter, check_img_quota,
     load_upgrade_slots, save_upgrade_slots, claim_upgrade_slot,
     load_usage, save_usage,
+    load_weekly_usage, increment_weekly_msgs,
 )
 from studio.project import scan_project, format_project_context
 from studio.agents  import Agent, BLACKBOARD, pick_best_agent, auto_assign_agents
@@ -830,7 +832,7 @@ def _run_enterprise_negotiation(state, plan: str, is_onboarding: bool = False) -
         base_prices = {0: 200, 10: 400, 50: 900, 200: 2000}
     else:
         base_prices = {0: 149, 10: 149, 50: 499, 200: 1499}
-    our_price = next(v for k, v in sorted(base_prices.items(), reverse=True) if seat_n >= k)
+    our_price = next((v for k, v in sorted(base_prices.items(), reverse=True) if seat_n >= k), list(base_prices.values())[0])
 
     ref_id = f"{'TM' if plan == 'team' else 'ENT'}-{abs(hash(name + email + seats)) % 99999:05d}"
 
@@ -1484,6 +1486,8 @@ ALL_COMMANDS = [
     # v9.8 — CLI utilities
     "/json","/regex","/diff-files","/wc","/case","/sortlines","/sort","/uniq",
     "/slug","/color","/cron","/http","/roll","/pick",
+    # v9.9 — Session Handoff, Limits, Power features
+    "/limits","/scaffold","/remind","/reminders","/multiagent","/explain-shell",
 ]
 
 COMMAND_METADATA = {
@@ -1640,6 +1644,14 @@ COMMAND_METADATA = {
     "/jwt":            ("UTIL",    "Decode a JWT token (header + payload, no verification)"),
     "/lorem":          ("UTIL",    "Generate placeholder text: /lorem [paragraphs]"),
     "/spell":          ("UTIL",    "NATO phonetic alphabet for a string: /spell hello"),
+    # v9.9
+    "/limits":         ("PLAN",    "Visual bars: session, weekly, context, image, rate limits"),
+    "/handoff":        ("AI",      "✏ Generate session handoff prompt — free light model for Free users"),
+    "/scaffold":       ("FILE",    "AI-scaffold a new project: /scaffold fastapi my-api"),
+    "/remind":         ("UTIL",    "Timed in-REPL reminder: /remind 5m run tests"),
+    "/reminders":      ("UTIL",    "List active reminders"),
+    "/multiagent":     ("AI",      "Fan-out task to multiple agents in parallel then synthesize"),
+    "/explain-shell":  ("AI",      "Explain any shell command in plain English"),
 }
 
 
@@ -1670,7 +1682,6 @@ def cmd_recap(state, args, history):
 
 def cmd_gitdiff(state, args):
     """Show the current git working-tree diff in a syntax-highlighted panel."""
-    import subprocess
     theme = state.get("theme", THEMES["default"])
     cwd   = state.get("workspace_root") or "."
     try:
@@ -1698,7 +1709,6 @@ def cmd_gitdiff(state, args):
 
 def cmd_branch(state, args):
     """Show current git branch, log, and status summary."""
-    import subprocess
     theme = state.get("theme", THEMES["default"])
     cwd   = state.get("workspace_root") or "."
     try:
@@ -2525,6 +2535,8 @@ def track_usage(state, tokens_in, tokens_out, is_heavy=False, prompt=""):
     prof["total_tokens_in"]   = prof.get("total_tokens_in", 0) + tokens_in
     prof["total_tokens_out"]  = prof.get("total_tokens_out", 0) + tokens_out
     prof["last_seen"]         = datetime.now().isoformat()
+    # Weekly rolling counter — auto-resets on new week
+    increment_weekly_msgs(uid)
     save_profile(uid, prof)
     state["balance"] = prof["balance"]
 
@@ -3136,46 +3148,430 @@ def cmd_name(state, args, history=None):
     return state
 
 
-# ── /handoff — AI-generated handoff prompt from current chat ────────────────
+# ── /handoff — Session handoff: free light model for Free users ──────────────
 def cmd_handoff(state, args, history):
-    theme = state.get("theme", THEMES["default"])
-    h = history or []
+    """Generate a session handoff prompt.
+    Free users automatically use a free lightweight model.
+    Paid users use their current model (or pass a custom model as arg).
+    Handoff file is auto-saved to workspace."""
+    theme   = state.get("theme", THEMES["default"])
+    h       = history or []
     if not h:
         console.print("[yellow]No chat history to generate a handoff from.[/yellow]")
         return history
-    console.print("[dim]✦ Generating handoff prompt…[/dim]")
-    snippet = "\n".join(
-        f"{m['role'].upper()}: {m['text'][:400]}" for m in h
-    )
-    model   = state.get("model") or DEFAULT_MODEL
+
+    plan_id = get_plan(state)
+    # Free users always get the lightweight free model; paid get their model
+    if plan_id == "free":
+        handoff_model = HANDOFF_FREE_MODEL
+    else:
+        handoff_model = args.strip() if args and "/" in args else (state.get("model") or DEFAULT_MODEL)
+
+    model_label = handoff_model.split("/")[-1]
+    console.print(f"[dim]✏ Generating handoff  [white]({model_label})[/white] · {len(h)} msgs…[/dim]")
+
+    # Context stats for the summary
+    total_text = " ".join(m.get("text", "") for m in h if isinstance(m, dict))
+    used_tok   = approx_tokens(total_text)
+
+    snippet = "\n".join(f"{m['role'].upper()}: {m['text'][:400]}" for m in h[-30:])
     ws      = state.get("workspace_root") or str(Path.cwd().name)
     sname   = state.get("session_name") or "this session"
+
     prompt = (
-        f"You are summarizing a coding session called '{sname}' using model '{model}' "
-        f"in workspace '{ws}'.\n\n"
-        "Write a concise handoff prompt that a developer can paste into a NEW AI session "
-        "to continue exactly where this left off. Include:\n"
-        "• What was being built / worked on\n"
-        "• Key decisions or changes made\n"
-        "• Current state (what works, what's broken or pending)\n"
-        "• Clear next steps\n\n"
-        "Use plain text with section headers. Be specific — include file names, function "
-        "names, and error messages where relevant. Keep it under 400 words.\n\n"
-        "CONVERSATION:\n" + snippet
+        f"You are compressing a coding session called '{sname}' in workspace '{ws}'.\n"
+        f"Session: {len(h)} messages, ~{used_tok:,} tokens.\n\n"
+        "Write a HANDOFF PROMPT — something the developer pastes into a NEW AI session "
+        "to pick up exactly where this left off. Be very specific.\n\n"
+        "Sections:\n"
+        "**What we were building** — project name, goal, tech stack\n"
+        "**Key decisions made** — architectural choices, libraries chosen\n"
+        "**Current state** — what works, what's broken, what's in progress\n"
+        "**Files touched** — list file names and what changed\n"
+        "**Next steps** — exact actions to take first\n\n"
+        "Rules: plain text + bold headers, under 400 words, no filler, no intro sentence.\n\n"
+        "CONVERSATION (last 30 turns):\n" + snippet
     )
+
+    # Temporarily swap model for free-tier handoff
+    orig_model     = state.get("model")
+    orig_use_or    = state.get("use_openrouter")
+    if plan_id == "free":
+        state["model"]          = handoff_model
+        state["use_openrouter"] = True
+
     text = _quick_ai(state, prompt)
+
+    if plan_id == "free":
+        state["model"]          = orig_model
+        state["use_openrouter"] = orig_use_or
+
     if not text:
         console.print("[red]Could not generate handoff — check your API key.[/red]")
         return history
+
     border = theme.get("border", "cyan")
-    console.print(Panel(text, title="✦ Handoff Prompt", border_style=border, padding=(1, 2)))
-    # Copy to clipboard if pyperclip available
+    console.print(Panel(text, title="✏  Session Handoff", border_style=border, padding=(1, 2)))
+    console.print(f"[dim]Model: {model_label} · {len(h)} msgs · ~{used_tok:,} tokens[/dim]")
+
+    # Auto-save to workspace
+    ws_path = Path(state["workspace_root"]) if state.get("workspace_root") else Path.cwd()
+    ts      = datetime.now().strftime("%Y%m%d-%H%M")
+    out_path = ws_path / f".studio-handoff-{ts}.md"
+    try:
+        out_path.write_text(
+            f"# Studio Handoff — {sname}\n"
+            f"_Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} · {model_label}_\n\n"
+            + text + "\n",
+            encoding="utf-8"
+        )
+        console.print(f"[{theme['success']}]✓ Saved → {out_path.name}[/{theme['success']}]")
+    except Exception as e:
+        console.print(f"[dim yellow]Could not save file: {e}[/dim yellow]")
+
+    # Clipboard
     try:
         import pyperclip
         pyperclip.copy(text)
-        console.print(f"[{theme['success']}]✓ Copied to clipboard.[/{theme['success']}]")
+        console.print(f"[{theme['success']}]✓ Copied to clipboard[/{theme['success']}]")
     except Exception:
-        console.print("[dim]Tip: install pyperclip to auto-copy handoffs.[/dim]")
+        console.print("[dim]Tip: pip install pyperclip to auto-copy[/dim]")
+
+    state.pop("_show_handoff_hint", None)
+    return history
+
+
+# ── /limits — visual progress bars for all session limits ────────────────────
+def cmd_limits(state, history=None):
+    """Show session, weekly, context, image and rate limits as visual bars."""
+    theme   = state.get("theme", THEMES["default"])
+    plan_id = get_plan(state)
+    plan    = PLANS.get(plan_id, PLANS["free"])
+    prof    = load_profile() or {}
+
+    def _bar(used, limit, width=26):
+        if limit >= 99999:
+            return "[green]∞  unlimited[/green]", 0
+        pct    = min(100, int(used / max(limit, 1) * 100))
+        filled = int(width * pct / 100)
+        color  = "red" if pct >= 85 else "yellow" if pct >= 60 else "green"
+        bar    = f"[{color}]{'█' * filled}[/{color}][dim]{'░' * (width - filled)}[/dim]"
+        return f"{bar}  [bold]{used}[/bold][dim]/{limit}[/dim] [dim]({pct}%)[/dim]", pct
+
+    # Session messages
+    sess_used  = prof.get("session_msgs", 0)
+    sess_limit = plan["msg_limit"]
+    sess_bar, sess_pct = _bar(sess_used, sess_limit)
+
+    # Weekly messages
+    week_used, _  = load_weekly_usage()
+    week_limit    = WEEKLY_LIMITS.get(plan_id, 50)
+    week_bar, week_pct = _bar(week_used, week_limit)
+
+    # Context window (if history passed)
+    if history:
+        total_text  = " ".join(m.get("text","") for m in history if isinstance(m, dict))
+        used_tok    = approx_tokens(total_text)
+        model       = state.get("model","")
+        ctx_limit   = 1_000_000 if ("gemini-2.5" in model or "gemini-2.0" in model) else 128_000
+        ctx_bar, ctx_pct = _bar(used_tok, ctx_limit)
+        ctx_line    = f"  [bold]Context:[/bold]       {ctx_bar}  [dim]{used_tok:,} tokens[/dim]"
+    else:
+        ctx_line    = "  [bold]Context:[/bold]       [dim]pass history for live bar — or use /context-bar[/dim]"
+        ctx_pct     = 0
+
+    # Images (3-hour rolling window)
+    img_limit = plan["img_per_3h"]
+    img_used  = 0
+    if IMG_QUOTA_FILE.exists():
+        try:
+            _d = json.loads(IMG_QUOTA_FILE.read_text())
+            now = time.time()
+            img_used = len([t for t in _d.get("ts", []) if now - t < 10800])
+        except Exception:
+            pass
+    img_bar, _ = _bar(img_used, img_limit)
+
+    # Rate limit
+    _, rl_count = check_rate_limit(state)
+    _rl_caps    = {"free":10,"starter":50,"pro":200,"dev":500,"max":500,"ultra":1000,"enterprise":9999}
+    rl_cap      = _rl_caps.get(plan_id, 10)
+    rl_bar, _   = _bar(rl_count, rl_cap)
+
+    # Credits / balance
+    credits  = plan.get("credits", 0)
+    balance  = prof.get("balance", 0)
+    spent    = sum(prof.get("model_spend", {}).values())
+    cred_line = (
+        f"[green]{credits:,}[/green] credits/mo  "
+        f"[dim]· balance: ${abs(balance):.4f}  · spent: ${spent:.4f}[/dim]"
+    )
+
+    # Plan badge
+    plan_line = f"[{plan['color']}]{plan['badge']} {plan['name']}[/{plan['color']}]  [dim]{plan['price']}[/dim]"
+
+    # Handoff hint when near limit
+    handoff_hint = ""
+    if sess_pct >= 80 or week_pct >= 80 or ctx_pct >= 75:
+        handoff_hint = "\n  [yellow]✏  Approaching limit — /handoff to save your session context[/yellow]"
+
+    lines = [
+        f"  [bold]Plan:[/bold]          {plan_line}",
+        "",
+        f"  [bold]Session msgs:[/bold]  {sess_bar}",
+        f"  [bold]Weekly msgs:[/bold]   {week_bar}",
+        ctx_line,
+        f"  [bold]Images / 3h:[/bold]  {img_bar}",
+        f"  [bold]Rate limit:[/bold]   {rl_bar}",
+        f"  [bold]Credits:[/bold]      {cred_line}",
+        handoff_hint,
+        "",
+        "  [dim]/handoff · /context-bar · /usage · /upgrade[/dim]",
+    ]
+
+    console.print(Panel(
+        "\n".join(lines),
+        title="[bold]Session Limits[/bold]",
+        border_style=theme["border"], padding=(0, 2)
+    ))
+
+
+# ── _context_warning — auto-show hint when context is filling up ──────────────
+def _context_warning(state, history):
+    """Called after each AI response. Prints a one-line handoff hint when limits loom."""
+    theme = state.get("theme", THEMES["default"])
+
+    # Session message %
+    prof       = load_profile() or {}
+    sess_used  = prof.get("session_msgs", 0)
+    plan_id    = get_plan(state)
+    plan       = PLANS.get(plan_id, PLANS["free"])
+    sess_limit = plan["msg_limit"]
+    sess_pct   = (sess_used / sess_limit * 100) if sess_limit < 99999 else 0
+
+    # Context window %
+    total_text = " ".join(m.get("text","") for m in history if isinstance(m, dict))
+    used_tok   = approx_tokens(total_text)
+    model      = state.get("model","")
+    ctx_limit  = 1_000_000 if ("gemini-2.5" in model or "gemini-2.0" in model) else 128_000
+    ctx_pct    = used_tok / ctx_limit * 100
+
+    # Weekly %
+    week_used, _  = load_weekly_usage()
+    week_limit    = WEEKLY_LIMITS.get(plan_id, 50)
+    week_pct      = (week_used / week_limit * 100) if week_limit < 99999 else 0
+
+    warned = False
+    if ctx_pct >= 75:
+        console.print(
+            f"  [{theme['warning']}]✏  Context {ctx_pct:.0f}% full "
+            f"({used_tok:,}/{ctx_limit:,} tokens) — /handoff to save session[/{theme['warning']}]"
+        )
+        warned = True
+    elif sess_pct >= 80:
+        rem = sess_limit - sess_used
+        console.print(
+            f"  [{theme['warning']}]✏  {rem} message{'s' if rem!=1 else ''} remaining "
+            f"this session — /handoff to save context[/{theme['warning']}]"
+        )
+        warned = True
+    elif week_pct >= 80:
+        rem = week_limit - week_used
+        console.print(
+            f"  [{theme['warning']}]✏  {rem} message{'s' if rem!=1 else ''} left "
+            f"this week — /handoff to save context[/{theme['warning']}]"
+        )
+        warned = True
+
+    state["_show_handoff_hint"] = warned
+
+
+# ── /scaffold — AI-scaffold a new project ────────────────────────────────────
+def cmd_scaffold(state, args, history):
+    """Scaffold a new project with AI-generated boilerplate files."""
+    if not args:
+        console.print(Panel(
+            "  [bold]Usage:[/bold] /scaffold <framework> [project-name]\n\n"
+            "  [bold]Frameworks:[/bold] [cyan]express  fastapi  next  react  vue  "
+            "django  flask  go  rust  cli  electron[/cyan]\n\n"
+            "  [bold]Examples:[/bold]\n"
+            "    /scaffold fastapi my-api\n"
+            "    /scaffold next my-dashboard\n"
+            "    /scaffold cli devtool",
+            title="[bold]Scaffold[/bold]", border_style="cyan", padding=(0, 2)
+        ))
+        return history
+
+    parts     = args.split(None, 1)
+    framework = parts[0].lower()
+    name      = parts[1].strip() if len(parts) > 1 else f"my-{framework}-app"
+    theme     = state.get("theme", THEMES["default"])
+
+    console.print(f"[{theme['accent']}]⚙  Scaffolding [bold]{framework}[/bold] → [bold]{name}[/bold]…[/{theme['accent']}]")
+
+    prompt = (
+        f"Generate a complete, production-ready scaffold for a **{framework}** project named `{name}`.\n\n"
+        "Output ONLY file blocks — no prose before or after:\n\n"
+        "### FILE: path/to/file.ext\n"
+        "```lang\n"
+        "file content here\n"
+        "```\n\n"
+        "Include: entry point, config, README.md, .gitignore, and any essential boilerplate. "
+        "Use modern best practices and current library versions. Keep files concise but complete."
+    )
+
+    _, history = ai_respond(state, prompt, history)
+    return history
+
+
+# ── /remind — timed in-REPL reminders ────────────────────────────────────────
+_reminders: list = []  # [(trigger_time_float, message_str)]
+
+
+def cmd_remind(state, args):
+    """Set a timed in-REPL reminder. Format: /remind <time> <message>
+    Time: 30s, 5m, 2h  (defaults to minutes if no unit)"""
+    theme = state.get("theme", THEMES["default"])
+
+    if not args or args.strip() in ("list", "ls", ""):
+        if _reminders:
+            now  = time.time()
+            rows = []
+            for i, (t, msg) in enumerate(_reminders):
+                rem = max(0, t - now)
+                m, s = divmod(int(rem), 60)
+                rows.append(f"  [{i+1}] [dim]{m}m {s:02d}s[/dim]  {msg}")
+            console.print(Panel("\n".join(rows), title="Active Reminders",
+                                border_style=theme["border"]))
+        else:
+            console.print("[dim]No active reminders. Usage: /remind 5m run tests[/dim]")
+        return
+
+    parts = args.split(None, 1)
+    if len(parts) < 2:
+        console.print("[yellow]Usage: /remind <time> <message>  e.g. /remind 5m run tests[/yellow]")
+        return
+
+    time_str, msg = parts[0].lower(), parts[1].strip()
+    try:
+        if   time_str.endswith("s"): secs = int(time_str[:-1])
+        elif time_str.endswith("m"): secs = int(time_str[:-1]) * 60
+        elif time_str.endswith("h"): secs = int(time_str[:-1]) * 3600
+        else:                        secs = int(time_str) * 60
+    except ValueError:
+        console.print("[yellow]Bad time — use 30s, 5m, 1h[/yellow]")
+        return
+
+    trigger = time.time() + secs
+    _reminders.append((trigger, msg))
+
+    m2, s2 = divmod(secs, 60)
+    h2, m2 = divmod(m2, 60)
+    label  = f"{h2}h {m2:02d}m" if h2 else (f"{m2}m {s2:02d}s" if m2 else f"{s2}s")
+    console.print(f"[{theme['success']}]⏰  Reminder in {label}: {msg}[/{theme['success']}]")
+
+    def _fire():
+        time.sleep(secs)
+        console.print(f"\n[bold yellow]⏰  REMINDER: {msg}[/bold yellow]\n")
+        try:
+            _reminders.remove((trigger, msg))
+        except ValueError:
+            pass
+
+    threading.Thread(target=_fire, daemon=True).start()
+
+
+# ── /multiagent — fan-out task to parallel agents, synthesize ────────────────
+def cmd_multiagent(state, args, history):
+    """Send a task to multiple agents in parallel and synthesize their outputs."""
+    if not args:
+        console.print(Panel(
+            "  [bold]Usage:[/bold] /multiagent <task>\n\n"
+            "  Agents are auto-selected by task keywords, then run in parallel.\n"
+            "  Results are synthesized into a single coherent answer.\n\n"
+            f"  Available agents: {', '.join(AGENT_ROSTER.keys())}",
+            title="[bold]Multi-Agent[/bold]", border_style="cyan", padding=(0, 2)
+        ))
+        return history
+
+    theme     = state.get("theme", THEMES["default"])
+    task      = args.strip()
+    assigned  = auto_assign_agents(task)
+    if len(assigned) < 2:
+        assigned = ["lucifer", "deathohmyson", "blacklord"]
+
+    console.print(Panel(
+        f"  [bold]Task:[/bold]    {task[:80]}\n"
+        f"  [bold]Agents:[/bold]  {', '.join(assigned)}\n"
+        "  [dim]Running in parallel…[/dim]",
+        title="[bold]Multi-Agent Fan-out[/bold]",
+        border_style=theme["border"], padding=(0, 2)
+    ))
+
+    results: dict = {}
+    errors:  dict = {}
+    lock         = threading.Lock()
+    proj_ctx     = state.get("project_ctx")
+
+    def _run(aid):
+        try:
+            ag  = Agent(aid, state, proj_ctx, BLACKBOARD)
+            res = ag.run(task, console, ai_respond)
+            with lock:
+                results[aid] = res
+        except Exception as exc:
+            with lock:
+                errors[aid] = str(exc)
+
+    threads = [threading.Thread(target=_run, args=(aid,), daemon=True) for aid in assigned]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=120)
+
+    if not results:
+        console.print("[red]All agents failed to respond.[/red]")
+        return history
+
+    console.print(f"\n[{theme['accent']}]◆  Synthesizing {len(results)} agent responses…[/{theme['accent']}]")
+
+    synth_parts = [f"Parallel results from {len(results)} agents working on: {task[:100]}\n"]
+    for aid, res in results.items():
+        info = AGENT_ROSTER.get(aid, {})
+        synth_parts.append(f"\n{info.get('emoji','🤖')} {info.get('name', aid)} ({info.get('role','')}):\n{res[:700]}")
+
+    synth_prompt = (
+        "Multiple AI agents worked on the same task in parallel. Synthesize their outputs "
+        "into one comprehensive, non-redundant answer. Preserve concrete details, code "
+        "snippets, and specific recommendations. Resolve contradictions by choosing the "
+        "strongest approach. Use clear headers per topic.\n\n"
+        + "\n".join(synth_parts)
+    )
+
+    _, history = ai_respond(state, synth_prompt, history)
+
+    if errors:
+        console.print(f"[dim yellow]⚠  {len(errors)} agent(s) failed: {', '.join(errors)}[/dim yellow]")
+
+    return history
+
+
+# ── /explain-shell — plain-English explanation of any shell command ───────────
+def cmd_shell_explain(state, args, history):
+    """Explain any shell/terminal command in plain English."""
+    if not args:
+        console.print("[yellow]Usage: /explain-shell <command>[/yellow]")
+        console.print("[dim]Example: /explain-shell git rebase -i HEAD~3[/dim]")
+        return history
+
+    prompt = (
+        f"Explain this shell command concisely:\n\n```sh\n{args}\n```\n\n"
+        "Format:\n"
+        "**What it does** — one sentence\n"
+        "**Each part** — flag/argument breakdown\n"
+        "**Example use case** — when you'd run this\n"
+        "**Gotchas** — any dangers or common mistakes\n\n"
+        "Be terse. No intro sentence. No 'Sure, let me explain'."
+    )
+    _, history = ai_respond(state, prompt, history)
     return history
 
 
@@ -11241,6 +11637,10 @@ def _make_toolbar(state):
         if show("fast") and state.get("fast_mode"):
             parts.append("<b>⚡FAST</b>")
 
+        # Handoff hint — ✏ icon when context or limits are filling up
+        if state.get("_show_handoff_hint"):
+            parts.append("<b>✏ /handoff</b>")
+
         # Thinking budget
         budget = state.get("thinking_budget", 0)
         if budget > 0:
@@ -12392,6 +12792,16 @@ def run_repl(state):
                 elif cmd == "roll":             cmd_roll(state, args)
                 elif cmd == "pick":             cmd_pick(state, args)
 
+                # ── v9.9 — Session Handoff, Limits, Power features ───────────
+                elif cmd == "limits":          cmd_limits(state, history)
+                elif cmd == "scaffold":        history = cmd_scaffold(state, args, history)
+                elif cmd in ("remind",):       cmd_remind(state, args)
+                elif cmd in ("reminders",):    cmd_remind(state, "list")
+                elif cmd == "multiagent":      history = cmd_multiagent(state, args, history)
+                elif cmd in ("explain-shell","shell-explain","xsh"):
+                    history = cmd_shell_explain(state, args, history) if args else (
+                        console.print("[yellow]Usage: /explain-shell <command>[/yellow]"), history)[1]
+
                 else:
                     # Check user-defined aliases first
                     _user_aliases = _load_aliases()
@@ -12487,6 +12897,8 @@ def run_repl(state):
                             _, history = ai_respond(state, _effective, history)
                         # Auto-save session after every exchange
                         _autosave_session(history)
+                        # Show handoff hint when limits are approaching
+                        _context_warning(state, history)
 
         except KeyboardInterrupt:
             if state.get("_working"):
@@ -12662,222 +13074,6 @@ def main():
             )
             sys.exit(1)
         raise
-
-
-# ═══════════════════════════════════════════════════════════
-# AGENT SYSTEM + PROJECT SCANNER
-# ═══════════════════════════════════════════════════════════
-
-def scan_project(path):
-    root  = Path(path).resolve()
-    if not root.exists():
-        return {"error": f"Not found: {path}"}
-    files       = {}
-    tree_lines  = []
-    total_chars = 0
-    stats       = {"total_files":0,"total_lines":0,"total_size":0,"by_ext":{}}
-
-    def walk(cur, prefix="", depth=0):
-        nonlocal total_chars
-        if depth > 7: return
-        try:
-            items = sorted(cur.iterdir(), key=lambda x:(x.is_file(), x.name.lower()))
-        except PermissionError:
-            return
-        for i, item in enumerate(items):
-            last = i == len(items)-1
-            conn = "└── " if last else "├── "
-            ext2 = "    " if last else "│   "
-            if item.is_dir():
-                if item.name in SKIP_DIRS: continue
-                tree_lines.append(f"{prefix}{conn}📁 {item.name}/")
-                walk(item, prefix+ext2, depth+1)
-            else:
-                ext = item.suffix.lower()
-                sz  = item.stat().st_size
-                stats["total_files"] += 1
-                stats["total_size"]  += sz
-                stats["by_ext"][ext]  = stats["by_ext"].get(ext,0)+1
-                sl = f"{sz}B" if sz<1024 else f"{sz//1024}KB"
-                tree_lines.append(f"{prefix}{conn}📄 {item.name} ({sl})")
-                if ext in CODE_EXTS and sz < 500000 and total_chars < MAX_TOTAL_CHARS:
-                    try:
-                        content = item.read_text(encoding="utf-8", errors="replace")
-                        lns     = len(content.splitlines())
-                        stats["total_lines"] += lns
-                        rel = str(item.relative_to(root))
-                        if len(content) > MAX_FILE_CHARS:
-                            content = content[:MAX_FILE_CHARS] + f"\n...[{lns} lines, truncated]"
-                        files[rel] = {"content":content,"lines":lns,"ext":ext,"size":sz}
-                        total_chars += len(content)
-                    except Exception:
-                        pass
-
-    walk(root)
-
-    all_names   = " ".join(files.keys())
-    all_content = " ".join(v.get("content","")[:500] for v in files.values())
-    checks      = [
-        ("package.json" in all_names, "Node.js"),
-        ("requirements.txt" in all_names or "pyproject.toml" in all_names, "Python"),
-        (any(".ts" in f for f in files), "TypeScript"),
-        (any(".tsx" in f or ".jsx" in f for f in files), "React"),
-        (any(".vue" in f for f in files), "Vue.js"),
-        ("next.config" in all_names, "Next.js"),
-        ("vite.config" in all_names, "Vite"),
-        ("tailwind" in all_content.lower(), "Tailwind CSS"),
-        ("prisma" in all_content.lower(), "Prisma"),
-        ("supabase" in all_content.lower(), "Supabase"),
-        ("express" in all_content.lower(), "Express"),
-        ("fastapi" in all_content.lower(), "FastAPI"),
-        ("django" in all_content.lower(), "Django"),
-        ("docker" in all_names.lower(), "Docker"),
-        ("openai" in all_content.lower(), "OpenAI"),
-    ]
-    stack   = [name for cond, name in checks if cond]
-    prios   = ["main.py","app.py","index.py","server.py","index.js","main.js",
-               "app.js","index.ts","index.html","App.tsx","App.jsx"]
-    entries = [p for p in prios if any(f.endswith(p) or f==p for f in files)]
-
-    return {
-        "root":         str(root),
-        "tree":         "\n".join(tree_lines),
-        "files":        files,
-        "stats":        stats,
-        "tech_stack":   stack,
-        "entry_points": entries[:5],
-        "total_chars":  total_chars,
-    }
-
-
-def format_project_context(ctx, max_files=15):
-    if "error" in ctx:
-        return f"Error: {ctx['error']}"
-    parts = [f"PROJECT ROOT: {ctx['root']}"]
-    if ctx.get("tech_stack"):
-        parts.append("TECH STACK: " + ", ".join(ctx["tech_stack"]))
-    s  = ctx["stats"]
-    sz = f"{s['total_size']//1024}KB" if s["total_size"]<1048576 else f"{s['total_size']//1048576}MB"
-    parts.append(f"STATS: {s['total_files']} files · {s['total_lines']:,} lines · {sz}")
-    if ctx.get("entry_points"):
-        parts.append("ENTRY POINTS: " + ", ".join(ctx["entry_points"]))
-    tree_preview = "\n".join(ctx["tree"].split("\n")[:50])
-    parts.append(f"DIRECTORY TREE:\n{tree_preview}")
-    for fname, info in sorted(ctx["files"].items(), key=lambda x: -x[1]["size"])[:max_files]:
-        parts.append(f"\nFILE: {fname} ({info['lines']} lines)\n\n{info['content']}")
-    return "\n".join(parts)
-
-
-def pick_best_agent(task):
-    task_lower = task.lower()
-    scores     = {aid: sum(1 for kw in info["specialties"] if kw in task_lower)
-                  for aid, info in AGENT_ROSTER.items()}
-    best = max(scores, key=scores.get)
-    return best if scores[best] > 0 else "lucifer"
-
-
-def auto_assign_agents(task):
-    task_lower = task.lower()
-    assigned   = [aid for aid, info in AGENT_ROSTER.items()
-                  if any(kw in task_lower for kw in info["specialties"])]
-    return (assigned or ["lucifer"])[:3]
-
-
-BLACKBOARD      = {} # Shared memory for Agent Mesh
-
-def call_ollama(model, history, prompt, system_prompt=None, stream=False):
-    """Local Ollama provider — supports non-streaming and live NDJSON streaming."""
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    for m in history:
-        messages.append({"role": m["role"], "content": m["text"]})
-    messages.append({"role": "user", "content": prompt})
-
-    payload = json.dumps({"model": model, "messages": messages, "stream": stream}).encode()
-    req = request.Request(
-        OLLAMA_BASE, data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST"
-    )
-
-    if stream:
-        def _ollama_stream():
-            try:
-                with request.urlopen(req, timeout=300) as resp:
-                    for raw in resp:
-                        line = raw.decode("utf-8", errors="replace").strip()
-                        if not line:
-                            continue
-                        try:
-                            obj = json.loads(line)
-                        except Exception:
-                            continue
-                        content = (obj.get("message") or {}).get("content") or ""
-                        if content:
-                            yield content, None, None
-                        if obj.get("done"):
-                            break
-                yield None, None, None
-            except Exception as exc:
-                yield None, str(exc), None
-        return _ollama_stream()
-
-    # Non-streaming
-    try:
-        with request.urlopen(req, timeout=120) as resp:
-            res = json.loads(resp.read().decode())
-        return res["message"]["content"], None
-    except Exception as exc:
-        return None, str(exc)
-
-class Agent:
-    def __init__(self, agent_id, state, project_ctx=None, blackboard=None):
-        self.id   = agent_id
-        info      = AGENT_ROSTER.get(agent_id, {})
-        self.name = info.get("name", agent_id.title())
-        self.emoji= info.get("emoji", "🤖")
-        self.color= info.get("color", "bold cyan")
-        self.role = info.get("role", "Agent")
-        self.state= state.copy()
-        self.blackboard = blackboard if blackboard is not None else BLACKBOARD
-        self.state["system_prompt"] = info.get("persona", "You are a helpful AI agent.")
-        if project_ctx and "error" not in project_ctx:
-            self.state["system_prompt"] += (
-                f"\n\nProject Context: {project_ctx.get('root','')}"
-                f"\nShared Blackboard: {json.dumps(self.blackboard)}"
-                f"\nYou can delegate tasks to other agents using [AGENT:id]task[/AGENT]. Available: {', '.join(AGENT_ROSTER.keys())}"
-            )
-        self.history     = []
-        self.project_ctx = project_ctx
-
-    def run(self, task, console_obj, ai_respond_fn):
-        console_obj.print(f"\n[{self.color}]{self.emoji} {self.name}[/{self.color}] [dim]{self.role} — working...[/dim]")
-        
-        # Prepend project context for first message
-        full_task = task
-        if self.project_ctx and not self.history:
-            ctx_str   = format_project_context(self.project_ctx, max_files=10)
-            full_task = ctx_str + "\n\n---\n\nTask: " + task
-
-        text, self.history = ai_respond_fn(self.state, full_task, self.history)
-        if not text: return ""
-
-        # AGENT MESH: Check for handoff tags
-        mesh_p = re.compile(r"\[AGENT:(.+?)\](.*?)\[/AGENT\]", re.DOTALL)
-        for m in mesh_p.finditer(text):
-            target_id = m.group(1).strip().lower()
-            sub_task  = m.group(2).strip()
-            if target_id in AGENT_ROSTER and target_id != self.id:
-                console_obj.print(f"  [dim]↳ Handoff to [bold]{target_id}[/bold]...[/dim]")
-                sub_agent = Agent(target_id, self.state, self.project_ctx, self.blackboard)
-                sub_res   = sub_agent.run(sub_task, console_obj, ai_respond_fn)
-                # Feed the result back to the original agent history
-                self.history.append({"role":"user", "text":f"Result from {target_id}: {sub_res}"})
-                text, self.history = ai_respond_fn(self.state, "Continue based on the result above.", self.history)
-
-        return text or ""
-
 
 if __name__ == "__main__":
     main()

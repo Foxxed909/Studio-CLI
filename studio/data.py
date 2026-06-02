@@ -157,6 +157,28 @@ PLANS = {
         "features":    ["Unlimited", "Custom agents", "SSO/SAML (/sso)", "Dedicated support", "SLA", "/policy", "/orgmetrics", "Unlimited credits"],
         "limitations": [],
     },
+    # Owner-only top tier. Sits ABOVE every paid plan in every dimension, but is
+    # bounded (not literal Infinity) so usage is still tracked/limited. Hidden from
+    # the public /upgrade table and not purchasable — see `internal` flag.
+    "creator": {
+        "name":        "Creator",
+        "tier":        "internal",
+        "price":       "Internal",
+        "msg_limit":   1000000,     # > Ultra's 999,999 session cap
+        "img_per_3h":  100000,      # > Enterprise's 9,999
+        "credits":     1000000,     # > the 999,999 "unlimited" sentinel
+        "models":      None,
+        "color":       "bold magenta",
+        "badge":       "✦",
+        "web_search":  True,
+        "deep_research": True,
+        "turbo":       True,
+        "computer_use": True,
+        "live_code":   True,
+        "internal":    True,
+        "features":    ["Top tier — above every plan", "1,000,000 msgs / session", "1,000,000 credits / mo", "100,000 images / 3 hrs", "All models & agents", "Computer Use + Chrome Extension", "Early access to every beta"],
+        "limitations": [],
+    },
 }
 
 # ── WEEKLY MESSAGE LIMITS ─────────────────────────────────────────────────────
@@ -169,6 +191,7 @@ WEEKLY_LIMITS = {
     "ultra":      999999,
     "team":       999999,
     "enterprise": 999999,
+    "creator":    1000000,   # owner top tier — above the 999,999 "unlimited" sentinel, but bounded
 }
 
 # ── HANDOFF MODELS (fastest free model for session summaries) ─────────────────

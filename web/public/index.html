@@ -4113,7 +4113,7 @@ async function lcpApplyFix(){
 }
 
 // ── Credits badge ──────────────────────────────────────────────────────────────
-const _PLAN_CREDITS = {free:100,starter:500,pro:2000,dev:5000,max:10000,ultra:50000,team:25000,enterprise:999999,creator:999999};
+const _PLAN_CREDITS = {free:100,starter:500,pro:2000,dev:5000,max:10000,ultra:50000,team:25000,enterprise:999999,creator:1000000};
 function _initCreditsFromPlan(){
   const plan = localStorage.getItem("studioPlan") || "free";
   const limit = _PLAN_CREDITS[plan] ?? 100;

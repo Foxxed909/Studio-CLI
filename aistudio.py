@@ -944,6 +944,8 @@ def cmd_upgrade(state, args):
         tbl.add_column("Features", width=38)
 
         for pid, p in PLANS.items():
+            if p.get("internal") and pid != current:
+                continue  # owner-only tiers aren't shown to others
             active_tag = " ← YOU" if pid == current else ""
             color = p["color"]
             creds  = f"{p.get('credits',0):,}" if p.get("credits",0) < 999999 else "∞"
@@ -975,8 +977,9 @@ def cmd_upgrade(state, args):
         _run_enterprise_negotiation(state, sub)
         return
 
-    if sub not in PLANS:
-        console.print(f"[yellow]Unknown plan. Choose: {', '.join(PLANS.keys())}[/yellow]")
+    if sub not in PLANS or PLANS[sub].get("internal"):
+        public = [k for k in PLANS.keys() if not PLANS[k].get("internal")]
+        console.print(f"[yellow]Unknown plan. Choose: {', '.join(public)}[/yellow]")
         return
 
     if sub == current:
@@ -1741,8 +1744,13 @@ def cmd_setmodel(state, args):
     if not args:
         console.print(f"[bold]Current model:[/bold] {state.get('model','(none)')}\n[dim]Usage: /set model <model-id>[/dim]")
         return state
-    # Reuse cmd_model dispatch
-    return cmd_model(state, args)
+    # Mirror the inline /model handler (there is no standalone cmd_model function).
+    state["_prev_model"] = state.get("model")
+    state["model"] = args
+    save_last_model(args)
+    theme = state.get("theme", THEMES["default"])
+    console.print(f"[{theme['success']}]✓ Model → {args}[/{theme['success']}]")
+    return state
 
 
 def cmd_undo_exchange(state, args, history):
@@ -5027,6 +5035,7 @@ def cmd_models(state):
     cur_idx = next((i for i, m in enumerate(all_models) if m == model), 0)
 
     def _draw(sel):
+        """Print the picker window and return how many lines it printed."""
         lines = []
         start = max(0, sel - 4)
         end   = min(len(all_models), start + 9)
@@ -5038,13 +5047,16 @@ def cmd_models(state):
             uses  = model_usage.get(m, 0)
             use_tag = f" [dim]×{uses}[/dim]" if uses else ""
             if i == sel:
-                console.print(f"  [{acc}]▶  {short}{use_tag}[/{acc}]")
+                lines.append(f"  [{acc}]▶  {short}{use_tag}[/{acc}]")
             else:
-                console.print(f"  [dim]   {short}{use_tag}[/dim]")
+                lines.append(f"  [dim]   {short}{use_tag}[/dim]")
         if len(all_models) > 9:
-            console.print(f"  [dim]   … {len(all_models)} total[/dim]")
+            lines.append(f"  [dim]   … {len(all_models)} total[/dim]")
+        for ln in lines:
+            console.print(ln)
+        return len(lines)
 
-    _draw(cur_idx)
+    drawn = _draw(cur_idx)
 
     while True:
         key = _read_key()
@@ -5062,9 +5074,11 @@ def cmd_models(state):
         elif key == 'ESC':
             console.print("[dim]  Keeping current model.[/dim]\n")
             return state
-        # Redraw picker
-        console.print()
-        _draw(cur_idx)
+        # Redraw in place: rewind over the previous block and clear it first,
+        # so navigating doesn't stack a fresh copy of the list each keypress.
+        sys.stdout.write(f"\033[{drawn}A\033[J")
+        sys.stdout.flush()
+        drawn = _draw(cur_idx)
 
     return state
 
@@ -5780,20 +5794,27 @@ def cmd_model_picker(state):
     console.print(f"\n[{acc}]◆ Model Picker[/{acc}]  [dim]↑↓ navigate · Enter select · Esc cancel[/dim]\n")
 
     def _draw(selected_idx):
+        """Render the picker panel and return how many terminal lines it used."""
         lines = []
         for i, label in enumerate(labels):
             if i == selected_idx:
                 lines.append(f"  [{acc}]▶  {label}[/{acc}]")
             else:
                 lines.append(f"  [dim]   {label}[/dim]")
-        console.print(Panel(
+        panel = Panel(
             "\n".join(lines),
             title=f"[dim]{len(all_models)} models[/dim]",
             border_style=border,
-        ))
+        )
+        with console.capture() as cap:
+            console.print(panel)
+        out = cap.get()
+        sys.stdout.write(out)
+        sys.stdout.flush()
+        return out.count("\n")
 
+    drawn = _draw(idx)
     while True:
-        _draw(idx)
         key = _read_key()
         if key == 'UP':
             idx = (idx - 1) % len(all_models)
@@ -5809,8 +5830,11 @@ def cmd_model_picker(state):
         elif key == 'ESC':
             console.print("[dim]Cancelled.[/dim]")
             return state
-        # Redraw: clear the panel (print empty lines to push old content up)
-        console.print()
+        # Redraw in place: rewind over the previous panel and clear it,
+        # so each keypress replaces the panel instead of stacking a new one.
+        sys.stdout.write(f"\033[{drawn}A\033[J")
+        sys.stdout.flush()
+        drawn = _draw(idx)
 
 
 # ═══════════════════════════════════════════════════════════════

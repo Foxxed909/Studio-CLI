@@ -1133,7 +1133,7 @@ app.get("/api/stripe/plan", async (req, res) => {
   }
 
   if (_CREATOR_EMAILS.has(email.toLowerCase().trim())) {
-    return res.json({ plan: "creator", sub: { plan: "creator", credits: Infinity, updatedAt: new Date().toISOString() } });
+    return res.json({ plan: "creator", sub: { plan: "creator", credits: 1000000, updatedAt: new Date().toISOString() } });
   }
   const sub = loadSub(email);
   res.json({ plan: sub?.plan || "free", sub: sub || null });

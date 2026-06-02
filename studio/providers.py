@@ -97,7 +97,11 @@ def call_openrouter(api_key, model, history, prompt, system_prompt=None,
     try:
         with request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode())
-        return data["choices"][0]["message"]["content"], None
+        choices = data.get("choices") or []
+        if not choices:
+            err = (data.get("error") or {}).get("message", "empty response")
+            return None, f"OpenRouter returned no choices: {err}"
+        return choices[0]["message"]["content"], None
     except urllib_error.HTTPError as e:
         body = e.read().decode()
         if e.code in (429, 503) and _retry < 3:
@@ -200,7 +204,11 @@ def call_cursor(api_key, model, history, prompt, system_prompt=None, stream=Fals
         req = request.Request(url, data=payload, headers=headers, method="POST")
         with request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode())
-        content = data["choices"][0]["message"]["content"]
+        choices = data.get("choices") or []
+        if not choices:
+            err = (data.get("error") or {}).get("message", "empty response")
+            return None, f"Cursor API returned no choices: {err}"
+        content = choices[0]["message"]["content"]
         return content, None
     except urllib_error.HTTPError as e:
         body = e.read().decode()

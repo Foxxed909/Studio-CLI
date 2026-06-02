@@ -8,6 +8,21 @@ import time
 from pathlib import Path
 from datetime import datetime
 
+
+def _atomic_write(path: Path, text: str, encoding: str = "utf-8") -> None:
+    """Write text atomically: temp file + os.replace() prevents corrupt reads on kill/crash."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    try:
+        tmp.write_text(text, encoding=encoding)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
 from studio.paths import (
     CONFIG_DIR, HF_KEY_FILE, TRIAL_FILE, IMG_QUOTA_FILE,
     UPGRADE_SLOTS_FILE, THEME_FILE, LAST_MODEL_FILE,
@@ -35,8 +50,7 @@ def save_profile(user_id_or_profile="default", profile=None):
     else:
         user_id = user_id_or_profile
     path = Path("profiles") / user_id / "profile.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+    _atomic_write(path, json.dumps(profile, indent=2))
 
 
 # ── API KEYS ──────────────────────────────────────────────────────────────────
@@ -92,8 +106,7 @@ def load_all_keys():
 
 
 def save_all_keys(keys):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    KEYS_FILE.write_text(json.dumps(keys, indent=2))
+    _atomic_write(KEYS_FILE, json.dumps(keys, indent=2))
 
 
 def get_key(provider):
@@ -200,8 +213,7 @@ def load_memory():
 
 
 def save_memory(mem: list):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    MEMORY_FILE.write_text(json.dumps(mem, indent=2), encoding="utf-8")
+    _atomic_write(MEMORY_FILE, json.dumps(mem, indent=2))
 
 
 # ── TRIAL ─────────────────────────────────────────────────────────────────────
@@ -282,8 +294,7 @@ def check_img_quota(state) -> tuple[bool, int, int]:
         return False, len(timestamps), limit
     timestamps.append(now)
     data["ts"] = timestamps
-    CONFIG_DIR.mkdir(exist_ok=True)
-    IMG_QUOTA_FILE.write_text(json.dumps(data), encoding="utf-8")
+    _atomic_write(IMG_QUOTA_FILE, json.dumps(data))
     return True, len(timestamps), limit
 
 
@@ -299,8 +310,7 @@ def load_upgrade_slots():
 
 
 def save_upgrade_slots(data):
-    CONFIG_DIR.mkdir(exist_ok=True)
-    UPGRADE_SLOTS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    _atomic_write(UPGRADE_SLOTS_FILE, json.dumps(data, indent=2))
 
 
 def claim_upgrade_slot(user_id, target_plan):
@@ -340,7 +350,6 @@ def load_usage():
 
 def save_usage(usage):
     try:
-        CONFIG_DIR.mkdir(exist_ok=True)
-        USAGE_FILE.write_text(json.dumps(usage))
+        _atomic_write(USAGE_FILE, json.dumps(usage))
     except Exception:
         pass

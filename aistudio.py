@@ -1453,6 +1453,7 @@ ALL_COMMANDS = [
     "/history-search","/hs","/compact","/clip","/tts",
     "/diffpatch","/format","/rename","/name","/n","/handoff","/outline","/comment",
     "/hotswap","/pin","/template","/undo","/undo-exchange",
+    "/trim","/inline","/pin-model","/tldr","/streak","/smart-diff","/word-count","/session-name",
     # v9.2
     "/fast","/thinking","/time","/statusline","/effort",
     "/pr-review","/git-suggest","/test-coverage","/safety-check",
@@ -1589,6 +1590,14 @@ COMMAND_METADATA = {
     "/clip":           ("UTIL",    "Copy last AI response to clipboard"),
     "/tts":            ("UTIL",    "Speak last AI response aloud (Windows TTS)"),
     "/undo-exchange":  ("HIST",    "Remove the last user+assistant exchange from history"),
+    "/trim":           ("HIST",    "Trim history to last N exchanges: /trim 5"),
+    "/inline":         ("FILE",    "Line-range viewer: /inline <file> <10-25>"),
+    "/pin-model":      ("MODEL",   "Lock active model this session; /pin-model off to unlock"),
+    "/tldr":           ("UTIL",    "One-sentence summary of last AI response"),
+    "/streak":         ("UTIL",    "Session achievement card with stats"),
+    "/smart-diff":     ("GIT",     "Git diff + AI explanation of changes"),
+    "/word-count":     ("UTIL",    "Word/line/char/token count for file or last response"),
+    "/session-name":   ("UTIL",    "Label this session — shown in the prompt"),
     # v9.2 — Codex killers
     "/pr-review":      ("GIT",     "Review a git diff or branch — structured code review with severities"),
     "/git-suggest":    ("GIT",     "AI commit/branch strategy — squash, split, rebase recommendations"),
@@ -1733,6 +1742,190 @@ def cmd_undo_exchange(state, args, history):
     removed = len(history) - len(new_history)
     console.print(f"[{theme['success']}]✓ Undone last exchange ({removed} entr{'y' if removed==1 else 'ies'} removed). History: {len(new_history)} turns.[/{theme['success']}]")
     return new_history
+
+
+# ── 8 NEW FEATURES (claude-style era) ─────────────────────────────────────────
+
+def cmd_trim(state, args, history):
+    """/trim <n> — Keep only the last N user+assistant exchanges."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    try:
+        n = int((args or "").strip())
+        if n < 1: raise ValueError
+    except ValueError:
+        console.print("[yellow]Usage: /trim <number>  e.g. /trim 5 keeps last 5 exchanges[/yellow]")
+        return history
+    keep    = n * 2
+    before  = len(history)
+    history = history[-keep:] if len(history) > keep else list(history)
+    dropped = before - len(history)
+    console.print(f"  [{acc}]✓ Trimmed {dropped} message(s) — {len(history)} turn(s) remain[/{acc}]")
+    return history
+
+
+def cmd_inline(state, args):
+    """/inline <file> <line|start-end> — Show a targeted line range with syntax highlight."""
+    theme = state.get("theme", THEMES["default"])
+    parts = (args or "").split(None, 1)
+    if len(parts) < 2:
+        console.print("[yellow]Usage: /inline <file> <line>  or  /inline <file> 10-25[/yellow]")
+        return
+    file_arg, range_arg = parts[0], parts[1].strip()
+    try:
+        p = resolve_path(state, file_arg, must_exist=True)
+    except Exception as e:
+        console.print(f"[red]{e}[/red]"); return
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception as e:
+        console.print(f"[red]Cannot read {p}: {e}[/red]"); return
+    try:
+        if "-" in range_arg:
+            s, e2 = range_arg.split("-", 1)
+            start, end = max(1, int(s)) - 1, min(len(lines), int(e2))
+        else:
+            ln = max(1, int(range_arg))
+            start, end = max(0, ln - 5), min(len(lines), ln + 6)
+    except ValueError:
+        console.print("[yellow]Range must be a number or start-end e.g. 10-25[/yellow]"); return
+    snippet = "\n".join(f"{i+1:4d}  {l}" for i, l in enumerate(lines[start:end], start))
+    ext = p.suffix.lstrip(".") or "text"
+    console.print(Panel(
+        Syntax(snippet, ext, theme="monokai", line_numbers=False),
+        title=f"[bold]{p.name}[/bold]  [dim]lines {start+1}–{end}[/dim]",
+        border_style=theme["border"],
+    ))
+
+
+def cmd_pin_model(state, args):
+    """/pin-model [off] — Lock the active model so /swap won't change it."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    if (args or "").strip().lower() in ("off", "unpin", "unlock"):
+        state.pop("_model_pinned", None)
+        console.print(f"  [{acc}]✓ Model unlocked — switching re-enabled[/{acc}]")
+        return state
+    current = state.get("model") or DEFAULT_MODEL
+    state["_model_pinned"] = current
+    console.print(f"  [{acc}]◆ Model pinned:[/{acc}] {_short_model(current)}  [dim]/pin-model off to unlock[/dim]")
+    return state
+
+
+def cmd_tldr(state):
+    """/tldr — One-sentence summary of the last AI response."""
+    acc  = state.get("theme", THEMES["default"]).get("accent", "cyan")
+    last = state.get("_last_response", "")
+    if not last:
+        console.print("[yellow]No response yet — send a message first[/yellow]"); return
+    prompt = (
+        "Summarise the following AI response in EXACTLY one sentence (max 25 words). "
+        "Key takeaway only:\n\n" + last[:3000]
+    )
+    result, _ = ai_respond(state, prompt, [], silent=True)
+    if result:
+        console.print(f"\n  [{acc}]◆[/{acc}]  {result.strip()}\n")
+
+
+def cmd_streak(state, history):
+    """/streak — Session achievement card: messages, tokens, duration, cost."""
+    theme    = state.get("theme", THEMES["default"])
+    acc      = theme.get("accent", "cyan")
+    border   = theme.get("border", "cyan")
+    usage    = state.get("_usage", {})
+    t_in     = usage.get("total_in", 0)
+    t_out    = usage.get("total_out", 0)
+    turns    = len([h for h in history if h["role"] == "user"])
+    rate     = model_price_per_1k(state.get("model") or DEFAULT_MODEL)
+    cost     = round(((t_in + t_out) / 1000) * rate, 6)
+    elapsed  = int(time.time() - state.get("_session_start", time.time()))
+    mins, s  = divmod(elapsed, 60)
+    hrs, mins= divmod(mins, 60)
+    dur      = f"{hrs}h {mins}m" if hrs else f"{mins}m {s}s"
+    if turns >= 50:    tier, icon = "Legendary",  "🏆"
+    elif turns >= 20:  tier, icon = "Elite",       "🔥"
+    elif turns >= 10:  tier, icon = "Active",      "⚡"
+    elif turns >= 5:   tier, icon = "Warming Up",  "✦"
+    else:              tier, icon = "Just Started", "◌"
+    body = (
+        f"  {icon}  [bold]{tier}[/bold]\n\n"
+        f"  [dim]exchanges[/dim]   [{acc}]{turns}[/{acc}]\n"
+        f"  [dim]tokens in[/dim]   [dim]{t_in:,}[/dim]\n"
+        f"  [dim]tokens out[/dim]  [dim]{t_out:,}[/dim]\n"
+        f"  [dim]duration[/dim]    [dim]{dur}[/dim]\n"
+        f"  [dim]cost[/dim]        [dim]{'$0 (free model)' if rate == 0 else f'~${cost:.6f}'}[/dim]\n"
+    )
+    console.print(Panel(body, title=f"[bold {acc}]◆ Session Streak[/bold {acc}]", border_style=border, padding=(0, 2)))
+
+
+def cmd_smart_diff(state, args, history):
+    """/smart-diff — Show git diff + AI explanation of what changed and why."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    ws    = state.get("workspace_root") or "."
+    try:
+        stat  = subprocess.run(["git", "diff", "--stat", "HEAD"], capture_output=True, text=True, timeout=10, cwd=ws)
+        diff  = subprocess.run(["git", "diff", "HEAD"],           capture_output=True, text=True, timeout=10, cwd=ws)
+    except Exception as e:
+        console.print(f"[red]Git error: {e}[/red]"); return history
+    if not diff.stdout.strip():
+        console.print(f"  [{acc}]◆ No uncommitted changes.[/{acc}]"); return history
+    console.print(Panel(Syntax(stat.stdout.strip(), "diff", theme="monokai"),
+                        title="[bold]Changed Files[/bold]", border_style=acc))
+    prompt = (
+        "Explain this git diff in plain English. For each changed file state what changed and why it matters. "
+        "One line per file, be concrete:\n\n```diff\n" + diff.stdout[:4000] + "\n```"
+    )
+    _, history = ai_respond(state, prompt, history)
+    return history
+
+
+def cmd_word_count(state, args):
+    """/word-count [file] — Words, lines, chars, token estimate for a file or last response."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    if args:
+        try:
+            p       = resolve_path(state, args.strip(), must_exist=True)
+            content = p.read_text(encoding="utf-8", errors="replace")
+            label   = p.name
+        except Exception as e:
+            console.print(f"[red]{e}[/red]"); return
+    else:
+        content = state.get("_last_response", "")
+        label   = "last response"
+        if not content:
+            console.print("[yellow]No last response. Specify a file or send a message first.[/yellow]"); return
+    words  = len(content.split())
+    lines  = len(content.splitlines())
+    chars  = len(content)
+    tokens = approx_tokens(content)
+    console.print(Panel(
+        f"  [dim]source[/dim]   [white]{label}[/white]\n"
+        f"  [dim]words[/dim]    [{acc}]{words:,}[/{acc}]\n"
+        f"  [dim]lines[/dim]    [{acc}]{lines:,}[/{acc}]\n"
+        f"  [dim]chars[/dim]    [{acc}]{chars:,}[/{acc}]\n"
+        f"  [dim]~tokens[/dim]  [{acc}]{tokens:,}[/{acc}]",
+        title="[bold]Word Count[/bold]", border_style=theme["border"], padding=(0, 2),
+    ))
+
+
+def cmd_session_name(state, args):
+    """/session-name <name|off> — Label this session; name shows in the prompt."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    name  = (args or "").strip()
+    if not name:
+        cur = state.get("session_name", "")
+        console.print(f"  [{acc}]Session:[/{acc}] {cur or '[dim]none[/dim]'}  [dim]/session-name <name>[/dim]")
+        return state
+    if name.lower() == "off":
+        state.pop("session_name", None)
+        console.print(f"  [{acc}]✓ Session name cleared[/{acc}]")
+        return state
+    state["session_name"] = name[:24]
+    console.print(f"  [{acc}]✓ Session named:[/{acc}] {name[:24]}  [dim](shown in prompt)[/dim]")
+    return state
 
 
 def cmd_quicknote(state, args):
@@ -2378,7 +2571,7 @@ def _assistant_heading(state, provider_label, is_heavy=False, toks=0):
     if ui == "studio":
         return f"\n{sep}\n[{color}]{label}[/{color}]  {meta}\n"
     if ui == "claude":
-        return f"\n{sep}\n[bold white]▸[/bold white] [{color}]{label}[/{color}]  {meta}\n"
+        return f"\n[dim {accent}]{'─' * 48}[/dim {accent}]\n[{accent}]◆[/{accent}] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "codex":
         return f"\n{sep}\n[{color}]>[/{color}] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "ghost":
@@ -10568,35 +10761,19 @@ def render_welcome(state):
 
     # ── CLAUDE ──────────────────────────────────────────────────────────────
     if ui == "claude":
-        left = (
-            f"[{acc}]  ┌──────────────────────────────────┐\n"
-            f"  │  AI Studio CLI  v{VERSION}          │\n"
-            f"  │  {plan_cfg['badge']} {plan_cfg['name']:<30}│\n"
-            f"  └──────────────────────────────────┘[/{acc}]\n\n"
-            f"  [bold dim]MODEL[/bold dim]    [{theme['success']}]{short}[/{theme['success']}]\n"
-            f"  [bold dim]DIR[/bold dim]      [cyan]{ws_short}[/cyan]\n"
-            f"  [bold dim]VIA[/bold dim]      [dim]{mode_str}[/dim]\n"
-            f"  [bold dim]PERMS[/bold dim]    [dim]{perms}[/dim]\n"
-            f"  [bold dim]MSGS[/bold dim]     [dim]{msg_str}[/dim]\n"
-        )
-        right = (
-            f"[bold]Quick commands[/bold]\n\n"
-            f"  [{acc}]/enter .[/{acc}]        scan project\n"
-            f"  [{acc}]/read <file>[/{acc}]    open file\n"
-            f"  [{acc}]/patch <file>[/{acc}]   smart edit\n"
-            f"  [{acc}]/agent berry[/{acc}]    main AI\n"
-            f"  [{acc}]/agent silicon[/{acc}]  pentester\n"
-            f"  [{acc}]/fif <file>[/{acc}]     bug hunt\n"
-            f"  [{acc}]/models[/{acc}]         pick model\n"
-            f"  [{acc}]/vibe <name>[/{acc}]    restyle\n"
-            f"  [{acc}]/help[/{acc}]           all cmds\n"
-        )
-        console.print(Panel(
-            Columns([left, right], equal=True, expand=True),
-            title=f"[bold {border_c}]◆  AI Studio CLI  v{VERSION}[/bold {border_c}]",
-            border_style=border_c,
-            padding=(0, 1),
-        ))
+        bar = f"[{acc}]{'─' * 58}[/{acc}]"
+        console.print()
+        console.print(f"  [{acc}]◆[/{acc}]  [bold white]AI Studio CLI[/bold white]  [dim]v{VERSION}[/dim]  [{acc}]{plan_cfg['badge']} {plan_cfg['name']}[/{acc}]")
+        console.print(f"  {bar}")
+        console.print()
+        console.print(f"  [dim]model[/dim]    [{theme['success']}]{short}[/{theme['success']}]")
+        console.print(f"  [dim]dir[/dim]      [white]{ws_short}[/white]")
+        console.print(f"  [dim]via[/dim]      [dim]{mode_str}[/dim]")
+        console.print(f"  [dim]stream[/dim]   [dim]{stream_m}[/dim]")
+        console.print(f"  [dim]msgs[/dim]     [dim]{msg_str}[/dim]")
+        console.print()
+        console.print(f"  [{acc}]/enter .[/{acc}]  [{acc}]/read[/{acc}]  [{acc}]/patch[/{acc}]  [{acc}]/agent[/{acc}]  [{acc}]/fif[/{acc}]  [{acc}]/models[/{acc}]  [{acc}]/recap[/{acc}]  [{acc}]/help[/{acc}]")
+        console.print()
         return
 
     # ── CODEX ──────────────────────────────────────────────────────────────
@@ -11198,16 +11375,20 @@ def _prompt_box(theme, ui_style, state):
             (f"fg:{pc}",      mid),
             (f"fg:{ac} bold", f"{glyph} "),
         ])
+    elif ui_style == "claude":
+        fill  = max(3, 50 - len(label) - len(model_short) - len(mode_tag))
+        dots  = "·" * fill
+        return FormattedText([
+            (f"fg:{ac} bold",  " ◆  "),
+            (f"fg:{pc}",       f"{label}{mode_tag}  "),
+            ("fg:#4b5563",     f"{dots}  {model_short}\n"),
+            (f"fg:{ac} bold",  " ❯  "),
+        ])
     else:
         fill  = max(2, 55 - len(label) - len(model_short))
         top   = f" ╭─ {label} ─{'─'*fill} {model_short} ─╮\n"
         mid   = " │ "
-        if ui_style == "codex":
-            arrow = "$ "
-        elif ui_style == "claude":
-            arrow = "> "
-        else:
-            arrow = "› "
+        arrow = "$ " if ui_style == "codex" else "› "
         return FormattedText([
             (f"fg:{pc}", top),
             (f"fg:{pc}", mid),
@@ -11442,6 +11623,7 @@ def run_repl(state):
     state["workspace_root"]   = state.get("workspace_root")   or load_workspace_root()
     state["permissions_mode"] = state.get("permissions_mode") or load_permissions_mode()
     state["edit_perm"]        = state.get("edit_perm")        or load_edit_perm()
+    state.setdefault("_session_start", time.time())
 
     ensure_onboarded(state)
 
@@ -11691,6 +11873,16 @@ def run_repl(state):
                 elif cmd == "undo":          cmd_undo(state, args)
                 elif cmd == "undo-exchange": history = cmd_undo_exchange(state, args, history)
                 elif cmd == "reload":  state = cmd_reload(state)
+
+                # ── New claude-era features ──────────────────────────────────
+                elif cmd == "trim":         history = cmd_trim(state, args, history)
+                elif cmd == "inline":       cmd_inline(state, args)
+                elif cmd == "pin-model":    state = cmd_pin_model(state, args)
+                elif cmd == "tldr":         cmd_tldr(state)
+                elif cmd == "streak":       cmd_streak(state, history)
+                elif cmd == "smart-diff":   history = cmd_smart_diff(state, args, history)
+                elif cmd in ("word-count", "wordcount", "wcount"): cmd_word_count(state, args)
+                elif cmd == "session-name": state = cmd_session_name(state, args)
 
                 # ── Chat management
                 elif cmd == "history": cmd_show_history(history)
@@ -12124,7 +12316,11 @@ def run_repl(state):
                 # ── v9.5 QoL ─────────────────────────────────────────────
                 elif cmd == "focus":           state = cmd_focus(state, args)
                 elif cmd == "unfocus":         state = cmd_unfocus(state)
-                elif cmd == "swap":            state = cmd_swap(state)
+                elif cmd == "swap":
+                    if state.get("_model_pinned"):
+                        console.print(f"[yellow]◆ Model is pinned — /pin-model off to unlock[/yellow]")
+                    else:
+                        state = cmd_swap(state)
                 elif cmd in ("copy-code", "copycode", "cc"): cmd_copy_code(state)
                 elif cmd in ("session", "sess"): cmd_session_info(state, history)
                 elif cmd in ("clear-history", "ch"): history = cmd_clear_history(state, history)

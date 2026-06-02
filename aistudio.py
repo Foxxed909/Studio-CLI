@@ -2378,7 +2378,7 @@ def _assistant_heading(state, provider_label, is_heavy=False, toks=0):
     if ui == "studio":
         return f"\n{sep}\n[{color}]{label}[/{color}]  {meta}\n"
     if ui == "claude":
-        return f"\n{sep}\n[bold white]▸[/bold white] [{color}]{label}[/{color}]  {meta}\n"
+        return f"\n[dim {border}]{'─' * 48}[/dim {border}]\n[{accent}]◆[/{accent}] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "codex":
         return f"\n{sep}\n[{color}]>[/{color}] [{color}]{label}[/{color}]  {meta}\n"
     if ui == "ghost":
@@ -10568,35 +10568,19 @@ def render_welcome(state):
 
     # ── CLAUDE ──────────────────────────────────────────────────────────────
     if ui == "claude":
-        left = (
-            f"[{acc}]  ┌──────────────────────────────────┐\n"
-            f"  │  AI Studio CLI  v{VERSION}          │\n"
-            f"  │  {plan_cfg['badge']} {plan_cfg['name']:<30}│\n"
-            f"  └──────────────────────────────────┘[/{acc}]\n\n"
-            f"  [bold dim]MODEL[/bold dim]    [{theme['success']}]{short}[/{theme['success']}]\n"
-            f"  [bold dim]DIR[/bold dim]      [cyan]{ws_short}[/cyan]\n"
-            f"  [bold dim]VIA[/bold dim]      [dim]{mode_str}[/dim]\n"
-            f"  [bold dim]PERMS[/bold dim]    [dim]{perms}[/dim]\n"
-            f"  [bold dim]MSGS[/bold dim]     [dim]{msg_str}[/dim]\n"
-        )
-        right = (
-            f"[bold]Quick commands[/bold]\n\n"
-            f"  [{acc}]/enter .[/{acc}]        scan project\n"
-            f"  [{acc}]/read <file>[/{acc}]    open file\n"
-            f"  [{acc}]/patch <file>[/{acc}]   smart edit\n"
-            f"  [{acc}]/agent berry[/{acc}]    main AI\n"
-            f"  [{acc}]/agent silicon[/{acc}]  pentester\n"
-            f"  [{acc}]/fif <file>[/{acc}]     bug hunt\n"
-            f"  [{acc}]/models[/{acc}]         pick model\n"
-            f"  [{acc}]/vibe <name>[/{acc}]    restyle\n"
-            f"  [{acc}]/help[/{acc}]           all cmds\n"
-        )
-        console.print(Panel(
-            Columns([left, right], equal=True, expand=True),
-            title=f"[bold {border_c}]◆  AI Studio CLI  v{VERSION}[/bold {border_c}]",
-            border_style=border_c,
-            padding=(0, 1),
-        ))
+        bar = f"[{acc}]{'─' * 58}[/{acc}]"
+        console.print()
+        console.print(f"  [{acc}]◆[/{acc}]  [bold white]AI Studio CLI[/bold white]  [dim]v{VERSION}[/dim]  [{acc}]{plan_cfg['badge']} {plan_cfg['name']}[/{acc}]")
+        console.print(f"  {bar}")
+        console.print()
+        console.print(f"  [dim]model[/dim]    [{theme['success']}]{short}[/{theme['success']}]")
+        console.print(f"  [dim]dir[/dim]      [white]{ws_short}[/white]")
+        console.print(f"  [dim]via[/dim]      [dim]{mode_str}[/dim]")
+        console.print(f"  [dim]stream[/dim]   [dim]{stream_m}[/dim]")
+        console.print(f"  [dim]msgs[/dim]     [dim]{msg_str}[/dim]")
+        console.print()
+        console.print(f"  [{acc}]/enter .[/{acc}]  [{acc}]/read[/{acc}]  [{acc}]/patch[/{acc}]  [{acc}]/agent[/{acc}]  [{acc}]/fif[/{acc}]  [{acc}]/models[/{acc}]  [{acc}]/help[/{acc}]")
+        console.print()
         return
 
     # ── CODEX ──────────────────────────────────────────────────────────────
@@ -11198,14 +11182,21 @@ def _prompt_box(theme, ui_style, state):
             (f"fg:{pc}",      mid),
             (f"fg:{ac} bold", f"{glyph} "),
         ])
+    elif ui_style == "claude":
+        fill  = max(2, 52 - len(label) - len(model_short) - len(mode_tag))
+        top   = f" ◆  {label}{mode_tag}  {'·'*fill}  {model_short}\n"
+        return FormattedText([
+            (f"fg:{ac} bold", " ◆  "),
+            (f"fg:{pc}",      f"{label}{mode_tag}  "),
+            ("fg:#4b5563",    f"{'·'*fill}  {model_short}\n"),
+            (f"fg:{ac} bold", " ❯  "),
+        ])
     else:
         fill  = max(2, 55 - len(label) - len(model_short))
         top   = f" ╭─ {label} ─{'─'*fill} {model_short} ─╮\n"
         mid   = " │ "
         if ui_style == "codex":
             arrow = "$ "
-        elif ui_style == "claude":
-            arrow = "> "
         else:
             arrow = "› "
         return FormattedText([

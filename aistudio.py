@@ -5373,6 +5373,13 @@ def _unpatch_autonomous_writes():
 # ═══════════════════════════════════════════════════════════════
 
 CHANGELOG = {
+    "10.0": [
+        "Milestone release — StudioCLI is now v10",
+        "Free tier is now FROZEN at v8+ — it no longer receives v9/v10 feature updates",
+        "Paid tiers continue to receive all new features (v9, v9+, v9 Beta, and beyond)",
+        "Carried forward: model-picker dedupe fix + cmd_setmodel crash fix",
+        "New top tier: Creator (internal/owner) sits above every paid plan",
+    ],
     "6.2": [
         "New: /vault now uses Fernet AES encryption when cryptography is installed (pip install cryptography)",
         "New: git branch shown in toolbar (⎇branch) — TTL-cached, no keypress perf hit",
@@ -6531,14 +6538,18 @@ def cmd_whats_new(state):
     tier_label = plan_cfg.get("tier", "v8+")
     body = (
         f"  [bold]StudioCLI v{VERSION}[/bold]  [{acc}]{tier_label}[/{acc}]\n\n"
-        f"  [{acc}]v8.0[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
+        f"  [{acc}]v10.0[/{acc}]  [dim]─────────────────────────────────────────[/dim]\n"
+        "  [bold magenta]✦[/bold magenta] [bold]Milestone release[/bold] — StudioCLI is now v10\n"
+        "  [bold magenta]✦[/bold magenta] [bold]Free tier frozen at v8+[/bold] — no more v9/v10 updates  [dim](upgrade for new features)[/dim]\n"
+        "  [bold magenta]✦[/bold magenta] Paid tiers keep getting every new feature\n"
+        f"\n  [{acc}]v8.0[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
         "  [bold green]✦[/bold green] [bold]4 new themes[/bold]: cobalt, carbon, crimson, slate   [dim](/theme <name>[/dim])\n"
         "  [bold green]✦[/bold green] [bold]4 new vibe presets[/bold]: cobalt, carbon, crimson, slate  [dim](/vibe <name>[/dim])\n"
         "  [bold green]✦[/bold green] [bold]/snapshot[/bold]: export current session to JSON\n"
         "  [bold green]✦[/bold green] [bold]/open-web[/bold]: launch web UI in browser\n"
         "  [bold green]✦[/bold green] [bold]/tip[/bold]: random power-user tip\n"
         "  [bold green]✦[/bold green] [bold]/speed[/bold]: toggle low-latency stream mode\n"
-        "  [bold green]✦[/bold green] Plan tiers: v8+ (free) · v9 (pro) · v9+ (max) · v9 Beta (ultra)\n"
+        "  [bold green]✦[/bold green] Plan tiers: v8+ (free, frozen) · v9 (pro) · v9+ (max) · v9 Beta (ultra)\n"
         f"\n  [{acc}]v9.0[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
         "  [bold cyan]✦[/bold cyan] [bold]/plugin list|add|remove[/bold]: plugin management  [dim](pro)[/dim]\n"
         "  [bold cyan]✦[/bold cyan] [bold]/agent-mesh[/bold]: multi-agent parallel tasks  [dim](pro)[/dim]\n"

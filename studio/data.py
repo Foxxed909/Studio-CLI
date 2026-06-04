@@ -4,7 +4,7 @@ No I/O, no side-effects; pure data and tiny pure functions only.
 """
 import re
 
-VERSION          = "9.8"
+VERSION          = "10.0"
 API_BASE         = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENROUTER_BASE  = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL    = "nvidia/nemotron-3-super-120b-a12b:free"
@@ -32,8 +32,9 @@ PLANS = {
         "turbo":       False,
         "computer_use": False,
         "live_code":   False,
-        "features":    ["10 messages / session", "1 image / 3 hrs", "Nemotron only", "v8+ features", "100 credits/mo"],
-        "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta", "No web search", "Max tier: v8+"],
+        "frozen_at":   "v8+",
+        "features":    ["10 messages / session", "1 image / 3 hrs", "Nemotron only", "v8+ features (frozen)", "100 credits/mo"],
+        "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta", "No web search", "Frozen at v8+ — no v9/v10 updates"],
     },
     "pro": {
         "name":        "Pro",

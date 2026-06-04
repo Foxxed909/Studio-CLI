@@ -1,10 +1,11 @@
 """
 All AI provider call functions for StudioCLI.
-Handles Gemini, OpenRouter (+ streaming), Cursor, Ollama, Gemini CLI.
+Handles Gemini, OpenRouter (+ streaming), Cursor, Ollama, Gemini CLI, Claude CLI.
 """
 import json
 import subprocess
 import shutil
+import sys
 import time
 from urllib import request, error as urllib_error
 
@@ -282,3 +283,55 @@ def call_gemini_cli(prompt, sys_prompt=None):
         return None, "Gemini CLI timed out after 60s"
     except Exception as e:
         return None, str(e)
+
+
+# ── CLAUDE CLI (subprocess) ───────────────────────────────────────────────────
+_claude_cli_path: str | None = None
+_claude_cli_detected: bool = False
+
+def detect_claude_cli() -> str | None:
+    global _claude_cli_path, _claude_cli_detected
+    if _claude_cli_detected:
+        return _claude_cli_path
+    _claude_cli_path = shutil.which("claude")
+    _claude_cli_detected = True
+    return _claude_cli_path
+
+def call_claude_cli(prompt: str, session_id: str | None = None) -> tuple:
+    """
+    Call claude CLI in headless mode. Returns (text, new_session_id, error).
+    Pass session_id from a prior call to --resume for conversation continuity.
+    """
+    cli = detect_claude_cli()
+    if not cli:
+        return None, None, "Claude CLI not found. Install from code.claude.com then run: claude auth login"
+
+    cmd = [cli, "--print", "--output-format", "json"]
+    if session_id:
+        cmd += ["--resume", session_id]
+    cmd.append(prompt)
+
+    try:
+        kwargs = {"capture_output": True, "text": True, "timeout": 120}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+        result = subprocess.run(cmd, **kwargs)
+
+        raw = (result.stdout or "").strip()
+        if not raw:
+            return None, None, (result.stderr.strip() or "Claude CLI returned no output")
+
+        try:
+            data = json.loads(raw)
+            if data.get("is_error") or data.get("subtype") == "error":
+                return None, None, data.get("result", "Claude CLI returned an error")
+            text    = data.get("result") or data.get("content") or ""
+            new_sid = data.get("session_id") or data.get("sessionId") or ""
+            return (text or None), (new_sid or None), None
+        except (json.JSONDecodeError, AttributeError):
+            return raw or None, None, None
+
+    except subprocess.TimeoutExpired:
+        return None, None, "Claude CLI timed out after 120s"
+    except Exception as e:
+        return None, None, str(e)

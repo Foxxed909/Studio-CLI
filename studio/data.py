@@ -4,7 +4,7 @@ No I/O, no side-effects; pure data and tiny pure functions only.
 """
 import re
 
-VERSION          = "10.0"
+VERSION          = "10.1"
 API_BASE         = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENROUTER_BASE  = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL    = "nvidia/nemotron-3-super-120b-a12b:free"
@@ -19,9 +19,9 @@ SLOT_GATED_PLANS       = ("starter", "pro", "max")
 PLANS = {
     "free": {
         "name":        "Free",
-        "tier":        "v8+",
+        "tier":        "v12",
         "price":       "$0 / mo",
-        "msg_limit":   10,
+        "msg_limit":   1000,
         "img_per_3h":  1,
         "credits":     100,
         "models":      ["nvidia/nemotron-3-super-120b-a12b:free"],
@@ -32,15 +32,15 @@ PLANS = {
         "turbo":       False,
         "computer_use": False,
         "live_code":   False,
-        "frozen_at":   "v8+",
-        "features":    ["10 messages / session", "1 image / 3 hrs", "Nemotron only", "v8+ features (frozen)", "100 credits/mo"],
-        "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta", "No web search", "Frozen at v8+ — no v9/v10 updates"],
+        "frozen_at":   "v12",
+        "features":    ["1,000 messages / session", "1 image / 3 hrs", "Nemotron only", "Updates through v12", "100 credits/mo"],
+        "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta", "No web search", "Frozen at v12 — no updates after"],
     },
     "pro": {
         "name":        "Pro",
         "tier":        "v9",
         "price":       "$18 / mo",
-        "msg_limit":   500,
+        "msg_limit":   10000,
         "img_per_3h":  10,
         "credits":     5000,
         "models":      None,
@@ -51,14 +51,14 @@ PLANS = {
         "turbo":       True,
         "computer_use": False,
         "live_code":   True,
-        "features":    ["500 messages / session", "10 images / 3 hrs", "All models", "All agents", "Web Search", "Deep Research", "Turbo Mode", "Live Code Preview", "v9 features", "5,000 credits/mo"],
+        "features":    ["10,000 messages / session", "10 images / 3 hrs", "All models", "All agents", "Web Search", "Deep Research", "Turbo Mode", "Live Code Preview", "v9 features", "5,000 credits/mo"],
         "limitations": ["No Computer Use", "No Chrome Extension"],
     },
     "max": {
         "name":        "Max",
         "tier":        "v9+",
         "price":       "$80 / mo",
-        "msg_limit":   5000,
+        "msg_limit":   50000,
         "img_per_3h":  100,
         "credits":     50000,
         "models":      None,
@@ -69,7 +69,7 @@ PLANS = {
         "turbo":       True,
         "computer_use": True,
         "live_code":   True,
-        "features":    ["5,000 messages / session", "100 images / 3 hrs", "Cursor API", "Surgical Patching", "Computer Use", "Chrome Extension", "Deep Research", "Turbo Mode", "v9+ features", "50,000 credits/mo"],
+        "features":    ["50,000 messages / session", "100 images / 3 hrs", "Cursor API", "Surgical Patching", "Computer Use", "Chrome Extension", "Deep Research", "Turbo Mode", "v9+ features", "50,000 credits/mo"],
         "limitations": [],
     },
     "ultra": {
@@ -93,7 +93,7 @@ PLANS = {
     "starter": {
         "name":        "Starter",
         "price":       "$5 / mo",
-        "msg_limit":   100,
+        "msg_limit":   3000,
         "img_per_3h":  3,
         "credits":     1000,
         "models":      None,
@@ -104,13 +104,13 @@ PLANS = {
         "turbo":       False,
         "computer_use": False,
         "live_code":   False,
-        "features":    ["100 msgs/session", "3 images/3h", "All models", "Basic agents", "1,000 credits/mo"],
+        "features":    ["3,000 msgs/session", "3 images/3h", "All models", "Basic agents", "1,000 credits/mo"],
         "limitations": ["No /arena", "No /beta", "No web search", "No turbo"],
     },
     "dev": {
         "name":        "Dev",
         "price":       "$35 / mo",
-        "msg_limit":   2000,
+        "msg_limit":   25000,
         "img_per_3h":  50,
         "credits":     15000,
         "models":      None,
@@ -121,7 +121,7 @@ PLANS = {
         "turbo":       True,
         "computer_use": False,
         "live_code":   True,
-        "features":    ["2,000 msgs/session", "50 images/3h", "All models", "/arena", "Web Search", "Turbo Mode", "Live Code", "Cursor API", "15,000 credits/mo"],
+        "features":    ["25,000 msgs/session", "50 images/3h", "All models", "/arena", "Web Search", "Turbo Mode", "Live Code", "Cursor API", "15,000 credits/mo"],
         "limitations": ["No Computer Use"],
     },
     "team": {
@@ -184,11 +184,11 @@ PLANS = {
 
 # ── WEEKLY MESSAGE LIMITS ─────────────────────────────────────────────────────
 WEEKLY_LIMITS = {
-    "free":       50,
-    "starter":    500,
-    "pro":        3000,
-    "dev":        10000,
-    "max":        50000,
+    "free":       7000,
+    "starter":    21000,
+    "pro":        70000,
+    "dev":        175000,
+    "max":        350000,
     "ultra":      999999,
     "team":       999999,
     "enterprise": 999999,

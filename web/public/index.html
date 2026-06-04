@@ -3955,13 +3955,18 @@ document.getElementById("cuInstr").addEventListener("keydown", e=>{
 // ── Plan Updates ──────────────────────────────────────────────────────────────
 function _checkPlanUpdates(){
   const lastSeen = parseFloat(localStorage.getItem("studioLastUpdate") || "0");
-  const currentVer = 9.3;
+  const currentVer = 10.0;
+  const isFree = (localStorage.getItem("studioPlan") || "free") === "free";
   if(lastSeen < currentVer){
     const toast = document.createElement("div");
     toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--accent);padding:10px 20px;border-radius:30px;box-shadow:var(--shadow-lg);color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px;pointer-events:all";
-    toast.innerHTML = '<span style="cursor:pointer">✨ Studio v9.3: Web Search, Turbo &amp; Credits!</span><button style="background:rgba(0,0,0,.25);border:none;border-radius:50%;width:20px;height:20px;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1" title="Dismiss">×</button>';
+    const headline = isFree ? "✨ Studio v10: 1,000 free msgs/session!" : "✨ Studio v10 is here!";
+    toast.innerHTML = '<span style="cursor:pointer">'+headline+'</span><button style="background:rgba(0,0,0,.25);border:none;border-radius:50%;width:20px;height:20px;color:#fff;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1" title="Dismiss">×</button>';
     toast.querySelector("span").onclick = () => {
-      alert("What's New in v9.3:\n- Web Search mode (/search)\n- Deep Research (/research)\n- 2.5x Turbo Mode (/turbo)\n- Monthly Credits System\n- Live Code Preview\n- Computer Use (Max+ plans)");
+      const freeNote = isFree
+        ? "\n\nHeads up — the Free plan now gets 1,000 messages/session and will receive updates through v12. After v12 the Free plan freezes (no further updates). Upgrade any time to keep getting new features."
+        : "";
+      alert("What's New in v10:\n- Milestone release\n- Free plan: 1,000 messages/session (up from 10)\n- Paid tiers scaled up accordingly\n- Free plan freezes at v12 — paid tiers keep all new features" + freeNote);
       localStorage.setItem("studioLastUpdate", currentVer);
       toast.remove();
     };

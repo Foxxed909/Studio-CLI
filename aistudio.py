@@ -53,6 +53,7 @@ from studio.data    import (
 from studio.providers import (
     call_gemini, call_openrouter, call_openrouter_stream,
     call_cursor, call_ollama, call_gemini_cli,
+    call_claude_cli, detect_claude_cli,
 )
 from studio.session import (
     load_profile, save_profile,
@@ -965,7 +966,7 @@ def cmd_upgrade(state, args):
         console.print(f"  You are on [{theme['accent']}]{PLANS[current]['name']}[/{theme['accent']}]. To switch: [yellow]/upgrade pro[/yellow] · [yellow]/upgrade max[/yellow] · [yellow]/upgrade ultra[/yellow]")
         if current == "free":
             console.print()
-            console.print(f"  [dim]Free plan: Nemotron-only · 10 msg/session · 1 image / 3 hrs[/dim]")
+            console.print(f"  [dim]Free plan: Nemotron-only · {PLANS['free']['msg_limit']:,} msg/session · {PLANS['free']['img_per_3h']} image / 3 hrs[/dim]")
             console.print(f"  [dim]  → /trial pro   (5 free hours of Pro, no card required)[/dim]")
             console.print(f"  [dim]  → /free-tips   (tips for getting more from Free plan)[/dim]")
             console.print(f"  [dim]  → /clear        (reset message counter)[/dim]")
@@ -1429,7 +1430,7 @@ ALL_COMMANDS = [
     "/ls","/cd","/pwd","/cat","/find","/grep","/mkdir","/rm","/cp","/mv","/diff","/tree","/summary",
     "/shell","/run","/git","/watch",
     "/save","/load","/history","/remember","/memory","/context","/forget",
-    "/compare","/persona","/mode","/model","/models","/cli","/openrouter","/theme",
+    "/compare","/persona","/mode","/model","/models","/cli","/openrouter","/claude","/theme",
     "/ui","/stream",
     "/workspace","/perm",
     "/cache",
@@ -1514,6 +1515,7 @@ COMMAND_METADATA = {
     "/computer-use":   ("MAX",     "AI desktop automation — see your screen (Max+)"),
     "/extension":      ("MAX",     "Chrome Extension — browser control & automation (Max+)"),
     "/local":          ("AI",      "Switch to local Ollama provider"),
+    "/claude":         ("CLI",     "Route prompts through Claude CLI subscription (on/off)"),
     "/ls":             ("FS",      "List directory contents"),
     "/tree":           ("FS",      "Show visual file tree"),
     "/find":           ("FS",      "Find files by pattern"),
@@ -2114,6 +2116,47 @@ def cmd_local(state, args=""):
     return state
 
 
+def cmd_claude_cli(state, args=""):
+    """/claude [on|off] — route all prompts through your local Claude CLI subscription."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    sub   = (args or "").strip().lower()
+
+    if sub in ("off", "stop", "disable"):
+        state.pop("use_claude_cli", None)
+        state.pop("_claude_cli_session_id", None)
+        console.print(f"  [{acc}]✓ Claude CLI mode off[/{acc}]")
+        return state
+
+    cli = detect_claude_cli()
+    if not cli:
+        console.print(Panel(
+            "[yellow]Claude CLI (claude) not found in PATH.[/yellow]\n\n"
+            "Install from [cyan]https://code.claude.com[/cyan], then authenticate:\n"
+            "  [bold]claude auth login[/bold]\n\n"
+            "Once done, re-run [bold]/claude on[/bold].",
+            title="[bold]Claude CLI[/bold]", border_style=theme["border"]))
+        return state
+
+    if sub in ("", "on"):
+        state["use_claude_cli"]  = True
+        state["use_openrouter"]  = False
+        state["use_cli"]         = False
+        state.pop("cursor_key", None)
+        state.pop("_claude_cli_session_id", None)
+        console.print(Panel(
+            f"  [{acc}]✓ Claude CLI mode ON[/{acc}]\n\n"
+            f"  All prompts now route through your Claude subscription.\n"
+            f"  Conversation history is maintained via session IDs.\n\n"
+            f"  [dim]Binary: {cli}[/dim]\n"
+            f"  [dim]/claude off to switch back[/dim]",
+            title="[bold]Claude CLI Active[/bold]", border_style=acc))
+        return state
+
+    console.print("[yellow]Usage: /claude on|off[/yellow]")
+    return state
+
+
 def cmd_imagine(state, args):
     hf_key = state.get("hf_key") or load_hf_key()
     if not hf_key:
@@ -2497,7 +2540,7 @@ def check_rate_limit(state):
     if tier in ("ultra", "team", "api"):
         return True, 0
     window = {"free": 3600, "pro": 18000, "max": 36000}.get(tier, 3600)
-    limit  = {"free": 10,   "pro": 200,   "max": 500  }.get(tier, 10)
+    limit  = {"free": 1000, "pro": 10000, "max": 50000}.get(tier, 1000)
 
     now = time.time()
     valid_history = [e for e in usage.get("history", []) if now - e["ts"] < window]
@@ -2834,6 +2877,13 @@ def ai_respond(state, prompt, history, silent=False):
         if not silent: _start_think_anim("Thinking (CLI)")
         text, err = call_gemini_cli(prompt, system_prompt)
         if not silent: _stop_think_anim()
+
+    elif state.get("use_claude_cli"):
+        if not silent: _start_think_anim("Thinking (Claude)")
+        text, new_sid, err = call_claude_cli(prompt, state.get("_claude_cli_session_id"))
+        if not silent: _stop_think_anim()
+        if new_sid:
+            state["_claude_cli_session_id"] = new_sid
 
     elif model.startswith("ollama/"):
         ollama_model = model[len("ollama/"):]
@@ -3950,7 +4000,7 @@ def cmd_free_tips(state):
         "[yellow]◆[/yellow] [bold]/ask <question>[/bold] — one-shot, doesn't consume session history\n"
         "[yellow]◆[/yellow] [bold]/remember <fact>[/bold] — store key info so you don't repeat context\n"
         "[yellow]◆[/yellow] [bold]/snippet save <name>[/bold] — save useful AI outputs for reuse\n"
-        "[yellow]◆[/yellow] [bold]/clear[/bold] resets your message counter (Free: 10 msgs/session)\n"
+        f"[yellow]◆[/yellow] [bold]/clear[/bold] resets your message counter (Free: {PLANS['free']['msg_limit']:,} msgs/session)\n"
         "[yellow]◆[/yellow] Get a free OpenRouter key at [link=https://openrouter.ai/keys]openrouter.ai/keys[/link]"
     )
     console.print(Panel(tips, title="[bold]Free Plan Tips[/bold]", border_style=theme["border"], padding=(1,2)))
@@ -5375,7 +5425,8 @@ def _unpatch_autonomous_writes():
 CHANGELOG = {
     "10.0": [
         "Milestone release — StudioCLI is now v10",
-        "Free tier is now FROZEN at v8+ — it no longer receives v9/v10 feature updates",
+        "Free tier message cap raised to 1,000 messages / session (paid tiers scaled up accordingly)",
+        "Free tier will receive updates through v12, then freeze — no updates after v12",
         "Paid tiers continue to receive all new features (v9, v9+, v9 Beta, and beyond)",
         "Carried forward: model-picker dedupe fix + cmd_setmodel crash fix",
         "New top tier: Creator (internal/owner) sits above every paid plan",
@@ -6540,7 +6591,8 @@ def cmd_whats_new(state):
         f"  [bold]StudioCLI v{VERSION}[/bold]  [{acc}]{tier_label}[/{acc}]\n\n"
         f"  [{acc}]v10.0[/{acc}]  [dim]─────────────────────────────────────────[/dim]\n"
         "  [bold magenta]✦[/bold magenta] [bold]Milestone release[/bold] — StudioCLI is now v10\n"
-        "  [bold magenta]✦[/bold magenta] [bold]Free tier frozen at v8+[/bold] — no more v9/v10 updates  [dim](upgrade for new features)[/dim]\n"
+        "  [bold magenta]✦[/bold magenta] [bold]Free tier: 1,000 messages / session[/bold]  [dim](up from 10)[/dim]\n"
+        "  [bold magenta]✦[/bold magenta] [bold]Free tier freezes at v12[/bold] — updates through v12, none after  [dim](upgrade to keep getting features)[/dim]\n"
         "  [bold magenta]✦[/bold magenta] Paid tiers keep getting every new feature\n"
         f"\n  [{acc}]v8.0[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
         "  [bold green]✦[/bold green] [bold]4 new themes[/bold]: cobalt, carbon, crimson, slate   [dim](/theme <name>[/dim])\n"
@@ -6549,7 +6601,7 @@ def cmd_whats_new(state):
         "  [bold green]✦[/bold green] [bold]/open-web[/bold]: launch web UI in browser\n"
         "  [bold green]✦[/bold green] [bold]/tip[/bold]: random power-user tip\n"
         "  [bold green]✦[/bold green] [bold]/speed[/bold]: toggle low-latency stream mode\n"
-        "  [bold green]✦[/bold green] Plan tiers: v8+ (free, frozen) · v9 (pro) · v9+ (max) · v9 Beta (ultra)\n"
+        "  [bold green]✦[/bold green] Plan tiers: v12 (free, freezes at v12) · v9 (pro) · v9+ (max) · v9 Beta (ultra)\n"
         f"\n  [{acc}]v9.0[/{acc}]  [dim]──────────────────────────────────────────[/dim]\n"
         "  [bold cyan]✦[/bold cyan] [bold]/plugin list|add|remove[/bold]: plugin management  [dim](pro)[/dim]\n"
         "  [bold cyan]✦[/bold cyan] [bold]/agent-mesh[/bold]: multi-agent parallel tasks  [dim](pro)[/dim]\n"
@@ -11172,6 +11224,15 @@ def render_welcome(state):
     sess_n   = prof.get("session_count", 1)
     username = prof.get("user", "User")
 
+    # Free-tier freeze notice (v10.0): Free gets updates through v12, then freezes.
+    if plan_id == "free":
+        frozen = plan_cfg.get("frozen_at", "v12")
+        console.print(
+            f"  [yellow]○ Free plan[/yellow] [dim]— {mlimit:,} msgs/session · "
+            f"updates through {frozen}, then frozen.[/dim] "
+            f"[{acc}]/upgrade[/{acc}] [dim]to keep getting new features.[/dim]"
+        )
+
     # ── STUDIO ──────────────────────────────────────────────────────────────
     if ui == "studio":
         lines = [
@@ -11848,7 +11909,7 @@ def _prompt_box(theme, ui_style, state):
 
 def _sync_state_to_agent(global_state, agent_obj):
     for k in (
-        "api_key","openrouter_key","model","use_cli","use_openrouter",
+        "api_key","openrouter_key","model","use_cli","use_openrouter","use_claude_cli",
         "theme","theme_name","ui_style","stream_mode",
         "workspace_root","permissions_mode","project_ctx",
     ):
@@ -12173,9 +12234,12 @@ def run_repl(state):
     if shutil.which("npx") or shutil.which("node"):
         cli = detect_gemini_cli()
         if cli: console.print(f"[{theme['success']}]✦ Gemini CLI detected![/{theme['success']}] Use [bold]/cli on[/bold] to route through it.\n")
+    if detect_claude_cli():
+        console.print(f"[{theme['success']}]✦ Claude CLI detected![/{theme['success']}] Use [bold]/claude on[/bold] to chat via your subscription.\n")
 
     def _mode_str():
-        return ("Gemini CLI" if state.get("use_cli")
+        return ("Claude CLI" if state.get("use_claude_cli")
+                else "Gemini CLI" if state.get("use_cli")
                 else "OpenRouter" if (state.get("use_openrouter") or _is_openrouter_model(state.get("model",""))) and state.get("openrouter_key")
                 else "Gemini API")
 
@@ -12303,6 +12367,7 @@ def run_repl(state):
                 elif cmd == "clear":
                     history = []
                     reset_msg_counter(state)
+                    state.pop("_claude_cli_session_id", None)
                     clear_terminal()
                     t2  = state.get("theme", THEMES["default"])
                     render_welcome(state)
@@ -12590,6 +12655,7 @@ def run_repl(state):
                 elif cmd == "arena":      history = cmd_arena(state, args, history)
                 elif cmd == "broadcast":  cmd_broadcast(state, args)
                 elif cmd in ("local", "ollama"): state = cmd_local(state, args)
+                elif cmd == "claude":            state = cmd_claude_cli(state, args)
                 elif cmd == "mesh":
                     console.print(Panel(json.dumps(BLACKBOARD, indent=2), title="Agent Mesh Blackboard", border_style="magenta"))
                 elif cmd == "live-fif":

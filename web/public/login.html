@@ -122,6 +122,12 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 const redirectTo = `${location.origin}/auth/callback.html`;
 
+// Studio CLI /login sends users here with ?cli=1 — the callback page then
+// shows the access token to paste back into the terminal.
+if (new URLSearchParams(location.search).get("cli") === "1") {
+  sessionStorage.setItem("studio_cli_login", "1");
+}
+
 function setStatus(msg, type = "") {
   const el = document.getElementById("status");
   el.textContent = msg;

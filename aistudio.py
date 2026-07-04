@@ -54,6 +54,7 @@ from studio.providers import (
     call_gemini, call_openrouter, call_openrouter_stream,
     call_cursor, call_ollama, call_gemini_cli,
     call_claude_cli, detect_claude_cli,
+    call_codex_cli, detect_codex_cli,
 )
 from studio.session import (
     load_profile, save_profile,
@@ -1430,7 +1431,7 @@ ALL_COMMANDS = [
     "/ls","/cd","/pwd","/cat","/find","/grep","/mkdir","/rm","/cp","/mv","/diff","/tree","/summary",
     "/shell","/run","/git","/watch",
     "/save","/load","/history","/remember","/memory","/context","/forget",
-    "/compare","/persona","/mode","/model","/models","/cli","/openrouter","/claude","/theme",
+    "/compare","/persona","/mode","/model","/models","/cli","/openrouter","/claude","/connect","/login","/logout-cloud","/theme",
     "/ui","/stream",
     "/workspace","/perm",
     "/cache",
@@ -1578,6 +1579,9 @@ COMMAND_METADATA = {
     "/fix-self":       ("SYS",     "Experimental: StudioCLI attempts to fix itself"),
     # v5.7
     "/vibe":           ("UI",      "One-shot UI + theme preset (e.g. /vibe foxxia)"),
+    "/connect":        ("AI",      "Use your existing Claude/ChatGPT/Gemini subscription via its CLI"),
+    "/login":          ("ME",      "Sign in with Google (Studio Stage account sync)"),
+    "/logout-cloud":   ("ME",      "Disconnect Studio Stage account"),
     "/quickstart":     ("HELP",    "Show 5-step guide tailored to your plan"),
     "/restart":        ("SYS",     "Restart Studio in-place (apply updates without closing terminal)"),
     "/pick":           ("AI",      "Interactive arrow-key model selector"),
@@ -2151,6 +2155,194 @@ def cmd_claude_cli(state, args=""):
         return state
 
     console.print("[yellow]Usage: /claude on|off[/yellow]")
+    return state
+
+
+def cmd_connect(state, args=""):
+    """/connect [claude|codex|gemini|ollama|off] — use the AI subscriptions you
+    already pay for, via their official CLIs. No extra API keys needed."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    sub   = (args or "").strip().lower()
+
+    if sub in ("off", "none", "api"):
+        for k in ("use_claude_cli", "use_codex_cli", "use_cli", "_claude_cli_session_id"):
+            state.pop(k, None)
+        console.print(f"  [{acc}]✓ Subscription routing off — back to API providers.[/{acc}]")
+        return state
+
+    if sub == "claude":
+        return cmd_claude_cli(state, "on")
+
+    if sub == "codex":
+        if not detect_codex_cli():
+            console.print(Panel(
+                "[yellow]Codex CLI (codex) not found in PATH.[/yellow]\n\n"
+                "Rides your ChatGPT Plus/Pro plan. Install + sign in:\n"
+                "  [bold]npm i -g @openai/codex[/bold]\n"
+                "  [bold]codex login[/bold]\n\n"
+                "Then re-run [bold]/connect codex[/bold].",
+                title="[bold]Codex CLI[/bold]", border_style=theme["border"]))
+            return state
+        state["use_codex_cli"] = True
+        for k in ("use_claude_cli", "use_cli", "_claude_cli_session_id"):
+            state.pop(k, None)
+        state["use_openrouter"] = False
+        console.print(f"  [{acc}]✓ Codex CLI connected — prompts ride your ChatGPT plan.[/{acc}]"
+                      f"  [dim]/connect off to switch back[/dim]")
+        return state
+
+    if sub in ("gemini", "gemini-cli"):
+        cli2 = detect_gemini_cli()
+        if not (cli2 or shutil.which("npx")):
+            console.print(Panel(
+                "[yellow]Gemini CLI not found.[/yellow]\n\n"
+                "Rides your Google account (free tier included). Install + sign in:\n"
+                "  [bold]npm i -g @google/gemini-cli[/bold]\n"
+                "  [bold]gemini[/bold]  [dim](first run opens Google sign-in)[/dim]\n\n"
+                "Then re-run [bold]/connect gemini[/bold].",
+                title="[bold]Gemini CLI[/bold]", border_style=theme["border"]))
+            return state
+        state["use_cli"] = True
+        for k in ("use_claude_cli", "use_codex_cli", "_claude_cli_session_id"):
+            state.pop(k, None)
+        console.print(f"  [{acc}]✓ Gemini CLI connected — prompts ride your Google account.[/{acc}]"
+                      f"  [dim]/connect off to switch back[/dim]")
+        return state
+
+    if sub == "ollama":
+        console.print(f"  [dim]Local models are managed with[/dim] [{acc}]/local[/{acc}]"
+                      f" [dim](needs `ollama serve` running).[/dim]")
+        return state
+
+    if sub:
+        console.print("[yellow]Usage: /connect [claude|codex|gemini|ollama|off][/yellow]")
+        return state
+
+    # Status panel: what's installed, what's active, how to get the rest.
+    def _row(name, rides, found, active, how):
+        mark  = f"[{theme['success']}]● connected[/{theme['success']}]" if active else \
+                ("[green]✓ installed[/green]" if found else "[dim]○ not found[/dim]")
+        cmd_c = f"[{acc}]{how}[/{acc}]" if found and not active else f"[dim]{how}[/dim]"
+        return name, rides, mark, cmd_c
+
+    or_key = state.get("openrouter_key") or load_or_key()
+    rows = [
+        _row("Claude Code",  "Claude Pro/Max subscription", bool(detect_claude_cli()),
+             bool(state.get("use_claude_cli")), "/connect claude"),
+        _row("Codex CLI",    "ChatGPT Plus/Pro plan",       bool(detect_codex_cli()),
+             bool(state.get("use_codex_cli")), "/connect codex"),
+        _row("Gemini CLI",   "Google account (free tier)",  bool(detect_gemini_cli() or shutil.which("npx")),
+             bool(state.get("use_cli")), "/connect gemini"),
+        _row("Ollama",       "Local models (offline)",      bool(shutil.which("ollama")),
+             (state.get("model") or "").startswith("ollama/"), "/local"),
+        _row("OpenRouter",   "API key (pay per token)",     bool(or_key),
+             bool(state.get("use_openrouter") and or_key), "/keys"),
+    ]
+    tbl = Table(title="[bold]Bring your own subscription[/bold]", box=box.SIMPLE,
+                border_style=theme["border"])
+    tbl.add_column("provider", style="bold")
+    tbl.add_column("rides")
+    tbl.add_column("status")
+    tbl.add_column("enable", justify="right")
+    for r in rows:
+        tbl.add_row(*r)
+    console.print(tbl)
+    console.print("[dim]Sign in once with the vendor's own CLI — Studio routes prompts through it.\n"
+                  "Your credentials never touch Studio.[/dim]")
+    return state
+
+
+# ── STUDIO STAGE ACCOUNT (Google OAuth via web) ───────────────────────────────
+STAGE_URL = os.environ.get("STUDIO_STAGE_URL", "http://localhost:3456").rstrip("/")
+
+def load_account():
+    try:
+        if ACCOUNT_FILE.exists():
+            return json.loads(ACCOUNT_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return None
+
+
+def cmd_login(state, args=""):
+    """/login [status] — sign in with Google via Studio Stage and sync your account."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    sub   = (args or "").strip()
+
+    if sub.lower() == "status" or (not sub and load_account()):
+        info = load_account()
+        if info:
+            console.print(Panel(
+                f"  [bold]{info.get('email', '?')}[/bold]\n"
+                f"  [dim]id[/dim]      {(info.get('id') or '?')[:13]}…\n"
+                f"  [dim]since[/dim]   {(info.get('connected_at') or '?')[:19].replace('T', ' ')}\n\n"
+                f"  [dim]/logout-cloud to disconnect · /login <token> to refresh[/dim]",
+                title=f"[bold {acc}]Studio Stage account[/bold {acc}]",
+                border_style=acc, padding=(0, 2)))
+        else:
+            console.print("[yellow]Not signed in. Run /login to connect.[/yellow]")
+        return state
+
+    if not sub:
+        login_url = f"{STAGE_URL}/login.html?cli=1"
+        console.print(Panel(
+            f"  1. Open  [bold {acc}]{login_url}[/bold {acc}]\n"
+            f"  2. Sign in with Google (or GitHub/Discord)\n"
+            f"  3. Copy the token it shows you\n"
+            f"  4. Paste it below\n\n"
+            f"  [dim]Different server? Set STUDIO_STAGE_URL and re-run /login.[/dim]",
+            title="[bold]Sign in with Google[/bold]", border_style=theme["border"], padding=(0, 2)))
+        try:
+            webbrowser.open(login_url)
+        except Exception:
+            pass
+        sub = _safe_input("  token › ").strip()
+        if not sub:
+            console.print("[yellow]No token — cancelled.[/yellow]")
+            return state
+
+    # Verify the pasted token against the Stage backend and store the account.
+    try:
+        req = request.Request(
+            f"{STAGE_URL}/api/auth/me",
+            headers={"Authorization": f"Bearer {sub}"})
+        with request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as e:
+        console.print(f"[red]Could not verify token against {STAGE_URL}: {e}[/red]")
+        console.print("[dim]Is the Stage server running? Set STUDIO_STAGE_URL if it lives elsewhere.[/dim]")
+        return state
+
+    user = data.get("user") or data
+    info = {
+        "id":           user.get("id", ""),
+        "email":        user.get("email", ""),
+        "connected_at": datetime.now().isoformat(timespec="seconds"),
+        "stage_url":    STAGE_URL,
+    }
+    CONFIG_DIR.mkdir(exist_ok=True)
+    ACCOUNT_FILE.write_text(json.dumps(info, indent=2), encoding="utf-8")
+    prof = load_profile() or {}
+    prof["stage_email"] = info["email"]
+    save_profile(prof)
+    console.print(f"  [{theme['success']}]✓ Signed in as {info['email']}[/{theme['success']}]"
+                  f"  [dim]· synced to profile[/dim]")
+    return state
+
+
+def cmd_logout_cloud(state, args=""):
+    """/logout-cloud — disconnect the Studio Stage account (local files only)."""
+    theme = state.get("theme", THEMES["default"])
+    if not load_account():
+        console.print("[yellow]No Stage account connected.[/yellow]")
+        return state
+    ACCOUNT_FILE.unlink(missing_ok=True)
+    prof = load_profile() or {}
+    prof.pop("stage_email", None)
+    save_profile(prof)
+    console.print(f"  [{theme['success']}]✓ Stage account disconnected.[/{theme['success']}]")
     return state
 
 
@@ -2891,6 +3083,11 @@ def ai_respond(state, prompt, history, silent=False):
         if not silent: _stop_think_anim()
         if new_sid:
             state["_claude_cli_session_id"] = new_sid
+
+    elif state.get("use_codex_cli"):
+        if not silent: _start_think_anim("Thinking (Codex)")
+        text, err = call_codex_cli(prompt)
+        if not silent: _stop_think_anim()
 
     elif model.startswith("ollama/"):
         ollama_model = model[len("ollama/"):]
@@ -4020,8 +4217,132 @@ def read_file(path):
         raise FileNotFoundError(f"Not found: {path}")
     return p.read_text(encoding="utf-8", errors="replace")
 
+# ── @FILE MENTIONS ────────────────────────────────
+# "explain @src/app.py" attaches the file to the prompt. Tab-completion on @
+# comes from AdvancedCompleter in run_repl.
+_FILE_MENTION_RE = re.compile(r"(?<![\w.])@([\w~][\w./\\~-]*)")
+
+def expand_file_mentions(state, text):
+    """Replace @path tokens with fenced file contents appended to the prompt."""
+    if "@" not in text:
+        return text
+    blocks, seen = [], set()
+
+    def _sub(m):
+        raw = m.group(1)
+        try:
+            p = resolve_path(state, raw, must_exist=True)
+        except Exception:
+            return m.group(0)
+        if not p.is_file() or p.stat().st_size > 400_000:
+            return m.group(0)
+        key = str(p)
+        if key not in seen:
+            seen.add(key)
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace")[:MAX_FILE_CHARS]
+            except Exception:
+                return m.group(0)
+            lang = p.suffix.lstrip(".") or "text"
+            blocks.append(f"```{lang}\n# file: {p}\n{content}\n```")
+        return f"`{p.name}`"
+
+    expanded = _FILE_MENTION_RE.sub(_sub, text)
+    if blocks:
+        expanded += "\n\nReferenced files:\n\n" + "\n\n".join(blocks)
+        console.print(f"[dim]@ attached {len(blocks)} file{'s' if len(blocks) != 1 else ''}[/dim]")
+    return expanded
+
+
+# ── CHECKPOINTS ───────────────────────────────────
+# Every AI-driven write snapshots the previous file content first, so any
+# change can be rolled back with /rewind — no scattered .bak files needed.
+_CHECKPOINT_CAP = 50
+
+def _checkpoint_manifest():
+    mf = CHECKPOINT_DIR / "manifest.json"
+    try:
+        if mf.exists():
+            data = json.loads(mf.read_text(encoding="utf-8"))
+            return data if isinstance(data, list) else []
+    except Exception:
+        pass
+    return []
+
+def _save_checkpoint_manifest(entries):
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    (CHECKPOINT_DIR / "manifest.json").write_text(
+        json.dumps(entries, indent=2), encoding="utf-8")
+
+def checkpoint_file(path, op="write"):
+    """Snapshot a file before it is overwritten. Never blocks the write."""
+    try:
+        p = Path(path)
+        if not p.exists() or not p.is_file() or p.stat().st_size > 2_000_000:
+            return
+        CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+        entries = _checkpoint_manifest()
+        cid  = f"{int(time.time()*1000):x}"
+        snap = CHECKPOINT_DIR / f"{cid}_{p.name}"
+        shutil.copy2(str(p), str(snap))
+        entries.append({"id": cid, "ts": datetime.now().isoformat(timespec="seconds"),
+                        "path": str(p.resolve()), "snap": snap.name, "op": op})
+        for old in entries[:-_CHECKPOINT_CAP]:
+            (CHECKPOINT_DIR / old["snap"]).unlink(missing_ok=True)
+        _save_checkpoint_manifest(entries[-_CHECKPOINT_CAP:])
+    except Exception:
+        pass
+
+
+def _undo_from_checkpoints(state, args):
+    """Restore a file from its automatic pre-write checkpoint (backs /undo)."""
+    theme   = state.get("theme", THEMES["default"])
+    acc     = theme.get("accent", "cyan")
+    entries = _checkpoint_manifest()
+    if not entries:
+        console.print("[yellow]No checkpoints yet — Studio snapshots files before every AI write.[/yellow]")
+        return
+    recent = list(reversed(entries[-15:]))
+    sub    = (args or "").strip().lower()
+    if not sub or sub == "list":
+        tbl = Table(title="[bold]Checkpoints[/bold]", box=box.SIMPLE,
+                    border_style=theme["border"])
+        tbl.add_column("#", justify="right")
+        tbl.add_column("when")
+        tbl.add_column("file")
+        tbl.add_column("op", style="dim")
+        for i, e in enumerate(recent, 1):
+            tbl.add_row(str(i), e["ts"].replace("T", " "), e["path"], e.get("op", "write"))
+        console.print(tbl)
+        console.print(f"[dim]/undo <#> to restore · newest first · keeps last {_CHECKPOINT_CAP}[/dim]")
+        return
+    if sub == "last":
+        sub = "1"
+    try:
+        e = recent[int(sub) - 1]
+    except (ValueError, IndexError):
+        console.print("[yellow]Usage: /undo [list|last|<#>|<file>][/yellow]")
+        return
+    snap = CHECKPOINT_DIR / e["snap"]
+    if not snap.exists():
+        console.print("[red]Snapshot file missing — cannot restore.[/red]")
+        return
+    target  = Path(e["path"])
+    preview = snap.read_text(encoding="utf-8", errors="replace")[:400]
+    console.print(Panel(preview or "[dim](empty file)[/dim]",
+        title=f"[bold]Restore {target.name}  ←  {e['ts'].replace('T', ' ')}[/bold]",
+        border_style=acc))
+    if not check_write_allowed(state, str(target), "restore"):
+        return
+    checkpoint_file(target, "pre-rewind")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(snap), str(target))
+    console.print(f"[{theme['success']}]✓ Rewound {target}[/{theme['success']}]")
+
+
 def write_file(path, content):
     p = Path(path); p.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_file(p)
     p.write_text(content, encoding="utf-8")
     console.print(f"[green]✓ Saved → {path}[/green]")
 
@@ -4095,6 +4416,7 @@ def read_image_beta(state, path):
 
 def write_file_state(state, path, content):
     p = resolve_path(state, path, must_exist=False, for_write=True)
+    checkpoint_file(p)
     p.write_text(content, encoding="utf-8")
     console.print(f"[green]✓ Saved → {p}[/green]")
     return p
@@ -4378,17 +4700,29 @@ def cmd_watch(state, path, history):
 
 # ── UNDO (restore .bak) ───────────────────────────
 def cmd_undo(state, args):
-    """Restore the most recent .bak file created by /fix or /patch."""
+    """/undo [list|last|<#>|<file>] — restore files from automatic pre-write
+    checkpoints; falls back to legacy .bak files from /fix and /patch."""
     theme = state.get("theme", THEMES["default"])
+    args  = (args or "").strip()
+
+    # Checkpoint flow: /undo, /undo list, /undo last, /undo <#>
+    if not args or args.lower() in ("list", "last") or args.isdigit():
+        if _checkpoint_manifest():
+            _undo_from_checkpoints(state, args)
+            return
+        if args.lower() in ("list", "last") or args.isdigit():
+            console.print("[yellow]No checkpoints yet — Studio snapshots files before every AI write.[/yellow]")
+            return
+
+    # Legacy flow: /undo <file> restores <file>.bak; bare /undo scans *.bak
     if args:
         bak = resolve_path(state, args + ".bak", must_exist=False)
-        target = resolve_path(state, args, must_exist=False)
         candidates = [bak] if bak.exists() else []
     else:
         cwd = Path.cwd()
         candidates = sorted(cwd.glob("*.bak"), key=lambda f: f.stat().st_mtime, reverse=True)
     if not candidates:
-        console.print("[yellow]No .bak files found. Run /fix or /patch first.[/yellow]")
+        console.print("[yellow]No checkpoints or .bak files found. Run an AI write first.[/yellow]")
         return
     bak = candidates[0]
     target = bak.with_suffix("")
@@ -11628,7 +11962,22 @@ def run_repl(state):
     # ── Prompt session ────────────────────────────────────────
     class AdvancedCompleter(WordCompleter):
         def get_completions(self, document, complete_event):
+            from prompt_toolkit.completion import Completion
             word = document.get_word_before_cursor(WORD=True)
+            # 0. @file mention completion ("explain @src/ap<TAB>")
+            if word.startswith("@"):
+                frag = word[1:]
+                base = Path(state.get("workspace_root") or ".")
+                try:
+                    hits = sorted(base.glob(frag + "*"))[:12] if frag else \
+                           sorted(f for f in base.iterdir() if not f.name.startswith("."))[:12]
+                except OSError:
+                    hits = []
+                for f in hits:
+                    rel = f.relative_to(base) if f.is_relative_to(base) else f
+                    suffix = "/" if f.is_dir() else ""
+                    yield Completion(f"@{rel}{suffix}", start_position=-len(word))
+                return
             # 1. Path completion (if not starting with /)
             if word and not word.startswith("/"):
                 # Suggest local files
@@ -12052,6 +12401,9 @@ def run_repl(state):
                         console.print(f"[dim]Current: {state['model']}[/dim]")
                 elif cmd == "models":
                     state = cmd_models(state)
+                elif cmd == "connect":  state = cmd_connect(state, args)
+                elif cmd == "login":         state = cmd_login(state, args)
+                elif cmd == "logout-cloud":  state = cmd_logout_cloud(state, args)
                 elif cmd == "cli":
                     if args=="on":
                         cli2 = detect_gemini_cli()
@@ -12447,6 +12799,7 @@ def run_repl(state):
                         _focus = state.get("_focus")
                         _effective = (f"[Context — stay focused on: {_focus}]\n\n{user_input}"
                                       if _focus else user_input)
+                        _effective = expand_file_mentions(state, _effective)
                         tmp_ctx = state.pop("_one_shot_ctx", None)
                         if isinstance(tmp_ctx, dict) and "error" not in tmp_ctx:
                             prompt     = format_project_context(tmp_ctx, max_files=8) + "\n\n---\n\nQuestion: " + _effective
@@ -12561,6 +12914,11 @@ def main():
         """
     )
     parser.add_argument("prompt",      nargs="?", help="One-shot prompt")
+    parser.add_argument("-p","--print", dest="print_prompt", nargs="?", const="",
+                        metavar="PROMPT",
+                        help="Headless one-shot: plain stdout, reads piped stdin, exit 1 on failure")
+    parser.add_argument("--json",      action="store_true",
+                        help="With -p: emit JSON {response, model, tokens, ok}")
     parser.add_argument("-r","--read", metavar="FILE")
     parser.add_argument("-m","--model",default=DEFAULT_MODEL)
     parser.add_argument("--setup",     action="store_true")
@@ -12603,6 +12961,29 @@ def main():
     if args.persona:
         p = PERSONAS.get(args.persona, args.persona)
         state["system_prompt"] = p; save_persona(p)
+
+    # ── Headless mode: studio -p "prompt", pipe-friendly, no chrome ──────────
+    if args.print_prompt is not None:
+        prompt = args.print_prompt
+        if not sys.stdin.isatty():
+            piped = sys.stdin.read()
+            if piped.strip():
+                prompt = ((prompt + "\n\n") if prompt else "") + \
+                         f"Input:\n```\n{piped[:MAX_TOTAL_CHARS]}\n```"
+        if not prompt.strip():
+            sys.stderr.write("studio -p: no prompt given (pass text or pipe stdin)\n")
+            sys.exit(2)
+        if not (state["api_key"] or state["openrouter_key"] or state["use_cli"]):
+            sys.stderr.write("studio -p: no API key configured — run studio --setup first\n")
+            sys.exit(2)
+        text, _ = ai_respond(state, prompt, [], silent=True)
+        if args.json:
+            lt = state.get("_last_tokens") or {}
+            sys.stdout.write(json.dumps({"response": text or "", "model": state.get("model"),
+                                         "tokens": lt, "ok": bool(text)}) + "\n")
+        elif text:
+            sys.stdout.write(text.rstrip("\n") + "\n")
+        sys.exit(0 if text else 1)
 
     if not state["api_key"] and not state["openrouter_key"] and not state["use_cli"]:
         k = setup_api_key(state)

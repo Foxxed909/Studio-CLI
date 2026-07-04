@@ -288,6 +288,39 @@ def call_gemini_cli(prompt, sys_prompt=None):
         return None, str(e)
 
 
+# ── CODEX CLI (subprocess) ────────────────────────────────────────────────────
+_codex_cli_path: str | None = None
+_codex_cli_detected: bool = False
+
+def detect_codex_cli() -> str | None:
+    global _codex_cli_path, _codex_cli_detected
+    if _codex_cli_detected:
+        return _codex_cli_path
+    _codex_cli_path = shutil.which("codex")
+    _codex_cli_detected = True
+    return _codex_cli_path
+
+def call_codex_cli(prompt: str) -> tuple:
+    """Run OpenAI Codex CLI non-interactively (rides the user's ChatGPT plan).
+    Returns (text, error)."""
+    cli = detect_codex_cli()
+    if not cli:
+        return None, "Codex CLI not found. Install: npm i -g @openai/codex, then: codex login"
+    try:
+        kwargs = {"capture_output": True, "text": True, "timeout": 120}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+        result = subprocess.run([cli, "exec", "--skip-git-repo-check", prompt], **kwargs)
+        out = (result.stdout or "").strip()
+        if out:
+            return out, None
+        return None, (result.stderr.strip() or "Codex CLI returned no output")
+    except subprocess.TimeoutExpired:
+        return None, "Codex CLI timed out after 120s"
+    except Exception as e:
+        return None, str(e)
+
+
 # ── CLAUDE CLI (subprocess) ───────────────────────────────────────────────────
 _claude_cli_path: str | None = None
 _claude_cli_detected: bool = False

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Studio Lab</title>
+<title>Studio Testing</title>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.10.0/styles/github-dark.min.css"/>
@@ -612,7 +612,7 @@ textarea.cmp-field { resize:none; height:100px; line-height:1.6 }
 <nav class="topnav">
   <div class="tn-logo">
     <div class="tn-mark">⚗</div>
-    <span class="tn-name">Studio Lab</span>
+    <span class="tn-name">Studio Testing</span>
     <span class="tn-badge">v10</span>
   </div>
   <div class="tn-div"></div>
@@ -622,7 +622,7 @@ textarea.cmp-field { resize:none; height:100px; line-height:1.6 }
     <button class="tn-tab"        id="tab-batch"    onclick="setTab('batch')">Batch</button>
   </div>
   <div class="tn-spacer"></div>
-  <div class="tn-user" onclick="showToast('Signed in via StudioCLI')">
+  <div class="tn-user" onclick="showToast('Signed in via Studio Stage')">
     <div class="tn-avatar" id="tnAvatar">S</div>
     <div class="tn-user-info">
       <div class="tn-user-name" id="tnName">Studio User</div>
@@ -658,7 +658,7 @@ textarea.cmp-field { resize:none; height:100px; line-height:1.6 }
       <!-- Empty / welcome -->
       <div class="empty-view" id="emptyView">
         <div class="empty-icon">⚗</div>
-        <div class="empty-title">Studio Lab</div>
+        <div class="empty-title">Studio Testing</div>
         <div class="empty-sub">Create a new thread to start testing models. Each conversation is saved and continuable.</div>
         <button class="empty-start" onclick="openCompose()">+ New Thread</button>
       </div>
@@ -914,7 +914,7 @@ const LAB_CODE = "STUDIOLAB-2026";
   const qp = new URLSearchParams(location.search).get("code");
   if(qp===LAB_CODE) localStorage.setItem("studioLabAccess","1");
   if(LAB_ALLOWLIST.includes(email)||localStorage.getItem("studioLabAccess")==="1") return;
-  document.body.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#08090f;color:#e2e8f0;font-family:system-ui,sans-serif;padding:24px"><div style="max-width:480px;text-align:center;background:#111827;border:1px solid rgba(99,102,241,.18);border-radius:16px;padding:40px 32px"><div style="font-size:32px;margin-bottom:12px">⚗</div><h1 style="font-size:20px;margin:0 0 10px;font-weight:800">Studio Lab — Internal Only</h1><p style="color:#94a3b8;line-height:1.6;margin:0 0 20px">Have an access code? Enter it below or request access at <a style="color:#818cf8" href="mailto:studio@foxxia.dev">studio@foxxia.dev</a>.</p><div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px"><input id="lc" placeholder="Access code" style="padding:10px 12px;border-radius:8px;border:1px solid rgba(99,102,241,.3);background:#0d0f1a;color:#e2e8f0;font-size:14px;width:190px;outline:none"><button id="le" style="padding:10px 18px;border-radius:8px;border:0;cursor:pointer;background:#6366f1;color:#fff;font-weight:600;font-family:system-ui">Enter</button></div><div id="lerr" style="color:#f87171;font-size:13px;min-height:18px"></div><a href="/index.html" style="color:#94a3b8;font-size:13px">← Back to Studio</a></div></div>`;
+  document.body.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#08090f;color:#e2e8f0;font-family:system-ui,sans-serif;padding:24px"><div style="max-width:480px;text-align:center;background:#111827;border:1px solid rgba(99,102,241,.18);border-radius:16px;padding:40px 32px"><div style="font-size:32px;margin-bottom:12px">⚗</div><h1 style="font-size:20px;margin:0 0 10px;font-weight:800">Studio Testing — Internal Only</h1><p style="color:#94a3b8;line-height:1.6;margin:0 0 20px">Have an access code? Enter it below or request access at <a style="color:#818cf8" href="mailto:studio@foxxia.dev">studio@foxxia.dev</a>.</p><div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px"><input id="lc" placeholder="Access code" style="padding:10px 12px;border-radius:8px;border:1px solid rgba(99,102,241,.3);background:#0d0f1a;color:#e2e8f0;font-size:14px;width:190px;outline:none"><button id="le" style="padding:10px 18px;border-radius:8px;border:0;cursor:pointer;background:#6366f1;color:#fff;font-weight:600;font-family:system-ui">Enter</button></div><div id="lerr" style="color:#f87171;font-size:13px;min-height:18px"></div><a href="/index.html" style="color:#94a3b8;font-size:13px">← Back to Studio</a></div></div>`;
   const go=()=>{const v=(document.getElementById("lc").value||"").trim();if(v===LAB_CODE){localStorage.setItem("studioLabAccess","1");location.reload();}else{document.getElementById("lerr").textContent="Invalid code.";}};
   document.getElementById("le").onclick=go;
   document.getElementById("lc").addEventListener("keydown",e=>{if(e.key==="Enter")go();});

@@ -257,7 +257,7 @@ def set_plan(state, plan: str):
 def check_msg_limit(state) -> tuple[bool, int, int]:
     from studio.data import PLANS
     plan  = get_plan(state)
-    limit = PLANS[plan]["msg_limit"]
+    limit = PLANS.get(plan, PLANS["free"])["msg_limit"]
     if limit >= 99999:
         return True, 0, limit
     prof = load_profile() or {}
@@ -278,7 +278,7 @@ def reset_msg_counter(state):
 def check_img_quota(state) -> tuple[bool, int, int]:
     from studio.data import PLANS
     plan   = get_plan(state)
-    limit  = PLANS[plan]["img_per_3h"]
+    limit  = PLANS.get(plan, PLANS["free"])["img_per_3h"]
     if limit >= 999:
         return True, 0, limit
     now    = time.time()

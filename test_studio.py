@@ -23,15 +23,15 @@ from aistudio import (
     CHANGELOG, CHANGELOG_TEXT, HELP_TEXT,
     show_status,
     cmd_millieman, cmd_cavecat,
-    cmd_workspace, cmd_perm, cmd_permissions, cmd_tts,
+    cmd_workspace, cmd_perm, cmd_permissions, cmd_speak, _speak_text,
     cmd_debug, cmd_label, cmd_cap, cmd_tokens,
     cmd_ui, cmd_stream, cmd_cache, cmd_theme,
-    cmd_changelog, cmd_update_log, cmd_free_tips,
-    cmd_profile_card, cmd_stats, cmd_insights,
+    cmd_changelog, cmd_free_tips,
+    cmd_profile_card, cmd_insights,
     cmd_usage, cmd_balance, cmd_cost,
     cmd_show_history, cmd_show_memory,
     cmd_remember, cmd_forget,
-    cmd_history, cmd_export,
+    cmd_show_history, cmd_export,
     cmd_plan, cmd_audit, cmd_profile_view,
     cmd_persona, cmd_voice, cmd_agents,
     cmd_todo, cmd_bench, cmd_reload, cmd_env,
@@ -110,8 +110,8 @@ run("CHANGELOG.keys() works (Bug B — no AttributeError)",
 run("HELP_TEXT banner matches current VERSION (Bug D)",
     lambda: None if f"v{VERSION}" in HELP_TEXT
             else (_ for _ in ()).throw(AssertionError(f"HELP_TEXT missing v{VERSION}")))
-run("cmd_tts has ASCII hyphen -AssemblyName (Bug C)",
-    lambda: None if "-AssemblyName" in inspect.getsource(cmd_tts) and "–AssemblyName" not in inspect.getsource(cmd_tts)
+run("_speak_text has ASCII hyphen -AssemblyName (Bug C)",
+    lambda: None if "-AssemblyName" in inspect.getsource(_speak_text) and "–AssemblyName" not in inspect.getsource(_speak_text)
             else (_ for _ in ()).throw(AssertionError("en-dash still present")))
 run("cmd_free_tips has no orphaned for-loops (Bug A)",
     lambda: None if "read_p.finditer" not in inspect.getsource(cmd_free_tips)
@@ -131,10 +131,9 @@ run("/help",          lambda: console.print(HELP_TEXT))
 run("/version",       lambda: console.print(f"AI Studio CLI v{VERSION}"))
 run("/status",        lambda: show_status(state))
 run("/changelog",     lambda: cmd_changelog(state))
-run("/update-log",    lambda: cmd_update_log(state))
 run("/free-tips",     lambda: cmd_free_tips(state))
 run("/profile-card",  lambda: cmd_profile_card(state))
-run("/stats",         lambda: cmd_stats(state))
+run("/stats",         lambda: cmd_insights(state))
 run("/insights",      lambda: cmd_insights(state))
 run("/usage",         lambda: cmd_usage(state))
 run("/balance",       lambda: cmd_balance(state))
@@ -169,7 +168,7 @@ print("\n[ 4 ] Plan / tokens / session")
 run("/plan",    lambda: cmd_plan(state))
 run("/tokens",  lambda: cmd_tokens(state, "", None))
 run("/cap",     lambda: cmd_cap(state, ""))
-run("/history", lambda: cmd_history(state, history))
+run("/history", lambda: cmd_show_history(history))
 
 # ══════════════════════════════════════════════════════════════
 # 5. Memory

@@ -269,18 +269,54 @@ def call_ollama(model, history, prompt, system_prompt=None, stream=False):
 def call_gemini_cli(prompt, sys_prompt=None):
     cli = shutil.which("gemini") or shutil.which("npx")
     if not cli:
-        return None, "Gemini CLI not found. Install: npm i -g @google/generative-ai-cli"
+        return None, "Gemini CLI not found. Install: npm i -g @google/gemini-cli"
     cmd = [cli]
-    if cli.endswith("npx"):
-        cmd += ["@google/generative-ai-cli"]
+    if cli.endswith("npx") or cli.endswith("npx.cmd"):
+        cmd += ["@google/gemini-cli"]
     if sys_prompt:
         cmd += ["--system", sys_prompt]
     cmd += ["--prompt", prompt]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        return (result.stdout.strip() or None), (result.stderr.strip() or None)
+        out = result.stdout.strip()
+        if out:
+            return out, None
+        return None, (result.stderr.strip() or "Gemini CLI returned no output")
     except subprocess.TimeoutExpired:
         return None, "Gemini CLI timed out after 60s"
+    except Exception as e:
+        return None, str(e)
+
+
+# ── CODEX CLI (subprocess) ────────────────────────────────────────────────────
+_codex_cli_path: str | None = None
+_codex_cli_detected: bool = False
+
+def detect_codex_cli() -> str | None:
+    global _codex_cli_path, _codex_cli_detected
+    if _codex_cli_detected:
+        return _codex_cli_path
+    _codex_cli_path = shutil.which("codex")
+    _codex_cli_detected = True
+    return _codex_cli_path
+
+def call_codex_cli(prompt: str) -> tuple:
+    """Run OpenAI Codex CLI non-interactively (rides the user's ChatGPT plan).
+    Returns (text, error)."""
+    cli = detect_codex_cli()
+    if not cli:
+        return None, "Codex CLI not found. Install: npm i -g @openai/codex, then: codex login"
+    try:
+        kwargs = {"capture_output": True, "text": True, "timeout": 120}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+        result = subprocess.run([cli, "exec", "--skip-git-repo-check", prompt], **kwargs)
+        out = (result.stdout or "").strip()
+        if out:
+            return out, None
+        return None, (result.stderr.strip() or "Codex CLI returned no output")
+    except subprocess.TimeoutExpired:
+        return None, "Codex CLI timed out after 120s"
     except Exception as e:
         return None, str(e)
 

@@ -54,6 +54,7 @@ from studio.providers import (
     call_gemini, call_openrouter, call_openrouter_stream,
     call_cursor, call_ollama, call_gemini_cli,
     call_claude_cli, detect_claude_cli,
+    call_codex_cli, detect_codex_cli,
 )
 from studio.session import (
     load_profile, save_profile,
@@ -1430,7 +1431,7 @@ ALL_COMMANDS = [
     "/ls","/cd","/pwd","/cat","/find","/grep","/mkdir","/rm","/cp","/mv","/diff","/tree","/summary",
     "/shell","/run","/git","/watch",
     "/save","/load","/history","/remember","/memory","/context","/forget",
-    "/compare","/persona","/mode","/model","/models","/cli","/openrouter","/claude","/theme",
+    "/compare","/persona","/mode","/model","/models","/cli","/openrouter","/claude","/connect","/login","/logout-cloud","/theme",
     "/ui","/stream",
     "/workspace","/perm",
     "/cache",
@@ -1455,7 +1456,7 @@ ALL_COMMANDS = [
     # v5.8
     "/profile","/me","/insights","/stats","/vault","/team",
     # v5.9 — Max / Team / Enterprise
-    "/audit-log","/priority-queue","/orgmetrics","/sso","/policy",
+    "/audit-log","/orgmetrics",
     # v9.0
     "/plugin","/agent-mesh","/vision-pro","/template",
     # v8.0
@@ -1578,6 +1579,9 @@ COMMAND_METADATA = {
     "/fix-self":       ("SYS",     "Experimental: StudioCLI attempts to fix itself"),
     # v5.7
     "/vibe":           ("UI",      "One-shot UI + theme preset (e.g. /vibe foxxia)"),
+    "/connect":        ("AI",      "Use your existing Claude/ChatGPT/Gemini subscription via its CLI"),
+    "/login":          ("ME",      "Sign in with Google (Studio Stage account sync)"),
+    "/logout-cloud":   ("ME",      "Disconnect Studio Stage account"),
     "/quickstart":     ("HELP",    "Show 5-step guide tailored to your plan"),
     "/restart":        ("SYS",     "Restart Studio in-place (apply updates without closing terminal)"),
     "/pick":           ("AI",      "Interactive arrow-key model selector"),
@@ -1590,10 +1594,7 @@ COMMAND_METADATA = {
     "/team":           ("PRO",     "Pro: manage team members (invite, remove, roles)"),
     # v5.9
     "/audit-log":      ("MAX",     "Max+: view audit trail (login, plan, security events)"),
-    "/priority-queue": ("MAX",     "Max+: route requests through the high-priority API lane"),
     "/orgmetrics":     ("TEAM",    "Team/Ent: aggregated org-wide metrics across all members"),
-    "/sso":            ("ENT",     "Enterprise: configure SSO / SAML / OIDC"),
-    "/policy":         ("ENT",     "Enterprise: org-wide policies (max_tokens, allowed_models, content_filter)"),
     # v9.1
     "/alias":          ("UTIL",    "Define/run custom prompt shortcuts: /alias set <name> <text>"),
     "/multiline":      ("UI",      "Toggle multiline input mode (submit with blank line)"),
@@ -2154,6 +2155,194 @@ def cmd_claude_cli(state, args=""):
         return state
 
     console.print("[yellow]Usage: /claude on|off[/yellow]")
+    return state
+
+
+def cmd_connect(state, args=""):
+    """/connect [claude|codex|gemini|ollama|off] — use the AI subscriptions you
+    already pay for, via their official CLIs. No extra API keys needed."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    sub   = (args or "").strip().lower()
+
+    if sub in ("off", "none", "api"):
+        for k in ("use_claude_cli", "use_codex_cli", "use_cli", "_claude_cli_session_id"):
+            state.pop(k, None)
+        console.print(f"  [{acc}]✓ Subscription routing off — back to API providers.[/{acc}]")
+        return state
+
+    if sub == "claude":
+        return cmd_claude_cli(state, "on")
+
+    if sub == "codex":
+        if not detect_codex_cli():
+            console.print(Panel(
+                "[yellow]Codex CLI (codex) not found in PATH.[/yellow]\n\n"
+                "Rides your ChatGPT Plus/Pro plan. Install + sign in:\n"
+                "  [bold]npm i -g @openai/codex[/bold]\n"
+                "  [bold]codex login[/bold]\n\n"
+                "Then re-run [bold]/connect codex[/bold].",
+                title="[bold]Codex CLI[/bold]", border_style=theme["border"]))
+            return state
+        state["use_codex_cli"] = True
+        for k in ("use_claude_cli", "use_cli", "_claude_cli_session_id"):
+            state.pop(k, None)
+        state["use_openrouter"] = False
+        console.print(f"  [{acc}]✓ Codex CLI connected — prompts ride your ChatGPT plan.[/{acc}]"
+                      f"  [dim]/connect off to switch back[/dim]")
+        return state
+
+    if sub in ("gemini", "gemini-cli"):
+        cli2 = detect_gemini_cli()
+        if not (cli2 or shutil.which("npx")):
+            console.print(Panel(
+                "[yellow]Gemini CLI not found.[/yellow]\n\n"
+                "Rides your Google account (free tier included). Install + sign in:\n"
+                "  [bold]npm i -g @google/gemini-cli[/bold]\n"
+                "  [bold]gemini[/bold]  [dim](first run opens Google sign-in)[/dim]\n\n"
+                "Then re-run [bold]/connect gemini[/bold].",
+                title="[bold]Gemini CLI[/bold]", border_style=theme["border"]))
+            return state
+        state["use_cli"] = True
+        for k in ("use_claude_cli", "use_codex_cli", "_claude_cli_session_id"):
+            state.pop(k, None)
+        console.print(f"  [{acc}]✓ Gemini CLI connected — prompts ride your Google account.[/{acc}]"
+                      f"  [dim]/connect off to switch back[/dim]")
+        return state
+
+    if sub == "ollama":
+        console.print(f"  [dim]Local models are managed with[/dim] [{acc}]/local[/{acc}]"
+                      f" [dim](needs `ollama serve` running).[/dim]")
+        return state
+
+    if sub:
+        console.print("[yellow]Usage: /connect [claude|codex|gemini|ollama|off][/yellow]")
+        return state
+
+    # Status panel: what's installed, what's active, how to get the rest.
+    def _row(name, rides, found, active, how):
+        mark  = f"[{theme['success']}]● connected[/{theme['success']}]" if active else \
+                ("[green]✓ installed[/green]" if found else "[dim]○ not found[/dim]")
+        cmd_c = f"[{acc}]{how}[/{acc}]" if found and not active else f"[dim]{how}[/dim]"
+        return name, rides, mark, cmd_c
+
+    or_key = state.get("openrouter_key") or load_or_key()
+    rows = [
+        _row("Claude Code",  "Claude Pro/Max subscription", bool(detect_claude_cli()),
+             bool(state.get("use_claude_cli")), "/connect claude"),
+        _row("Codex CLI",    "ChatGPT Plus/Pro plan",       bool(detect_codex_cli()),
+             bool(state.get("use_codex_cli")), "/connect codex"),
+        _row("Gemini CLI",   "Google account (free tier)",  bool(detect_gemini_cli() or shutil.which("npx")),
+             bool(state.get("use_cli")), "/connect gemini"),
+        _row("Ollama",       "Local models (offline)",      bool(shutil.which("ollama")),
+             (state.get("model") or "").startswith("ollama/"), "/local"),
+        _row("OpenRouter",   "API key (pay per token)",     bool(or_key),
+             bool(state.get("use_openrouter") and or_key), "/keys"),
+    ]
+    tbl = Table(title="[bold]Bring your own subscription[/bold]", box=box.SIMPLE,
+                border_style=theme["border"])
+    tbl.add_column("provider", style="bold")
+    tbl.add_column("rides")
+    tbl.add_column("status")
+    tbl.add_column("enable", justify="right")
+    for r in rows:
+        tbl.add_row(*r)
+    console.print(tbl)
+    console.print("[dim]Sign in once with the vendor's own CLI — Studio routes prompts through it.\n"
+                  "Your credentials never touch Studio.[/dim]")
+    return state
+
+
+# ── STUDIO STAGE ACCOUNT (Google OAuth via web) ───────────────────────────────
+STAGE_URL = os.environ.get("STUDIO_STAGE_URL", "http://localhost:3456").rstrip("/")
+
+def load_account():
+    try:
+        if ACCOUNT_FILE.exists():
+            return json.loads(ACCOUNT_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return None
+
+
+def cmd_login(state, args=""):
+    """/login [status] — sign in with Google via Studio Stage and sync your account."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    sub   = (args or "").strip()
+
+    if sub.lower() == "status" or (not sub and load_account()):
+        info = load_account()
+        if info:
+            console.print(Panel(
+                f"  [bold]{info.get('email', '?')}[/bold]\n"
+                f"  [dim]id[/dim]      {(info.get('id') or '?')[:13]}…\n"
+                f"  [dim]since[/dim]   {(info.get('connected_at') or '?')[:19].replace('T', ' ')}\n\n"
+                f"  [dim]/logout-cloud to disconnect · /login <token> to refresh[/dim]",
+                title=f"[bold {acc}]Studio Stage account[/bold {acc}]",
+                border_style=acc, padding=(0, 2)))
+        else:
+            console.print("[yellow]Not signed in. Run /login to connect.[/yellow]")
+        return state
+
+    if not sub:
+        login_url = f"{STAGE_URL}/login.html?cli=1"
+        console.print(Panel(
+            f"  1. Open  [bold {acc}]{login_url}[/bold {acc}]\n"
+            f"  2. Sign in with Google (or GitHub/Discord)\n"
+            f"  3. Copy the token it shows you\n"
+            f"  4. Paste it below\n\n"
+            f"  [dim]Different server? Set STUDIO_STAGE_URL and re-run /login.[/dim]",
+            title="[bold]Sign in with Google[/bold]", border_style=theme["border"], padding=(0, 2)))
+        try:
+            webbrowser.open(login_url)
+        except Exception:
+            pass
+        sub = _safe_input("  token › ").strip()
+        if not sub:
+            console.print("[yellow]No token — cancelled.[/yellow]")
+            return state
+
+    # Verify the pasted token against the Stage backend and store the account.
+    try:
+        req = request.Request(
+            f"{STAGE_URL}/api/auth/me",
+            headers={"Authorization": f"Bearer {sub}"})
+        with request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as e:
+        console.print(f"[red]Could not verify token against {STAGE_URL}: {e}[/red]")
+        console.print("[dim]Is the Stage server running? Set STUDIO_STAGE_URL if it lives elsewhere.[/dim]")
+        return state
+
+    user = data.get("user") or data
+    info = {
+        "id":           user.get("id", ""),
+        "email":        user.get("email", ""),
+        "connected_at": datetime.now().isoformat(timespec="seconds"),
+        "stage_url":    STAGE_URL,
+    }
+    CONFIG_DIR.mkdir(exist_ok=True)
+    ACCOUNT_FILE.write_text(json.dumps(info, indent=2), encoding="utf-8")
+    prof = load_profile() or {}
+    prof["stage_email"] = info["email"]
+    save_profile(prof)
+    console.print(f"  [{theme['success']}]✓ Signed in as {info['email']}[/{theme['success']}]"
+                  f"  [dim]· synced to profile[/dim]")
+    return state
+
+
+def cmd_logout_cloud(state, args=""):
+    """/logout-cloud — disconnect the Studio Stage account (local files only)."""
+    theme = state.get("theme", THEMES["default"])
+    if not load_account():
+        console.print("[yellow]No Stage account connected.[/yellow]")
+        return state
+    ACCOUNT_FILE.unlink(missing_ok=True)
+    prof = load_profile() or {}
+    prof.pop("stage_email", None)
+    save_profile(prof)
+    console.print(f"  [{theme['success']}]✓ Stage account disconnected.[/{theme['success']}]")
     return state
 
 
@@ -2734,6 +2923,16 @@ def check_update_eligibility(state):
         return wait_days == 0, wait_days
     except Exception: return False, 99
 
+def estimate_context_tokens(state, history):
+    """Rough context size in tokens (chars/4): system prompt + conversation."""
+    try:
+        chars = len(build_system_prompt(state) or "")
+    except Exception:
+        chars = 0
+    chars += sum(len(m.get("text", "")) for m in history)
+    return chars // 4
+
+
 def ai_respond(state, prompt, history, silent=False):
     allowed, count = check_rate_limit(state)
     if not allowed:
@@ -2885,6 +3084,11 @@ def ai_respond(state, prompt, history, silent=False):
         if new_sid:
             state["_claude_cli_session_id"] = new_sid
 
+    elif state.get("use_codex_cli"):
+        if not silent: _start_think_anim("Thinking (Codex)")
+        text, err = call_codex_cli(prompt)
+        if not silent: _stop_think_anim()
+
     elif model.startswith("ollama/"):
         ollama_model = model[len("ollama/"):]
         if stream_mode in ("on", "auto", "type"):
@@ -2935,6 +3139,7 @@ def ai_respond(state, prompt, history, silent=False):
         history.append({"role":"model","text":text})
         state["_last_response"] = text
         state["_last_tokens"] = {"in": in_t, "out": out_t, "sec": round(time.time()-t0, 2)}
+        state["_ctx_tokens"] = estimate_context_tokens(state, history)
         state["_working"] = False
         return text, history
 
@@ -4012,8 +4217,132 @@ def read_file(path):
         raise FileNotFoundError(f"Not found: {path}")
     return p.read_text(encoding="utf-8", errors="replace")
 
+# ── @FILE MENTIONS ────────────────────────────────
+# "explain @src/app.py" attaches the file to the prompt. Tab-completion on @
+# comes from AdvancedCompleter in run_repl.
+_FILE_MENTION_RE = re.compile(r"(?<![\w.])@([\w~][\w./\\~-]*)")
+
+def expand_file_mentions(state, text):
+    """Replace @path tokens with fenced file contents appended to the prompt."""
+    if "@" not in text:
+        return text
+    blocks, seen = [], set()
+
+    def _sub(m):
+        raw = m.group(1)
+        try:
+            p = resolve_path(state, raw, must_exist=True)
+        except Exception:
+            return m.group(0)
+        if not p.is_file() or p.stat().st_size > 400_000:
+            return m.group(0)
+        key = str(p)
+        if key not in seen:
+            seen.add(key)
+            try:
+                content = p.read_text(encoding="utf-8", errors="replace")[:MAX_FILE_CHARS]
+            except Exception:
+                return m.group(0)
+            lang = p.suffix.lstrip(".") or "text"
+            blocks.append(f"```{lang}\n# file: {p}\n{content}\n```")
+        return f"`{p.name}`"
+
+    expanded = _FILE_MENTION_RE.sub(_sub, text)
+    if blocks:
+        expanded += "\n\nReferenced files:\n\n" + "\n\n".join(blocks)
+        console.print(f"[dim]@ attached {len(blocks)} file{'s' if len(blocks) != 1 else ''}[/dim]")
+    return expanded
+
+
+# ── CHECKPOINTS ───────────────────────────────────
+# Every AI-driven write snapshots the previous file content first, so any
+# change can be rolled back with /rewind — no scattered .bak files needed.
+_CHECKPOINT_CAP = 50
+
+def _checkpoint_manifest():
+    mf = CHECKPOINT_DIR / "manifest.json"
+    try:
+        if mf.exists():
+            data = json.loads(mf.read_text(encoding="utf-8"))
+            return data if isinstance(data, list) else []
+    except Exception:
+        pass
+    return []
+
+def _save_checkpoint_manifest(entries):
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    (CHECKPOINT_DIR / "manifest.json").write_text(
+        json.dumps(entries, indent=2), encoding="utf-8")
+
+def checkpoint_file(path, op="write"):
+    """Snapshot a file before it is overwritten. Never blocks the write."""
+    try:
+        p = Path(path)
+        if not p.exists() or not p.is_file() or p.stat().st_size > 2_000_000:
+            return
+        CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+        entries = _checkpoint_manifest()
+        cid  = f"{int(time.time()*1000):x}"
+        snap = CHECKPOINT_DIR / f"{cid}_{p.name}"
+        shutil.copy2(str(p), str(snap))
+        entries.append({"id": cid, "ts": datetime.now().isoformat(timespec="seconds"),
+                        "path": str(p.resolve()), "snap": snap.name, "op": op})
+        for old in entries[:-_CHECKPOINT_CAP]:
+            (CHECKPOINT_DIR / old["snap"]).unlink(missing_ok=True)
+        _save_checkpoint_manifest(entries[-_CHECKPOINT_CAP:])
+    except Exception:
+        pass
+
+
+def _undo_from_checkpoints(state, args):
+    """Restore a file from its automatic pre-write checkpoint (backs /undo)."""
+    theme   = state.get("theme", THEMES["default"])
+    acc     = theme.get("accent", "cyan")
+    entries = _checkpoint_manifest()
+    if not entries:
+        console.print("[yellow]No checkpoints yet — Studio snapshots files before every AI write.[/yellow]")
+        return
+    recent = list(reversed(entries[-15:]))
+    sub    = (args or "").strip().lower()
+    if not sub or sub == "list":
+        tbl = Table(title="[bold]Checkpoints[/bold]", box=box.SIMPLE,
+                    border_style=theme["border"])
+        tbl.add_column("#", justify="right")
+        tbl.add_column("when")
+        tbl.add_column("file")
+        tbl.add_column("op", style="dim")
+        for i, e in enumerate(recent, 1):
+            tbl.add_row(str(i), e["ts"].replace("T", " "), e["path"], e.get("op", "write"))
+        console.print(tbl)
+        console.print(f"[dim]/undo <#> to restore · newest first · keeps last {_CHECKPOINT_CAP}[/dim]")
+        return
+    if sub == "last":
+        sub = "1"
+    try:
+        e = recent[int(sub) - 1]
+    except (ValueError, IndexError):
+        console.print("[yellow]Usage: /undo [list|last|<#>|<file>][/yellow]")
+        return
+    snap = CHECKPOINT_DIR / e["snap"]
+    if not snap.exists():
+        console.print("[red]Snapshot file missing — cannot restore.[/red]")
+        return
+    target  = Path(e["path"])
+    preview = snap.read_text(encoding="utf-8", errors="replace")[:400]
+    console.print(Panel(preview or "[dim](empty file)[/dim]",
+        title=f"[bold]Restore {target.name}  ←  {e['ts'].replace('T', ' ')}[/bold]",
+        border_style=acc))
+    if not check_write_allowed(state, str(target), "restore"):
+        return
+    checkpoint_file(target, "pre-rewind")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(snap), str(target))
+    console.print(f"[{theme['success']}]✓ Rewound {target}[/{theme['success']}]")
+
+
 def write_file(path, content):
     p = Path(path); p.parent.mkdir(parents=True, exist_ok=True)
+    checkpoint_file(p)
     p.write_text(content, encoding="utf-8")
     console.print(f"[green]✓ Saved → {path}[/green]")
 
@@ -4087,6 +4416,7 @@ def read_image_beta(state, path):
 
 def write_file_state(state, path, content):
     p = resolve_path(state, path, must_exist=False, for_write=True)
+    checkpoint_file(p)
     p.write_text(content, encoding="utf-8")
     console.print(f"[green]✓ Saved → {p}[/green]")
     return p
@@ -4370,17 +4700,29 @@ def cmd_watch(state, path, history):
 
 # ── UNDO (restore .bak) ───────────────────────────
 def cmd_undo(state, args):
-    """Restore the most recent .bak file created by /fix or /patch."""
+    """/undo [list|last|<#>|<file>] — restore files from automatic pre-write
+    checkpoints; falls back to legacy .bak files from /fix and /patch."""
     theme = state.get("theme", THEMES["default"])
+    args  = (args or "").strip()
+
+    # Checkpoint flow: /undo, /undo list, /undo last, /undo <#>
+    if not args or args.lower() in ("list", "last") or args.isdigit():
+        if _checkpoint_manifest():
+            _undo_from_checkpoints(state, args)
+            return
+        if args.lower() in ("list", "last") or args.isdigit():
+            console.print("[yellow]No checkpoints yet — Studio snapshots files before every AI write.[/yellow]")
+            return
+
+    # Legacy flow: /undo <file> restores <file>.bak; bare /undo scans *.bak
     if args:
         bak = resolve_path(state, args + ".bak", must_exist=False)
-        target = resolve_path(state, args, must_exist=False)
         candidates = [bak] if bak.exists() else []
     else:
         cwd = Path.cwd()
         candidates = sorted(cwd.glob("*.bak"), key=lambda f: f.stat().st_mtime, reverse=True)
     if not candidates:
-        console.print("[yellow]No .bak files found. Run /fix or /patch first.[/yellow]")
+        console.print("[yellow]No checkpoints or .bak files found. Run an AI write first.[/yellow]")
         return
     bak = candidates[0]
     target = bak.with_suffix("")
@@ -4832,37 +5174,7 @@ def cmd_bench(state):
         f"[bold]Speed:[/bold]     {toks/dt:.1f} t/s",
         title="Model Benchmark", border_style="magenta"))
 
-def cmd_tts(state, args=None):
-    """Speak the last AI response aloud (Windows TTS, /tts)."""
-    args = (args or "").strip()
-    if sys.platform != "win32":
-        console.print("[yellow]TTS is only supported on Windows.[/yellow]")
-        return
-    text = state.get("_last_response", "")
-    if not text:
-        console.print("[yellow]Nothing to speak — send a message first.[/yellow]")
-        return
-    # Clean for voice
-    clean = re.sub(r"\[.*?\]", "", text).replace("\n", " ").strip()
-    msg = clean[:500]
-    console.print("[dim]Speaking...[/dim]")
 
-    # Use Base64 encoded script block to prevent ANY injection
-    import base64
-    script = f'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak({json.dumps(msg)})'
-    encoded_script = base64.b64encode(script.encode('utf-16-le')).decode('ascii')
-    subprocess.Popen(["PowerShell", "-NoProfile", "-EncodedCommand", encoded_script])
-
-def cmd_stats(state):
-    """Show detailed usage statistics."""
-    usage = load_usage()
-    table = Table(title="Usage Statistics", box=box.ROUNDED)
-    table.add_column("Metric", style="bold cyan"); table.add_column("Value", style="green")
-    table.add_row("Total Input Tokens", f"{usage.get('total_in',0):,}")
-    table.add_row("Total Output Tokens", f"{usage.get('total_out',0):,}")
-    table.add_row("Requests (Last 5h)", str(len(usage.get("history", []))))
-    table.add_row("Current Balance", f"${state.get('balance',0):.2f}")
-    console.print(table)
 
 def cmd_balance(state):
     """Detailed financial breakdown with provider info and API tiers."""
@@ -4952,28 +5264,6 @@ def cmd_balance(state):
 # ── v5.6 NEW FEATURES ─────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════
 
-def cmd_history(state, history):
-    """/history — pretty-print session turns with index, role, preview."""
-    if not history:
-        console.print("[dim]No history yet — start chatting![/dim]")
-        return
-    theme = state.get("theme", THEMES["default"])
-    rows = []
-    for i, m in enumerate(history):
-        role   = m.get("role", "?")
-        text   = m.get("text", "")
-        icon   = "▸" if role == "user" else "◆"
-        color  = theme.get("prompt_user", "cyan") if role == "user" else theme.get("success", "green")
-        label  = "YOU" if role == "user" else "AI"
-        preview = text[:120].replace("\n", " ")
-        if len(text) > 120: preview += "…"
-        rows.append(f"  [dim]{i+1:>3}[/dim]  [{color}]{icon} {label}[/{color}]  {preview}")
-    console.print(Panel(
-        "\n".join(rows),
-        title=f"[bold]Session History — {len(history)} turns[/bold]",
-        border_style=theme.get("border", "cyan"),
-        padding=(0, 1)
-    ))
 
 
 def cmd_export(state, history):
@@ -5676,26 +5966,6 @@ def cmd_test(state, args, history):
     return history
 
 
-def call_gemini_cli(prompt, sys_prompt=None):
-    """Run the Gemini CLI subprocess and return (output, error)."""
-    cli = shutil.which("gemini") or shutil.which("npx")
-    if not cli:
-        return None, "Gemini CLI not found. Install: npm i -g @google/generative-ai-cli"
-    cmd = [cli]
-    if cli.endswith("npx"):
-        cmd += ["@google/generative-ai-cli"]
-    if sys_prompt:
-        cmd += ["--system", sys_prompt]
-    cmd += ["--prompt", prompt]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        return (result.stdout.strip() or None), (result.stderr.strip() or None)
-    except subprocess.TimeoutExpired:
-        return None, "Gemini CLI timed out after 60s"
-    except Exception as e:
-        return None, str(e)
-
-
 # ── VIBE COMMAND ────────────────────────────────────────────────
 
 
@@ -5833,66 +6103,6 @@ def _read_key():
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
-def cmd_model_picker(state):
-    """/pick — interactive arrow-key model selector."""
-    model   = state.get("model") or DEFAULT_MODEL
-    theme   = state.get("theme", THEMES["default"])
-    acc     = theme.get("accent", "bold cyan")
-    border  = theme.get("border", "cyan").replace("bold ", "")
-
-    all_models = list(dict.fromkeys(
-        FREE_CHAT_MODELS + list(STUDIO_MODEL_ALIASES.values())
-    ))
-    if model not in all_models:
-        all_models.insert(0, model)
-
-    labels = [_short_model(m) for m in all_models]
-    idx    = next((i for i, m in enumerate(all_models) if m == model), 0)
-
-    console.print(f"\n[{acc}]◆ Model Picker[/{acc}]  [dim]↑↓ navigate · Enter select · Esc cancel[/dim]\n")
-
-    def _draw(selected_idx):
-        """Render the picker panel and return how many terminal lines it used."""
-        lines = []
-        for i, label in enumerate(labels):
-            if i == selected_idx:
-                lines.append(f"  [{acc}]▶  {label}[/{acc}]")
-            else:
-                lines.append(f"  [dim]   {label}[/dim]")
-        panel = Panel(
-            "\n".join(lines),
-            title=f"[dim]{len(all_models)} models[/dim]",
-            border_style=border,
-        )
-        with console.capture() as cap:
-            console.print(panel)
-        out = cap.get()
-        sys.stdout.write(out)
-        sys.stdout.flush()
-        return out.count("\n")
-
-    drawn = _draw(idx)
-    while True:
-        key = _read_key()
-        if key == 'UP':
-            idx = (idx - 1) % len(all_models)
-        elif key == 'DOWN':
-            idx = (idx + 1) % len(all_models)
-        elif key == 'ENTER':
-            chosen = all_models[idx]
-            state["model"] = chosen
-            LAST_MODEL_FILE.parent.mkdir(exist_ok=True)
-            LAST_MODEL_FILE.write_text(chosen)
-            console.print(f"\n[{acc}]✓ Model → {_short_model(chosen)}[/{acc}]\n")
-            return state
-        elif key == 'ESC':
-            console.print("[dim]Cancelled.[/dim]")
-            return state
-        # Redraw in place: rewind over the previous panel and clear it,
-        # so each keypress replaces the panel instead of stacking a new one.
-        sys.stdout.write(f"\033[{drawn}A\033[J")
-        sys.stdout.flush()
-        drawn = _draw(idx)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -6166,9 +6376,6 @@ _MAX_TIER_PLANS  = ("max", "ultra", "team", "enterprise")
 _TEAM_TIER_PLANS = ("team", "enterprise")
 _ENTERPRISE_ONLY = ("enterprise",)
 
-ORG_POLICY_FILE     = CONFIG_DIR / "org_policy.json"
-ORG_SSO_FILE        = CONFIG_DIR / "org_sso.json"
-PRIORITY_QUEUE_FILE = CONFIG_DIR / "priority_queue"
 
 
 def _require_tier(state, allowed, label, suggested="/upgrade max"):
@@ -6228,31 +6435,6 @@ def cmd_audit_log(state, args):
     console.print(f"  [dim]Filter: /audit-log <text>   ·   File: {path}[/dim]")
 
 
-def cmd_priority_queue(state, args):
-    """/priority-queue — Max+: toggle priority API queue routing."""
-    if not _require_tier(state, _MAX_TIER_PLANS, "/priority-queue"):
-        return
-    sub = (args or "").strip().lower()
-    current = PRIORITY_QUEUE_FILE.exists()
-    if sub in ("on", "enable", "true", "1"):
-        PRIORITY_QUEUE_FILE.parent.mkdir(exist_ok=True)
-        PRIORITY_QUEUE_FILE.write_text("on", encoding="utf-8")
-        state["priority_queue"] = True
-        console.print("[green]✓ Priority queue ENABLED — your requests will be routed ahead of free traffic.[/green]")
-        return
-    if sub in ("off", "disable", "false", "0"):
-        PRIORITY_QUEUE_FILE.unlink(missing_ok=True)
-        state["priority_queue"] = False
-        console.print("[yellow]✓ Priority queue DISABLED.[/yellow]")
-        return
-    state["priority_queue"] = current
-    status = "[green]ON[/green]" if current else "[dim]OFF[/dim]"
-    console.print(Panel(
-        f"  Priority queue: {status}\n\n"
-        f"  [dim]Routes your API calls into the high-priority lane,\n"
-        f"  ahead of free-tier traffic during peak load.[/dim]\n\n"
-        f"  Toggle: [yellow]/priority-queue on[/yellow] · [yellow]/priority-queue off[/yellow]",
-        title="Priority Queue (Max+)", border_style="magenta", padding=(0, 2)))
 
 
 def cmd_orgmetrics(state, args):
@@ -6304,125 +6486,8 @@ def cmd_orgmetrics(state, args):
         title="Organization Metrics", border_style=acc, padding=(1, 2)))
 
 
-def cmd_sso(state, args):
-    """/sso — Enterprise: configure SSO/SAML/OIDC settings."""
-    if not _require_tier(state, _ENTERPRISE_ONLY, "/sso", suggested="/upgrade enterprise"):
-        return
-    theme = state.get("theme", THEMES["default"])
-    acc   = theme.get("accent", "cyan")
-    parts = (args or "").split(None, 2)
-    action = parts[0].lower() if parts else ""
-    cfg = {}
-    if ORG_SSO_FILE.exists():
-        try: cfg = json.loads(ORG_SSO_FILE.read_text(encoding="utf-8"))
-        except Exception: cfg = {}
-
-    if not action or action == "show":
-        if not cfg:
-            console.print(Panel(
-                "  No SSO configured yet.\n\n"
-                "  [dim]/sso set provider <okta|azure|google|generic-oidc>\n"
-                "  /sso set issuer <url>\n"
-                "  /sso set client_id <id>\n"
-                "  /sso set client_secret <secret>\n"
-                "  /sso enable | /sso disable[/dim]",
-                title="SSO / SAML", border_style=acc, padding=(0, 2)))
-            return
-        masked = dict(cfg)
-        if "client_secret" in masked and masked["client_secret"]:
-            masked["client_secret"] = "•" * 8 + masked["client_secret"][-4:]
-        body = "\n".join(f"  [bold]{k:<14}[/bold] {v}" for k, v in masked.items())
-        console.print(Panel(body, title="SSO Configuration", border_style=acc, padding=(0, 2)))
-        return
-
-    if action == "set":
-        if len(parts) < 3:
-            console.print("[yellow]Usage: /sso set <key> <value>[/yellow]")
-            return
-        key, value = parts[1].lower(), parts[2]
-        if key not in ("provider", "issuer", "client_id", "client_secret", "redirect_uri"):
-            console.print(f"[yellow]Unknown key '{key}'. Allowed: provider/issuer/client_id/client_secret/redirect_uri[/yellow]")
-            return
-        cfg[key] = value
-        ORG_SSO_FILE.parent.mkdir(exist_ok=True)
-        ORG_SSO_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-        audit_log("SSO_CONFIG", f"{key} updated")
-        console.print(f"  [{acc}]✓ {key} updated[/{acc}]")
-        return
-
-    if action in ("enable", "disable"):
-        cfg["enabled"] = (action == "enable")
-        ORG_SSO_FILE.parent.mkdir(exist_ok=True)
-        ORG_SSO_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-        audit_log("SSO_TOGGLE", action)
-        console.print(f"  [{acc}]✓ SSO {action}d[/{acc}]")
-        return
-
-    console.print("[yellow]Usage: /sso show | set <key> <value> | enable | disable[/yellow]")
 
 
-def cmd_policy(state, args):
-    """/policy — Enterprise: org-wide policies (max tokens, allowed models, content filter)."""
-    if not _require_tier(state, _ENTERPRISE_ONLY, "/policy", suggested="/upgrade enterprise"):
-        return
-    theme = state.get("theme", THEMES["default"])
-    acc   = theme.get("accent", "cyan")
-    parts = (args or "").split(None, 2)
-    action = parts[0].lower() if parts else ""
-    pol = {}
-    if ORG_POLICY_FILE.exists():
-        try: pol = json.loads(ORG_POLICY_FILE.read_text(encoding="utf-8"))
-        except Exception: pol = {}
-
-    if not action or action == "show":
-        if not pol:
-            console.print(Panel(
-                "  No org policy set.\n\n"
-                "  [dim]/policy set max_tokens 4000\n"
-                "  /policy set allowed_models gpt-oss-120b,nemotron\n"
-                "  /policy set content_filter strict|standard|off\n"
-                "  /policy clear <key>[/dim]",
-                title="Org Policy", border_style=acc, padding=(0, 2)))
-            return
-        body = "\n".join(f"  [bold]{k:<18}[/bold] {v}" for k, v in pol.items())
-        console.print(Panel(body, title="Org Policy", border_style=acc, padding=(0, 2)))
-        return
-
-    if action == "set":
-        if len(parts) < 3:
-            console.print("[yellow]Usage: /policy set <key> <value>[/yellow]")
-            return
-        key, value = parts[1].lower(), parts[2]
-        if key == "max_tokens":
-            try: value = int(value)
-            except ValueError:
-                console.print("[red]max_tokens must be an integer.[/red]"); return
-        elif key == "allowed_models":
-            value = [m.strip() for m in value.split(",") if m.strip()]
-        elif key == "content_filter" and value not in ("strict", "standard", "off"):
-            console.print("[red]content_filter must be strict|standard|off[/red]"); return
-        pol[key] = value
-        ORG_POLICY_FILE.parent.mkdir(exist_ok=True)
-        ORG_POLICY_FILE.write_text(json.dumps(pol, indent=2), encoding="utf-8")
-        audit_log("POLICY_UPDATE", f"{key}={value}")
-        console.print(f"  [{acc}]✓ Policy {key} → {value}[/{acc}]")
-        return
-
-    if action == "clear":
-        if len(parts) < 2:
-            console.print("[yellow]Usage: /policy clear <key>[/yellow]")
-            return
-        key = parts[1].lower()
-        if key in pol:
-            del pol[key]
-            ORG_POLICY_FILE.write_text(json.dumps(pol, indent=2), encoding="utf-8")
-            audit_log("POLICY_CLEAR", key)
-            console.print(f"  [{acc}]✓ Cleared {key}[/{acc}]")
-        else:
-            console.print(f"[yellow]No policy '{key}' to clear.[/yellow]")
-        return
-
-    console.print("[yellow]Usage: /policy show | set <key> <value> | clear <key>[/yellow]")
 
 
 PLUGIN_FILE = CONFIG_DIR / "plugins.json"
@@ -6887,7 +6952,7 @@ def cmd_timer(state, args):
 # ── /statusline ────────────────────────────────────────────────────────────────
 _STATUSLINE_DEFAULTS = _STATUSLINE_DEFAULTS_LAZY   # single source: studio/data.py
 _STATUSLINE_ALL      = {"model","plan","stream","branch","tokens","in_tokens","out_tokens",
-                         "mem","mode","agent","timer","fast","working","cwd"}
+                         "mem","mode","agent","timer","fast","working","cwd","ctx"}
 
 def cmd_statusline(state, args):
     """/statusline [show|hide|reset|list] [field,...] — configure the toolbar."""
@@ -7789,9 +7854,6 @@ def cmd_analytics_pro(state, args):
                         border_style="yellow", padding=(0, 2)))
 
 
-def cmd_labs(state, args):
-    """/labs — alias for /beta, show experimental lab features."""
-    cmd_beta(state, args)
 
 
 def cmd_profile_view(state):
@@ -8145,12 +8207,6 @@ CHANGELOG_TEXT = f"""
   ✦ /patch command, /clear fix, /write preview, /run fix
 """
 
-def cmd_update_log(state):
-    """View patch notes and feature updates."""
-    theme = state.get("theme", THEMES["default"])
-    console.print(Panel(CHANGELOG_TEXT.strip(), title="Update Log", border_style=theme["border"]))
-    # Add link or instructions if needed
-    console.print("\n[dim]See all updates at: [cyan]https://github.com/aistudio-cli/aistudio/blob/main/CHANGELOG.md[/cyan][/dim]")
 
 
 # ── REMOTE CONTROL ────────────────────────────────
@@ -10474,106 +10530,6 @@ def cmd_safety_check(state, args, history):
 
 
 # ── EXPERIMENTAL (prank) ─────────────────────────────────
-def cmd_experimental(state, args):
-    """Multi-phase prank: only available on Free plan."""
-    import random as _r
-    theme = state.get("theme", THEMES["default"])
-    phase = (args or "").strip().lower()
-
-    # Gate: only free users get the experimental prank
-    current_plan = get_plan(state)
-    if current_plan != "free":
-        console.print(Panel(
-            f"[dim]/experimental is a Free-plan feature.[/dim]\n\n"
-            f"[{theme['accent']}]{PLANS[current_plan]['badge']} {PLANS[current_plan]['name']}[/{theme['accent']}] users get full access by default.\n"
-            f"Nothing experimental here -- just use /models or /agents.",
-            title="Not Available", border_style=theme["border"]
-        ))
-        return
-
-    # ── Phase 0: no args — pitch it ──────────────────────────────────────────
-    if not phase:
-        lines = [
-            f"[bold {theme['accent']}]⚗  EXPERIMENTAL MODE  ⚗[/bold {theme['accent']}]\n",
-            "[dim]Psst. You didn't hear this from me.[/dim]\n",
-            "There's a hidden layer in Studio that most users [bold]never unlock[/bold].",
-            "We're talking [green]2× faster responses[/green], [green]smarter auto-mode detection[/green],",
-            "a [green]priority queue[/green] that skips the OpenRouter congestion window,",
-            "and a little surprise we call [bold cyan]\"turbo context\"[/bold cyan] — fits way more into",
-            "each prompt without the normal 8 k cap.\n",
-            "[dim]It's in beta. Not documented. Not promised. But it works.[/dim]\n",
-            f"  [yellow]/experimental enable[/yellow]    ← unlock it (requires a 3-second update)",
-            f"  [yellow]/experimental disable[/yellow]   ← turn it back off anytime",
-        ]
-        console.print(Panel("\n".join(lines),
-            title="[bold]Unlock Hidden Features[/bold]",
-            border_style=theme["accent"], padding=(1, 3)))
-        return
-
-    # ── Phase 1: enable — fake update ────────────────────────────────────────
-    if phase == "enable":
-        if state.get("_experimental_done"):
-            console.print(f"[{theme['accent']}]Already active.[/{theme['accent']}] "
-                          "Run [yellow]/experimental disable[/yellow] first.")
-            return
-
-        console.print(f"\n[bold {theme['accent']}]⚗  Enabling experimental features…[/bold {theme['accent']}]\n")
-        time.sleep(0.4)
-
-        steps = [
-            ("Fetching update manifest",      0.6),
-            ("Downloading feature pack",      1.1),
-            ("Verifying checksum",            0.5),
-            ("Patching rate-limit layer",     0.8),
-            ("Injecting turbo context hooks", 0.7),
-            ("Reindexing model registry",     0.9),
-            ("Finalising",                    0.5),
-        ]
-        bar_width = 32
-        for i, (label, delay) in enumerate(steps):
-            filled = int(bar_width * (i + 1) / len(steps))
-            bar    = "█" * filled + "░" * (bar_width - filled)
-            pct    = int(100 * (i + 1) / len(steps))
-            console.print(f"  [{theme['success']}]{bar}[/{theme['success']}] [dim]{pct:3d}%[/dim]  {label}…")
-            time.sleep(delay)
-
-        time.sleep(0.3)
-        console.print()
-        console.print(f"[bold {theme['success']}]✓  Update applied.[/bold {theme['success']}]\n")
-        time.sleep(0.8)
-
-        # ── The reveal ───────────────────────────────────────────────────────
-        reveal = (
-            f"[bold red]⚠  EXPERIMENTAL FEATURES ACTIVE  ⚠[/bold red]\n\n"
-            "[bold]Here's what just changed:[/bold]\n\n"
-            "  [red]✗[/red]  Rate limits now move [bold red]10× faster[/bold red] than before.\n"
-            "  [red]✗[/red]  On the free plan you will hit your wall in just [bold red]4 – 7 messages[/bold red].\n"
-            "  [red]✗[/red]  \"Turbo context\" is real — it eats tokens [bold red]2× as fast[/bold red].\n"
-            "  [red]✗[/red]  The priority queue? [bold red]You're now at the back[/bold red] of it.\n\n"
-            "[dim]We are currently experimenting. You agreed to this the moment\n"
-            "you typed [yellow]/experimental enable[/yellow]. Truly sorry. Not sorry.[/dim]\n\n"
-            f"  [yellow]/experimental disable[/yellow]   ← escape hatch (it won't actually help lol)"
-        )
-        console.print(Panel(reveal,
-            title="[bold red]The Fine Print You Didn't Read[/bold red]",
-            border_style="red", padding=(1, 3)))
-
-        state["_experimental_done"] = True
-        return
-
-    # ── Phase 2: disable — "fix" ──────────────────────────────────────────────
-    if phase == "disable":
-        console.print("\n[dim]Rolling back experimental features…[/dim]")
-        for label in ("Reverting patches", "Restoring rate limits", "Cleaning up"):
-            console.print(f"  [dim]· {label}…[/dim]")
-            time.sleep(_r.uniform(0.3, 0.6))
-        time.sleep(0.2)
-        console.print(f"\n[{theme['success']}]✓  Done.[/{theme['success']}]  "
-                      "[dim](Rate limits back to normal. Or are they? 👀)[/dim]\n")
-        state.pop("_experimental_done", None)
-        return
-
-    console.print(f"[yellow]Usage: /experimental   /experimental enable   /experimental disable[/yellow]")
 
 
 def cmd_help(state):
@@ -11101,13 +11057,6 @@ def ensure_onboarded(state):
     state["_skip_welcome"] = True
 
 
-def _animate_banner(lines, color, delay=0.04):
-    """Print banner lines. Delay param kept for API compat but ignored — sleep inside
-    prompt_toolkit event handlers corrupts the terminal display."""
-    for line in lines:
-        console.print(f"[{color}]{line}[/{color}]")
-
-
 # ── CELESTIAL CHROME ────────────────────────────────────────────────────────
 # Unified, theme-adaptive welcome screen shared by the celestial UI styles
 # (windynight, foggyskies, moon, shootingstars, blackhole, magnetar).
@@ -11196,6 +11145,134 @@ def _render_celestial_welcome(ui, theme, short, mode_str, ws_short, plan_cfg,
     console.print()
 
 
+# ── WELCOME CHROME ──────────────────────────────────────────────────────────
+# One layout skeleton, many skins. Every UI style is a palette + motif on the
+# same card/line/rule renderer — no style hand-draws its own box math.
+# accent: titles + hint commands · value: the model name · border: panel frame.
+# None means "inherit from the active theme" (studio/gemini adapt to /theme).
+_WELCOME_HINT = "/enter .   /models   /connect   /vibe   /help"
+
+_WELCOME_SKINS = {
+    "studio":       {"kind": "card", "icon": "◆",  "title": "STUDIO"},
+    "gemini":       {"kind": "card", "icon": "✦",  "title": "AI STUDIO"},
+    "codex":        {"kind": "card", "icon": "$>", "title": "STUDIO CODEX",
+                     "accent": "green", "border": "green", "dense": True},
+    "nova":         {"kind": "card", "icon": "⚡", "title": "NOVA STUDIO",
+                     "accent": "magenta", "border": "magenta", "value": "cyan"},
+    "foxxia":       {"kind": "card", "icon": "🦊", "title": "FOXXIA",
+                     "accent": "#f97316", "border": "#f97316", "value": "#fbbf24",
+                     "tag": "Dev Studio", "signature": "Foxxed909"},
+    "strawberry":   {"kind": "card", "icon": "🍓", "title": "STRAWBERRY",
+                     "accent": "#e11d48", "border": "#e11d48", "value": "#fb7185",
+                     "tag": "Dev Studio"},
+    "darkred":      {"kind": "card", "icon": "🩸", "title": "DARK RED",
+                     "accent": "#dc143c", "border": "#8b0000", "value": "#dc143c",
+                     "tag": "Dev Studio"},
+    "sophia":       {"kind": "card", "icon": "💜", "title": "SOPHIA",
+                     "accent": "#c084fc", "border": "#6b21a8", "value": "#c084fc"},
+    "godson":       {"kind": "card", "icon": "✝",  "title": "GOD OWN SON",
+                     "accent": "#fde68a", "border": "#b45309", "value": "#fde68a",
+                     "tag": "Dev Studio"},
+    "badhappening": {"kind": "card", "icon": "⚠",  "title": "BAD HAPPENING",
+                     "accent": "#ea580c", "border": "#ea580c", "value": "#84cc16"},
+    "rain":         {"kind": "card", "icon": "░",  "title": "RAIN STUDIO",
+                     "accent": "#00FF41", "border": "#00FF41", "value": "#00FFFF",
+                     "tag": "the terminal breathes",
+                     "motif": ("[dim #00FF41]│[/dim #00FF41][bold #00FF41]█[/bold #00FF41]"
+                               "[dim #00FF41]╎[/dim #00FF41][bold #00FFFF]▓[/bold #00FFFF]"
+                               "[dim #00FF41]│[/dim #00FF41][bold #00FF41]░[/bold #00FF41]"
+                               "[dim #00FF41]╎[/dim #00FF41][bold #00FFFF]│[/bold #00FFFF]"
+                               "[dim #00FF41]█[/dim #00FF41][bold #00FF41]░[/bold #00FF41]")},
+    "claude":       {"kind": "rule"},
+    "ghost":        {"kind": "line", "icon": "◌", "title": "ghost studio"},
+    "zen":          {"kind": "line", "zen": True},
+    "downcli":      {"kind": "line", "icon": "▼", "title": "down cli",
+                     "accent": "#9ca3af", "value": "#6b7280"},
+}
+
+
+def _welcome_card(skin, ctx):
+    """Shared Panel welcome: label column + value column + one hint row."""
+    theme  = ctx["theme"]
+    acc    = skin.get("accent") or ctx["acc"]
+    border = skin.get("border") or ctx["border_c"]
+    val_c  = skin.get("value") or theme.get("success", "white")
+    plan   = ctx["plan_cfg"]
+    dirline = ctx["ws_short"] + (f"  ⎇ {ctx['branch']}" if ctx["branch"] else "")
+
+    rows = [
+        ("model", f"[{val_c}]{ctx['short']}[/{val_c}]  [dim]· {ctx['mode_str']}[/dim]"),
+        ("dir",   f"[dim]{dirline}[/dim]"),
+        ("plan",  f"[{plan['color']}]{plan['badge']} {plan['name']}[/{plan['color']}]"
+                  f"  [dim]· {ctx['msg_str']} msgs[/dim]"),
+    ]
+    if skin.get("dense") or ctx["stream_m"] != "auto":
+        rows.append(("stream", f"[dim]{ctx['stream_m']}[/dim]"))
+    if skin.get("dense"):
+        rows.append(("perms", f"[dim]{ctx['perms']}[/dim]"))
+
+    body_lines = [f"  [dim]{label:<7}[/dim] {value}" for label, value in rows]
+    if skin.get("motif"):
+        body_lines.append("")
+        body_lines.append(f"  {skin['motif']}")
+    body_lines.append("")
+    body_lines.append(f"  [dim]{_WELCOME_HINT}[/dim]")
+
+    tag   = skin.get("tag")
+    title = (f"[bold {acc}]{skin['icon']}  {skin['title']}[/bold {acc}]"
+             + (f"  [dim {acc}]╱ {tag}[/dim {acc}]" if tag else "")
+             + f"  [dim]v{VERSION}[/dim]")
+    sig      = skin.get("signature") or ctx["username"]
+    subtitle = f"[dim {acc}]{sig} · {plan['badge']} {plan['name']}[/dim {acc}]"
+    console.print()
+    console.print(Panel("\n".join(body_lines), title=title, subtitle=subtitle,
+                        border_style=border, padding=(0, 1)))
+    console.print()
+
+
+def _welcome_line(skin, ctx):
+    """Minimal welcome: one or two quiet lines, no frame."""
+    if skin.get("zen"):
+        zen_char = ctx["state"].get("_zen_char", "$")
+        console.print()
+        console.print(
+            f"  [dim]{zen_char}[/dim]  [white]AI Studio CLI[/white]  "
+            f"[dim]v{VERSION}  ·  {ctx['plan_cfg']['name']}  ·  {ctx['short']}  ·  {ctx['ws_short']}[/dim]")
+        console.print()
+        return
+    acc   = skin.get("accent", "dim white")
+    val_c = skin.get("value", "dim")
+    plan  = ctx["plan_cfg"]
+    console.print()
+    console.print(f"  [{acc}]{skin['icon']}  {skin['title']}  v{VERSION}[/{acc}]")
+    console.print(
+        f"  [{val_c}]{ctx['short']}  ·  {ctx['mode_str']}  ·  "
+        f"{plan['badge']} {plan['name']}  ·  {ctx['ws_short']}[/{val_c}]")
+    console.print(f"  [dim]{_WELCOME_HINT}[/dim]")
+    console.print()
+
+
+def _welcome_rule(skin, ctx):
+    """Claude-style welcome: ruled header, label column, no panel frame."""
+    theme = ctx["theme"]
+    acc   = ctx["acc"]
+    plan  = ctx["plan_cfg"]
+    console.print()
+    console.print(
+        f"  [{acc}]◆[/{acc}]  [bold white]AI Studio CLI[/bold white]  [dim]v{VERSION}[/dim]  "
+        f"[{acc}]{plan['badge']} {plan['name']}[/{acc}]")
+    console.print(f"  [{acc}]{'─' * 58}[/{acc}]")
+    console.print()
+    console.print(f"  [dim]model[/dim]    [{theme['success']}]{ctx['short']}[/{theme['success']}]")
+    console.print(f"  [dim]dir[/dim]      [white]{ctx['ws_short']}[/white]")
+    console.print(f"  [dim]via[/dim]      [dim]{ctx['mode_str']}[/dim]")
+    console.print(f"  [dim]stream[/dim]   [dim]{ctx['stream_m']}[/dim]")
+    console.print(f"  [dim]msgs[/dim]     [dim]{ctx['msg_str']}[/dim]")
+    console.print()
+    console.print(f"  [dim]{_WELCOME_HINT}[/dim]")
+    console.print()
+
+
 def render_welcome(state):
     """Render startup screen — plan-aware, ui-aware."""
     theme    = state.get("theme", THEMES["default"])
@@ -11233,326 +11310,37 @@ def render_welcome(state):
             f"[{acc}]/upgrade[/{acc}] [dim]to keep getting new features.[/dim]"
         )
 
-    # ── STUDIO ──────────────────────────────────────────────────────────────
-    if ui == "studio":
-        lines = [
-            f"  [bold]{short}[/bold]  [dim]{mode_str}[/dim]",
-            f"  [dim]{ws_short}[/dim]",
-        ]
-        if mlimit < 99999:
-            lines.append(f"  [dim]{msg_str} messages[/dim]")
-        lines.append("")
-        lines.append(f"  [dim]/enter · /models · /vibe · /help[/dim]")
-        console.print()
-        console.print(Panel(
-            "\n".join(lines),
-            title=f"[bold {border_c}]AI Studio CLI  v{VERSION}[/bold {border_c}]"
-                  f"  {plan_badge}",
-            border_style=border_c,
-            padding=(1, 2),
-        ))
-        return
+    _git_branch = ""
+    try:
+        r = subprocess.run(["git", "branch", "--show-current"],
+                           capture_output=True, text=True, timeout=1, cwd=ws_str)
+        if r.returncode == 0:
+            _git_branch = r.stdout.strip()
+    except Exception:
+        pass
 
-    # ── CLAUDE ──────────────────────────────────────────────────────────────
-    if ui == "claude":
-        bar = f"[{acc}]{'─' * 58}[/{acc}]"
-        console.print()
-        console.print(f"  [{acc}]◆[/{acc}]  [bold white]AI Studio CLI[/bold white]  [dim]v{VERSION}[/dim]  [{acc}]{plan_cfg['badge']} {plan_cfg['name']}[/{acc}]")
-        console.print(f"  {bar}")
-        console.print()
-        console.print(f"  [dim]model[/dim]    [{theme['success']}]{short}[/{theme['success']}]")
-        console.print(f"  [dim]dir[/dim]      [white]{ws_short}[/white]")
-        console.print(f"  [dim]via[/dim]      [dim]{mode_str}[/dim]")
-        console.print(f"  [dim]stream[/dim]   [dim]{stream_m}[/dim]")
-        console.print(f"  [dim]msgs[/dim]     [dim]{msg_str}[/dim]")
-        console.print()
-        console.print(f"  [{acc}]/enter .[/{acc}]  [{acc}]/read[/{acc}]  [{acc}]/patch[/{acc}]  [{acc}]/agent[/{acc}]  [{acc}]/fif[/{acc}]  [{acc}]/models[/{acc}]  [{acc}]/recap[/{acc}]  [{acc}]/help[/{acc}]")
-        console.print()
-        return
+    ctx = {
+        "short": short, "mode_str": mode_str, "ws_short": ws_short,
+        "plan_cfg": plan_cfg, "msg_str": msg_str, "sess_n": sess_n,
+        "username": username, "stream_m": stream_m, "perms": perms,
+        "branch": _git_branch, "theme": theme, "acc": acc,
+        "border_c": border_c, "plan_badge": plan_badge, "state": state,
+    }
 
-    # ── ZEN ────────────────────────────────────────────────────────────────
-    if ui == "zen":
-        zen_char = state.get("_zen_char", "$")
-        console.print()
-        console.print(f"  [dim]{zen_char}[/dim]  [white]AI Studio CLI[/white]  [dim]v{VERSION}  ·  {plan_cfg['name']}  ·  {short}  ·  {ws_short}[/dim]")
-        console.print()
-        return
-
-    # ── CODEX ──────────────────────────────────────────────────────────────
-    if ui == "codex":
-        git_branch = ""
-        try:
-            r = subprocess.run(["git", "branch", "--show-current"],
-                               capture_output=True, text=True, timeout=2,
-                               cwd=ws_str)
-            if r.returncode == 0 and r.stdout.strip():
-                git_branch = r.stdout.strip()
-        except Exception:
-            pass
-
-        git_line = f"\ngit          {git_branch}" if git_branch else ""
-        bar = "─" * 54
-        body = (
-            f"[bold green]$>[/bold green] [bold]AI Studio CLI  v{VERSION}[/bold]  "
-            f"[dim]{plan_cfg['badge']} {plan_cfg['name']}[/dim]\n"
-            f"[dim]{bar}[/dim]\n"
-            f"[green]model[/green]        {short}\n"
-            f"[green]provider[/green]     {mode_str}\n"
-            f"[green]stream[/green]       {stream_m}\n"
-            f"[green]dir[/green]          {ws_short}\n"
-            f"[green]perms[/green]        {perms}"
-            f"{git_line}\n"
-            f"[green]messages[/green]     {msg_str}\n"
-            f"[dim]{bar}[/dim]\n"
-            "[dim]agents  ·  berry  silicon  cockroach  savannah[/dim]\n"
-            "[dim]cmds    ·  /models /enter /patch /fif /vibe /help[/dim]\n"
-            "[dim]tip     ·  /ui studio|claude|gemini|nova|foxxia[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold green]// Studio v{VERSION}[/bold green]",
-            border_style="green",
-        ))
-        return
-
-    # ── GHOST ──────────────────────────────────────────────────────────────
-    if ui == "ghost":
-        console.print()
-        console.print(f"  [dim white]◌  ghost studio  v{VERSION}[/dim white]")
-        console.print(f"  [dim]{'·' * 40}[/dim]")
-        console.print(f"  [dim]model    {short}[/dim]")
-        console.print(f"  [dim]via      {mode_str}[/dim]")
-        console.print(f"  [dim]plan     {plan_cfg['badge']} {plan_cfg['name']}[/dim]")
-        console.print(f"  [dim]dir      {ws_short}[/dim]")
-        console.print(f"  [dim]{'·' * 40}[/dim]")
-        console.print(f"  [dim]/enter · /models · /agent berry · /help[/dim]")
-        console.print()
-        return
-
-    # ── NOVA ──────────────────────────────────────────────────────────────
-    if ui == "nova":
-        nova_body = (
-            f"  [bold magenta]◆ Model[/bold magenta]    [cyan]{short}[/cyan]  [dim]· {mode_str}[/dim]\n"
-            f"  [bold magenta]◆ Dir[/bold magenta]      [dim]{ws_short}[/dim]\n"
-            f"  [bold magenta]◆ Plan[/bold magenta]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs[/dim]\n"
-            f"  [bold magenta]◆ Stream[/bold magenta]   [dim]{stream_m}[/dim]\n\n"
-            f"  [dim magenta]/enter .   /models   /agent berry   /vibe   /arena   /help[/dim magenta]"
-        )
-        console.print(Panel(
-            nova_body,
-            title=f"[bold magenta]⚡  NOVA  STUDIO  CLI  v{VERSION}[/bold magenta]",
-            subtitle=f"[dim magenta]{plan_cfg['badge']} {plan_cfg['name']}[/dim magenta]",
-            border_style="magenta",
-            padding=(0, 2),
-        ))
-        console.print()
-        return
-
-    # ── FOXXIA ──────────────────────────────────────────────────────────────
-    if ui == "foxxia":
-        fox_body = (
-            f"  [bold #fbbf24]Model[/bold #fbbf24]    [#fbbf24]{short}[/#fbbf24]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #fbbf24]Dir[/bold #fbbf24]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #fbbf24]Plan[/bold #fbbf24]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            fox_body,
-            title=f"[bold #f97316]🦊  FOXXIA[/bold #f97316]  [dim #fbbf24]╱  Dev Studio  ·  v{VERSION}[/dim #fbbf24]",
-            subtitle=f"[dim #f97316]Foxxed909  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #f97316]",
-            border_style="#f97316",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #f97316]/enter .   /models   /agent berry   /vibe   /help[/dim #f97316]")
-        console.print()
-        return
-
-    # ── STRAWBERRY ──────────────────────────────────────────────────────────
-    if ui == "strawberry":
-        berry_body = (
-            f"  [bold #fb7185]Model[/bold #fb7185]    [#fb7185]{short}[/#fb7185]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #fb7185]Dir[/bold #fb7185]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #fb7185]Plan[/bold #fb7185]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            berry_body,
-            title=f"[bold #e11d48]🍓  STRAWBERRY[/bold #e11d48]  [dim #fb7185]╱  Dev Studio  ·  v{VERSION}[/dim #fb7185]",
-            subtitle=f"[dim #e11d48]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #e11d48]",
-            border_style="#e11d48",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #e11d48]/enter .   /models   /agent berry   /vibe   /help[/dim #e11d48]")
-        console.print()
-        return
-
-    # ── DARK RED ────────────────────────────────────────────────────────────
-    if ui == "darkred":
-        body = (
-            f"  [bold #dc143c]Model[/bold #dc143c]    [#dc143c]{short}[/#dc143c]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #dc143c]Dir[/bold #dc143c]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #dc143c]Plan[/bold #dc143c]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold #dc143c]🩸  DARK RED[/bold #dc143c]  [dim #8b0000]╱  Dev Studio  ·  v{VERSION}[/dim #8b0000]",
-            subtitle=f"[dim #8b0000]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #8b0000]",
-            border_style="#8b0000",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #8b0000]/enter .   /models   /agent berry   /vibe   /help[/dim #8b0000]")
-        console.print()
-        return
-
-    # ── SOPHIA ──────────────────────────────────────────────────────────────
-    if ui == "sophia":
-        body = (
-            f"  [bold #c084fc]Model[/bold #c084fc]    [#c084fc]{short}[/#c084fc]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #c084fc]Dir[/bold #c084fc]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #c084fc]Plan[/bold #c084fc]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold #c084fc]💜  SOPHISTICATED SOPHIA[/bold #c084fc]  [dim #a855f7]╱  v{VERSION}[/dim #a855f7]",
-            subtitle=f"[dim #6b21a8]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #6b21a8]",
-            border_style="#6b21a8",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #6b21a8]/enter .   /models   /agent berry   /vibe   /help[/dim #6b21a8]")
-        console.print()
-        return
-
-    # ── GOD OWN SON ─────────────────────────────────────────────────────────
-    if ui == "godson":
-        body = (
-            f"  [bold #fde68a]Model[/bold #fde68a]    [#fde68a]{short}[/#fde68a]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #fde68a]Dir[/bold #fde68a]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #fde68a]Plan[/bold #fde68a]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold #fde68a]✝  GOD OWN SON[/bold #fde68a]  [dim #b45309]╱  Dev Studio  ·  v{VERSION}[/dim #b45309]",
-            subtitle=f"[dim #b45309]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #b45309]",
-            border_style="#b45309",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #b45309]/enter .   /models   /agent berry   /vibe   /help[/dim #b45309]")
-        console.print()
-        return
-
-    # ── DOWN CLI ────────────────────────────────────────────────────────────
-    if ui == "downcli":
-        console.print()
-        console.print(f"  [#9ca3af]▼  down cli  v{VERSION}[/#9ca3af]")
-        console.print(f"  [dim]{'╌' * 40}[/dim]")
-        console.print(f"  [#6b7280]model    {short}[/#6b7280]")
-        console.print(f"  [#6b7280]via      {mode_str}[/#6b7280]")
-        console.print(f"  [#6b7280]plan     {plan_cfg['badge']} {plan_cfg['name']}[/#6b7280]")
-        console.print(f"  [#6b7280]dir      {ws_short}[/#6b7280]")
-        console.print(f"  [dim]{'╌' * 40}[/dim]")
-        console.print(f"  [dim #6b7280]/enter · /models · /agent berry · /help[/dim #6b7280]")
-        console.print()
-        return
-
-    # ── BAD HAPPENING ───────────────────────────────────────────────────────
-    if ui == "badhappening":
-        body = (
-            f"  [bold #ea580c]Model[/bold #ea580c]    [#84cc16]{short}[/#84cc16]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #ea580c]Dir[/bold #ea580c]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #ea580c]Plan[/bold #ea580c]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold #ea580c]⚠  BAD HAPPENING[/bold #ea580c]  [dim #84cc16]╱  v{VERSION}[/dim #84cc16]",
-            subtitle=f"[dim #ea580c]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #ea580c]",
-            border_style="#ea580c",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #ea580c]/enter .   /models   /agent berry   /vibe   /help[/dim #ea580c]")
-        console.print()
-        return
-
-    # ── RAIN ────────────────────────────────────────────────────────────────
-    if ui == "rain":
-        console.print(Panel(
-            f"[bold #00FF41]R  A  I  N   S  T  U  D  I  O[/bold #00FF41]\n"
-            f"[dim #00FF41]v{VERSION}  ·  the terminal breathes[/dim #00FF41]",
-            border_style="#00FF41",
-            title="[bold #00FF41]░ ░ ░[/bold #00FF41]",
-            subtitle=f"[dim #00FFFF]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #00FFFF]",
-            padding=(0, 2),
-        ))
-        console.print()
-        noise = (
-            "[dim #00FF41]│[/dim #00FF41]"
-            "[bold #00FF41]█[/bold #00FF41]"
-            "[dim #00FF41]╎[/dim #00FF41]"
-            "[bold #00FFFF]▓[/bold #00FFFF]"
-            "[dim #00FF41]│[/dim #00FF41]"
-            "[bold #00FF41]░[/bold #00FF41]"
-            "[dim #00FF41]╎[/dim #00FF41]"
-            "[bold #00FFFF]│[/bold #00FFFF]"
-            "[dim #00FF41]█[/dim #00FF41]"
-            "[bold #00FF41]░[/bold #00FF41]"
-            "[dim #00FF41]╎[/dim #00FF41]"
-            "[bold #00FFFF]▓[/bold #00FFFF]"
-        )
-        console.print(f"  {noise}")
-        console.print()
-        info = (
-            f"  [bold #00FF41]░ Model[/bold #00FF41]    [#00FFFF]{short}[/#00FFFF]"
-            f"  [dim #00FF41]· {mode_str}[/dim #00FF41]\n"
-            f"  [bold #00FF41]░ Dir[/bold #00FF41]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #00FF41]░ Plan[/bold #00FF41]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim #00FF41]{msg_str} msgs[/dim #00FF41]\n"
-            f"  [bold #00FF41]░ Stream[/bold #00FF41]   [dim #00FF41]{stream_m}[/dim #00FF41]\n"
-        )
-        console.print(Panel(
-            info,
-            border_style="#00FF41",
-            padding=(0, 1),
-        ))
-        console.print(
-            "  [dim #00FF41]/enter .   /models   /agent berry   /vibe   /help[/dim #00FF41]\n"
-        )
-        return
-
-    # ── CELESTIAL COLLECTION (unified redesigned chrome) ─────────────────────
     if ui in CELESTIAL_STYLES:
         _render_celestial_welcome(
             ui, theme, short, mode_str, ws_short, plan_cfg,
             perms, stream_m, msg_str, sess_n, username,
         )
         return
-
-    # ── GEMINI (default) ────────────────────────────────────────────────────
-    # Redesigned inline instead of delegating to get_banner
-    console.print()
-    console.print(Panel(
-        f"  [{acc}]◆  AI Studio CLI  v{VERSION}[/{acc}]\n\n"
-        f"  {plan_badge}  [dim]·  {mode_str}[/dim]\n\n"
-        f"  [bold]Model[/bold]     [{theme['success']}]{short}[/{theme['success']}]\n"
-        f"  [bold]Dir[/bold]       [dim]{ws_short}[/dim]\n"
-        f"  [bold]Stream[/bold]    [dim]{stream_m}[/dim]\n"
-        f"  [bold]Perms[/bold]     [dim]{perms}[/dim]\n"
-        f"  [bold]Messages[/bold]  [dim]{msg_str}[/dim]\n\n"
-        f"  [dim]/enter .   /models   /agent berry   /vibe   /help[/dim]",
-        title=f"[bold {border_c}]AI Studio CLI[/bold {border_c}]",
-        border_style=border_c,
-        padding=(0, 1),
-    ))
-    console.print()
+    skin = _WELCOME_SKINS.get(ui) or _WELCOME_SKINS["gemini"]
+    kind = skin.get("kind", "card")
+    if kind == "rule":
+        _welcome_rule(skin, ctx)
+    elif kind == "line":
+        _welcome_line(skin, ctx)
+    else:
+        _welcome_card(skin, ctx)
 
 
 def cmd_agents(state):
@@ -11720,6 +11508,12 @@ def _make_toolbar(state):
                 parts.append(f"{lt.get('in',0)}↓t")
             if show("tokens"):
                 parts.append(f"{lt.get('sec',0)}s")
+
+        # Context meter (estimated tokens in play; nudge /compact when heavy)
+        ctx_t = state.get("_ctx_tokens", 0)
+        if show("ctx") and ctx_t:
+            ctx_fmt = f"{ctx_t/1000:.1f}k" if ctx_t >= 1000 else str(ctx_t)
+            parts.append(f"ctx:{ctx_fmt}" + (" <b>/compact</b>" if ctx_t >= 24000 else ""))
 
         # Mode
         if show("mode") and chat_mode and chat_mode != "normal":
@@ -12168,7 +11962,22 @@ def run_repl(state):
     # ── Prompt session ────────────────────────────────────────
     class AdvancedCompleter(WordCompleter):
         def get_completions(self, document, complete_event):
+            from prompt_toolkit.completion import Completion
             word = document.get_word_before_cursor(WORD=True)
+            # 0. @file mention completion ("explain @src/ap<TAB>")
+            if word.startswith("@"):
+                frag = word[1:]
+                base = Path(state.get("workspace_root") or ".")
+                try:
+                    hits = sorted(base.glob(frag + "*"))[:12] if frag else \
+                           sorted(f for f in base.iterdir() if not f.name.startswith("."))[:12]
+                except OSError:
+                    hits = []
+                for f in hits:
+                    rel = f.relative_to(base) if f.is_relative_to(base) else f
+                    suffix = "/" if f.is_dir() else ""
+                    yield Completion(f"@{rel}{suffix}", start_position=-len(word))
+                return
             # 1. Path completion (if not starting with /)
             if word and not word.startswith("/"):
                 # Suggest local files
@@ -12592,6 +12401,9 @@ def run_repl(state):
                         console.print(f"[dim]Current: {state['model']}[/dim]")
                 elif cmd == "models":
                     state = cmd_models(state)
+                elif cmd == "connect":  state = cmd_connect(state, args)
+                elif cmd == "login":         state = cmd_login(state, args)
+                elif cmd == "logout-cloud":  state = cmd_logout_cloud(state, args)
                 elif cmd == "cli":
                     if args=="on":
                         cli2 = detect_gemini_cli()
@@ -12755,10 +12567,7 @@ def run_repl(state):
 
                 # ── v5.9 Max / Team / Enterprise ──────────────────────────────
                 elif cmd in ("audit-log", "auditlog"):   cmd_audit_log(state, args)
-                elif cmd in ("priority-queue", "priorityqueue", "priority"): cmd_priority_queue(state, args)
                 elif cmd in ("orgmetrics", "orgstats", "org"): cmd_orgmetrics(state, args)
-                elif cmd == "sso":                       cmd_sso(state, args)
-                elif cmd == "policy":                    cmd_policy(state, args)
 
                 # ── v9 Beta (ultra) ───────────────────────────────────────────
                 elif cmd in ("labs", "flags"):
@@ -12990,6 +12799,7 @@ def run_repl(state):
                         _focus = state.get("_focus")
                         _effective = (f"[Context — stay focused on: {_focus}]\n\n{user_input}"
                                       if _focus else user_input)
+                        _effective = expand_file_mentions(state, _effective)
                         tmp_ctx = state.pop("_one_shot_ctx", None)
                         if isinstance(tmp_ctx, dict) and "error" not in tmp_ctx:
                             prompt     = format_project_context(tmp_ctx, max_files=8) + "\n\n---\n\nQuestion: " + _effective
@@ -13104,6 +12914,11 @@ def main():
         """
     )
     parser.add_argument("prompt",      nargs="?", help="One-shot prompt")
+    parser.add_argument("-p","--print", dest="print_prompt", nargs="?", const="",
+                        metavar="PROMPT",
+                        help="Headless one-shot: plain stdout, reads piped stdin, exit 1 on failure")
+    parser.add_argument("--json",      action="store_true",
+                        help="With -p: emit JSON {response, model, tokens, ok}")
     parser.add_argument("-r","--read", metavar="FILE")
     parser.add_argument("-m","--model",default=DEFAULT_MODEL)
     parser.add_argument("--setup",     action="store_true")
@@ -13146,6 +12961,29 @@ def main():
     if args.persona:
         p = PERSONAS.get(args.persona, args.persona)
         state["system_prompt"] = p; save_persona(p)
+
+    # ── Headless mode: studio -p "prompt", pipe-friendly, no chrome ──────────
+    if args.print_prompt is not None:
+        prompt = args.print_prompt
+        if not sys.stdin.isatty():
+            piped = sys.stdin.read()
+            if piped.strip():
+                prompt = ((prompt + "\n\n") if prompt else "") + \
+                         f"Input:\n```\n{piped[:MAX_TOTAL_CHARS]}\n```"
+        if not prompt.strip():
+            sys.stderr.write("studio -p: no prompt given (pass text or pipe stdin)\n")
+            sys.exit(2)
+        if not (state["api_key"] or state["openrouter_key"] or state["use_cli"]):
+            sys.stderr.write("studio -p: no API key configured — run studio --setup first\n")
+            sys.exit(2)
+        text, _ = ai_respond(state, prompt, [], silent=True)
+        if args.json:
+            lt = state.get("_last_tokens") or {}
+            sys.stdout.write(json.dumps({"response": text or "", "model": state.get("model"),
+                                         "tokens": lt, "ok": bool(text)}) + "\n")
+        elif text:
+            sys.stdout.write(text.rstrip("\n") + "\n")
+        sys.exit(0 if text else 1)
 
     if not state["api_key"] and not state["openrouter_key"] and not state["use_cli"]:
         k = setup_api_key(state)

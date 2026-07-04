@@ -4,7 +4,7 @@ No I/O, no side-effects; pure data and tiny pure functions only.
 """
 import re
 
-VERSION          = "10.1"
+VERSION          = "11.0"
 API_BASE         = "https://generativelanguage.googleapis.com/v1beta/models"
 OPENROUTER_BASE  = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL    = "nvidia/nemotron-3-super-120b-a12b:free"
@@ -527,7 +527,7 @@ CHAT_MODES = {
 }
 
 # ── Statusline defaults (used by toolbar when state has no override) ──────────
-_STATUSLINE_DEFAULTS_LAZY = {"model", "plan", "stream", "branch", "tokens", "timer", "mode", "agent", "fast"}
+_STATUSLINE_DEFAULTS_LAZY = {"model", "plan", "stream", "branch", "tokens", "ctx", "timer", "mode", "agent", "fast"}
 
 VIBE_PRESETS = {
     # ── Core vibes ───────────────────────────────────────────────────────────

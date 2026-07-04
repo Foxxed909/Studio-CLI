@@ -96,8 +96,11 @@ After the v9.5 fix that deleted the local `PLANS` block, a second audit found fu
 
 - `typewrite()` is broken for strings containing Rich markup when `style=""` — each character is printed in a separate `console.print()` call so markup tags are never interpreted as a whole. Fixed in v5.7 for all known callsites but new `typewrite` calls must not embed Rich markup without a `style=` argument.
 - `render_welcome` is now fully `Panel()`-based for all 7 UIs — no raw f-string width arithmetic with markup content.
-- `_make_toolbar` runs `load_profile()` and `load_memory()` on every keypress (prompt_toolkit calls `_toolbar()` continuously). Should cache with a short TTL.
+- ~~`_make_toolbar` disk reads on every keypress~~ — fixed: TTL-cached (5s) since v10.x.
 - Gemini CLI detection (`detect_gemini_cli()`) runs `shutil.which` on every call — no caching.
+- v11.0: `/sso`, `/policy`, `/priority-queue` removed — they wrote config files nothing read (sso stored client secrets in plaintext). `/team`, `/vault`, `/balance` remain local-only/simulated and stay honestly labeled.
+- v11.0: `web/public/auth/callback.html` now exists — OAuth logins previously 404'd there and dropped the session. `login.html?cli=1` shows the token for the CLI `/login` flow.
+- v11.0: Stage Beta seats in `web/beta_seats.json` (BETA_SEATS_PATH env to relocate); requireAuth-gated join/leave/status endpoints.
 
 ---
 

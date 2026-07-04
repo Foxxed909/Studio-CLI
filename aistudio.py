@@ -5621,26 +5621,6 @@ def cmd_test(state, args, history):
     return history
 
 
-def call_gemini_cli(prompt, sys_prompt=None):
-    """Run the Gemini CLI subprocess and return (output, error)."""
-    cli = shutil.which("gemini") or shutil.which("npx")
-    if not cli:
-        return None, "Gemini CLI not found. Install: npm i -g @google/generative-ai-cli"
-    cmd = [cli]
-    if cli.endswith("npx"):
-        cmd += ["@google/generative-ai-cli"]
-    if sys_prompt:
-        cmd += ["--system", sys_prompt]
-    cmd += ["--prompt", prompt]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        return (result.stdout.strip() or None), (result.stderr.strip() or None)
-    except subprocess.TimeoutExpired:
-        return None, "Gemini CLI timed out after 60s"
-    except Exception as e:
-        return None, str(e)
-
-
 # ── VIBE COMMAND ────────────────────────────────────────────────
 
 

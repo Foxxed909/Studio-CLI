@@ -269,16 +269,19 @@ def call_ollama(model, history, prompt, system_prompt=None, stream=False):
 def call_gemini_cli(prompt, sys_prompt=None):
     cli = shutil.which("gemini") or shutil.which("npx")
     if not cli:
-        return None, "Gemini CLI not found. Install: npm i -g @google/generative-ai-cli"
+        return None, "Gemini CLI not found. Install: npm i -g @google/gemini-cli"
     cmd = [cli]
-    if cli.endswith("npx"):
-        cmd += ["@google/generative-ai-cli"]
+    if cli.endswith("npx") or cli.endswith("npx.cmd"):
+        cmd += ["@google/gemini-cli"]
     if sys_prompt:
         cmd += ["--system", sys_prompt]
     cmd += ["--prompt", prompt]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        return (result.stdout.strip() or None), (result.stderr.strip() or None)
+        out = result.stdout.strip()
+        if out:
+            return out, None
+        return None, (result.stderr.strip() or "Gemini CLI returned no output")
     except subprocess.TimeoutExpired:
         return None, "Gemini CLI timed out after 60s"
     except Exception as e:

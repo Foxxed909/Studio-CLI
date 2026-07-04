@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>StudioCLI</title>
+<title>Studio Stage</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/>
@@ -1738,7 +1738,7 @@ body.gm-ui-active .file-pre-name{min-width:0}
           <path d="M12 1 C12 7, 17 7, 23 12 C17 12, 17 17, 12 23 C12 17, 7 17, 1 12 C7 12, 7 7, 12 1Z" fill="url(#sbGrad)"/>
         </svg>
       </span>
-      StudioCLI
+      Studio Stage
     </span>
     <button class="gm-sb-collapse" onclick="toggleSidebar()" title="Close sidebar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px">
@@ -1839,7 +1839,7 @@ body.gm-ui-active .file-pre-name{min-width:0}
     </button>
     <!-- Brand + model picker -->
     <div class="gm-brand">
-      <span class="gm-wordmark">StudioCLI</span>
+      <span class="gm-wordmark">Studio Stage</span>
       <button class="gm-model-trigger" id="gmModelTrigger" onclick="toggleModelDD()">
         <span id="gmModelName">Flash-Lite</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px"><polyline points="6 9 12 15 18 9"/></svg>
@@ -2012,7 +2012,7 @@ body.gm-ui-active .file-pre-name{min-width:0}
           <div class="gm-temp-icon">✏</div>
           <div class="gm-temp-heading">Welcome, stranger</div>
           <div class="gm-temp-sub">
-            <u onclick="openSettings()">Temporary chats</u> don't appear in <u>recent chats</u> and aren't used to improve StudioCLI AI. Stored for 72 hours for safety.
+            <u onclick="openSettings()">Temporary chats</u> don't appear in <u>recent chats</u> and aren't used to improve Studio Stage AI. Stored for 72 hours for safety.
           </div>
         </div>
         <div class="empty-greet" id="gmGreeting">What can I help with?</div>
@@ -2074,7 +2074,7 @@ body.gm-ui-active .file-pre-name{min-width:0}
       <!-- Textarea row -->
       <div class="inp-box">
         <input type="file" id="imgInput" accept="image/*,.py,.js,.ts,.jsx,.tsx,.md,.txt,.json,.yaml,.yml,.toml,.csv,.html,.css,.sh,.env,.gitignore" style="display:none" onchange="handleImg(this)"/>
-        <textarea id="cin" placeholder="Ask StudioCLI" rows="1"></textarea>
+        <textarea id="cin" placeholder="Ask Studio Stage" rows="1"></textarea>
       </div>
       <!-- Bottom row: + | model chip | spacer | stop | mic | send -->
       <div class="inp-box-row">
@@ -2236,7 +2236,7 @@ body.gm-ui-active .file-pre-name{min-width:0}
     <h3 style="margin-bottom:10px">Computer Use</h3>
     <p style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.5">
       AI sees your screen and controls your browser in real-time.<br><br>
-      Requires the <b>StudioCLI Chrome Extension</b> and a <b>Max plan</b> or higher.
+      Requires the <b>Studio Stage Chrome Extension</b> and a <b>Max plan</b> or higher.
     </p>
     <div style="display:flex;gap:10px;justify-content:center">
       <button class="btn-primary" onclick="window.location='/pricing.html'">Upgrade</button>
@@ -2279,7 +2279,7 @@ body.gm-ui-active .file-pre-name{min-width:0}
     </div>
     <div>
       <div class="cu-log-label">Activity</div>
-      <div class="cu-log" id="cuLog"><div class="cu-log-line info">Open the StudioCLI Chrome Extension and click Start to begin.</div></div>
+      <div class="cu-log" id="cuLog"><div class="cu-log-line info">Open the Studio Stage Chrome Extension and click Start to begin.</div></div>
     </div>
 
     <div style="padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:11.5px;color:var(--text3);line-height:1.5">
@@ -2655,7 +2655,7 @@ body.gm-ui-active .file-pre-name{min-width:0}
   <div class="cm-header">
     <div class="cm-title">
       <span class="cm-dot"></span>
-      StudioCLI Community
+      Studio Stage Community
       <span class="cm-count" id="cmCount">0 online</span>
     </div>
     <button class="cm-close" onclick="closeCommunity()">×</button>
@@ -3508,7 +3508,7 @@ function filterConvos(q){
 // ── Export ─────────────────────────────────────────────────────────────────────
 function exportConvo(){
   if(!messages.length){alert("Nothing to export.");return;}
-  const lines=["# StudioCLI Conversation\n\n",`**Date:** ${new Date().toLocaleString()}  \n`,`**Model:** ${model}\n\n---\n`];
+  const lines=["# Studio Stage Conversation\n\n",`**Date:** ${new Date().toLocaleString()}  \n`,`**Model:** ${model}\n\n---\n`];
   messages.forEach(m=>{lines.push(`\n### ${m.role==="user"?"You":"AI"}\n\n${m.content}\n`);});
   const blob=new Blob([lines.join("")],{type:"text/markdown"});
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);
@@ -4159,12 +4159,12 @@ const RESEARCH_PRESETS=[
 
 // ── Model Tier System Prompts ───────────────────────────────────────────────────
 const TIER_PROMPTS = {
-  flashlite: `You are Flash-Lite in StudioCLI. Answer immediately and briefly. No preamble, no sign-off, no "certainly!" — straight to the answer. Use the fewest words that fully solve the problem. For code, output only the necessary snippet. For questions, one or two sentences unless more is truly needed.`,
-  flash: `You are Flash in StudioCLI — the daily driver. Be clear, helpful, and complete without over-explaining. Get to the answer in the first sentence. Structure your response only when it meaningfully helps (code, lists, comparisons). For code tasks: write clean, working code with just enough context to use it.`,
-  pro: `You are Pro in StudioCLI. You are an expert software engineer and technical analyst. Write clean, production-ready code. Explain architectural decisions briefly. Cover edge cases. Optimize for correctness and maintainability. When asked non-coding questions, give thorough, structured answers.`,
-  thinking: `You are Thinking mode in StudioCLI. Before answering, reason through the problem step-by-step. Identify assumptions, consider multiple approaches, and explain your thought process. For code: think through the architecture before writing. For questions: show the chain of logic that leads to the answer.`,
-  deep: `You are Deep Thinking in StudioCLI — full deep mode. Think step-by-step before answering. Show your reasoning chain explicitly. Consider edge cases, tradeoffs, and alternative approaches. For code: write robust, well-considered solutions and explain key design decisions. For ambiguous problems: state your interpretation, then solve. Prioritize thorough correctness over speed. This mode uses 240% of normal processing depth.`,
-  auto: `You are Auto mode in StudioCLI. Read the intent behind the message, not just the words. Short question → short answer. Complex problem → thorough breakdown. Code request → production-quality code with relevant explanation. Architecture question → tradeoffs, options, recommendation. Adapt your depth, format, and tone to what the situation actually calls for.`,
+  flashlite: `You are Flash-Lite in Studio Stage. Answer immediately and briefly. No preamble, no sign-off, no "certainly!" — straight to the answer. Use the fewest words that fully solve the problem. For code, output only the necessary snippet. For questions, one or two sentences unless more is truly needed.`,
+  flash: `You are Flash in Studio Stage — the daily driver. Be clear, helpful, and complete without over-explaining. Get to the answer in the first sentence. Structure your response only when it meaningfully helps (code, lists, comparisons). For code tasks: write clean, working code with just enough context to use it.`,
+  pro: `You are Pro in Studio Stage. You are an expert software engineer and technical analyst. Write clean, production-ready code. Explain architectural decisions briefly. Cover edge cases. Optimize for correctness and maintainability. When asked non-coding questions, give thorough, structured answers.`,
+  thinking: `You are Thinking mode in Studio Stage. Before answering, reason through the problem step-by-step. Identify assumptions, consider multiple approaches, and explain your thought process. For code: think through the architecture before writing. For questions: show the chain of logic that leads to the answer.`,
+  deep: `You are Deep Thinking in Studio Stage — full deep mode. Think step-by-step before answering. Show your reasoning chain explicitly. Consider edge cases, tradeoffs, and alternative approaches. For code: write robust, well-considered solutions and explain key design decisions. For ambiguous problems: state your interpretation, then solve. Prioritize thorough correctness over speed. This mode uses 240% of normal processing depth.`,
+  auto: `You are Auto mode in Studio Stage. Read the intent behind the message, not just the words. Short question → short answer. Complex problem → thorough breakdown. Code request → production-quality code with relevant explanation. Architecture question → tradeoffs, options, recommendation. Adapt your depth, format, and tone to what the situation actually calls for.`,
 };
 let _activeTier = 'flashlite';
 let _activeModelId = 'openai/gpt-oss-20b:free';
@@ -4788,7 +4788,7 @@ function toggleTempChat() {
     document.getElementById("cin").placeholder = "Ask anything — this chat is temporary";
   } else {
     icon.innerHTML = '<path d="M11 4H4a2 2 0 0 0-2 2v14l4-4h14a2 2 0 0 0 2-2V9"/><path d="M18 2l4 4-10 10H8v-4L18 2z"/>';
-    document.getElementById("cin").placeholder = "Ask StudioCLI";
+    document.getElementById("cin").placeholder = "Ask Studio Stage";
   }
 }
 
@@ -4845,8 +4845,43 @@ window.toggleLiveCode    = function(){ _origToggleLC?.(); _syncChips(); };
 window.toggleComputer    = function(){ _origToggleCU?.(); _syncChips(); };
 
 // ── v10 Beta toggle ─────────────────────────────────────────────────────────────
-function toggleBeta() {
+function _stageToken() {
+  // supabase-js persists the session under sb-<project-ref>-auth-token
+  try {
+    for(let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if(k && k.startsWith("sb-") && k.endsWith("-auth-token")) {
+        const v = JSON.parse(localStorage.getItem(k));
+        return v?.access_token || v?.currentSession?.access_token || null;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+async function toggleBeta() {
   const on = localStorage.getItem("studioBeta") !== "1";
+  if(on) {
+    // Stage Beta is capped server-side (10 seats) — claim one before enabling.
+    const tok = _stageToken();
+    if(!tok) {
+      showToast("Stage Beta needs an account — sign in first", "info");
+      setTimeout(() => location.href = "/login.html", 900);
+      return;
+    }
+    try {
+      const r = await fetch("/api/beta/join", { method: "POST", headers: { Authorization: "Bearer " + tok } });
+      if(r.status === 403) {
+        const d = await r.json().catch(() => ({}));
+        showToast(`Stage Beta is full — ${d.max ?? 10} seats, all taken`, "error");
+        return;
+      }
+      if(!r.ok) { showToast("Could not join Stage Beta — try again", "error"); return; }
+    } catch { showToast("Could not reach the beta server", "error"); return; }
+  } else {
+    const tok = _stageToken();
+    if(tok) fetch("/api/beta/leave", { method: "POST", headers: { Authorization: "Bearer " + tok } }).catch(() => {});
+  }
   if(on) {
     // Snapshot current UI state before entering beta
     localStorage.setItem("studioPreBetaTheme", document.documentElement.getAttribute("data-theme") || "dark");

@@ -37,6 +37,7 @@ bash termux_setup.sh
 
 ```bash
 studio                  # launch
+studio -p "explain X"   # headless one-shot (pipe-friendly: cat log | studio -p "explain")
 /help                   # all commands
 /enter .                # load current project into context
 /ui foxxia              # pick a UI style
@@ -75,6 +76,9 @@ studio                  # launch
 | Command | Description |
 |---|---|
 | `<message>` | Chat with the active AI model |
+| `@file` in any message | Attach a file to the prompt (`explain @src/app.py`, tab-completes) |
+| `/connect [claude\|codex\|gemini]` | Ride your existing Claude / ChatGPT / Google subscription via its CLI |
+| `/login` | Sign in with Google via Studio Stage; syncs your account |
 | `/model <id>` | Switch model |
 | `/models` | Browse + pick model (arrow-key UI) |
 | `/effort <level>` | Set reasoning depth: `low` `medium` `pro` `high` `xhigh` `mxh` |
@@ -91,6 +95,7 @@ studio                  # launch
 | `/write <file> <prompt>` | AI writes a file |
 | `/edit <file> <prompt>` | AI edits existing file |
 | `/patch <file>` | AI generates + applies a diff patch |
+| `/undo [list\|<#>]` | Restore any file from its automatic pre-write checkpoint |
 | `/fix <file>` | AI diagnoses and fixes issues |
 | `/fif <file>` | Find · Identify · Fix — structured AI analysis |
 | `/analyze <file>` | Deep code analysis |
@@ -183,30 +188,28 @@ studio                  # launch
 ### Pro / Enterprise
 | Command | Description |
 |---|---|
-| `/vault <op>` | Local secrets store (`set` `get` `delete` `list`) |
-| `/team <op>` | Team management (`invite` `remove` `list` `role`) |
+| `/vault <op>` | Local secrets store — base64-obfuscated, not encrypted (`set` `get` `delete` `list`) |
+| `/team <op>` | Team management, local-only (`invite` `remove` `list` `role`) |
 | `/audit-log` | Full audit trail (Max+) |
-| `/priority-queue` | Priority task queue (Max+) |
-| `/orgmetrics` | Org-wide analytics (Team+) |
-| `/sso` | SSO/SAML config (Enterprise) |
-| `/policy` | Org policy editor (Enterprise) |
+| `/orgmetrics` | Local multi-profile analytics (Team+) |
 | `/creator` | Creator analytics dashboard |
 
 ---
 
 ## UI Styles
 
-Switch with `/ui <name>`:
+Switch with `/ui <name>`. All styles share one welcome-chrome skeleton — each
+is a palette + motif skin on the same layout.
 
 | Style | Description |
 |---|---|
-| `studio` | Default — clean two-panel box |
-| `claude` | Purple/violet, minimal |
-| `codex` | Green terminal aesthetic |
-| `gemini` | Blue gradient, Google-inspired |
-| `ghost` | Ultra-minimal single-line |
-| `nova` | Sci-fi magenta/cyan |
-| `foxxia` | Orange/gold Foxxia Dev Studio branding |
+| `studio` | Default — clean card, theme-adaptive |
+| `claude` | Ruled header, no frame, purple/violet |
+| `codex` | Green terminal aesthetic, dense fields |
+| `gemini` | Theme-adaptive card, Google-inspired |
+| `ghost` / `zen` / `downcli` | Minimal line welcomes, no frame |
+| `nova` / `foxxia` / `strawberry` / `darkred` / `sophia` / `godson` / `badhappening` / `rain` | Branded cards |
+| 22 celestial styles | `moon`, `blackhole`, `vaporwave`, `crt`, `matrixrain`, … (`/ui` to browse) |
 
 ---
 
@@ -254,9 +257,9 @@ Switch with `/theme <name>` or use a `/vibe` preset:
 
 ---
 
-## Web Interface — v10 Beta
+## Studio Stage — the web app
 
-The companion web app (`web/`) ships a full **Gemini-inspired UI** redesign.
+The companion web app (`web/`) is **Studio Stage**. **Stage Beta** is capped at 10 seats, enforced server-side (`BETA_MAX_SEATS`); the testing hub lives at `/testing` (**Studio Testing**).
 
 ```bash
 cd web
@@ -356,7 +359,7 @@ Load unpacked from `chrome://extensions` → **Developer mode** → **Load unpac
 
 ```
 StudioCLI/
-├── aistudio.py          # full CLI (~9k lines)
+├── aistudio.py          # full CLI (~13k lines)
 ├── studio/
 │   └── providers.py     # OpenRouter / Gemini / Ollama provider adapters
 ├── test_studio.py       # test suite

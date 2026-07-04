@@ -1,5 +1,52 @@
 # AI Studio CLI — Public Changelog
 
+## v11.0 — 2026-07-04
+
+### Bring your own subscription — /connect
+One hub for riding the AI plans you already pay for. `/connect` shows what's
+installed; `/connect claude` routes prompts through Claude Code (Claude
+Pro/Max), `/connect codex` through the Codex CLI (ChatGPT Plus/Pro), and
+`/connect gemini` through the Gemini CLI (Google account). Sign in once with
+the vendor's own CLI — your credentials never touch Studio.
+
+### Sign in with Google — /login
+`/login` opens Studio Stage, you sign in with Google (or GitHub/Discord), and
+paste the token back into the terminal. The CLI verifies it against the Stage
+backend and syncs your account. `/logout-cloud` disconnects.
+Also fixed: web OAuth used to redirect to a page that didn't exist — every
+Google sign-in on the web dead-ended in a 404. It works now.
+
+### Checkpoints — /undo, upgraded
+Every AI file write snapshots the previous version first (last 50, in
+`~/.aistudio/checkpoints`). `/undo` lists them with previews; `/undo 3`
+restores. The old `.bak` flow still works as a fallback.
+
+### @file mentions
+`explain @src/app.py` attaches the file to your prompt — with tab-completion
+on `@`. No more /read round-trips for quick questions.
+
+### Headless mode — studio -p
+`studio -p "prompt"` prints the plain answer and exits. Pipe-friendly
+(`cat error.log | studio -p "explain this"`), `--json` for scripts, proper
+exit codes for CI.
+
+### One welcome chrome, every style
+All UI styles now share a single welcome-card system — same layout skeleton,
+each style keeps its palette, icon, and motif. Every card shows your git
+branch, and the toolbar gained a live context-token meter that nudges
+`/compact` when the session gets heavy.
+
+### Studio Stage (web)
+The web app has a name now. Stage Beta is capped at 10 seats, enforced
+server-side — the v10 badge claims a seat when you flip it on. The testing
+hub is Studio Testing (`/testing`).
+
+### Removed
+Fake-enterprise theater is gone: `/sso`, `/policy`, `/priority-queue` wrote
+config files that nothing ever read. 4.3 MB of stale screenshots, two dead
+UI experiments, and 7 duplicate commands also left the building.
+
+
 ## v10.0 — 2026-05-20
 
 ### Web UI — 4 Model Tiers

@@ -1455,7 +1455,7 @@ ALL_COMMANDS = [
     # v5.8
     "/profile","/me","/insights","/stats","/vault","/team",
     # v5.9 — Max / Team / Enterprise
-    "/audit-log","/priority-queue","/orgmetrics","/sso","/policy",
+    "/audit-log","/orgmetrics",
     # v9.0
     "/plugin","/agent-mesh","/vision-pro","/template",
     # v8.0
@@ -1590,10 +1590,7 @@ COMMAND_METADATA = {
     "/team":           ("PRO",     "Pro: manage team members (invite, remove, roles)"),
     # v5.9
     "/audit-log":      ("MAX",     "Max+: view audit trail (login, plan, security events)"),
-    "/priority-queue": ("MAX",     "Max+: route requests through the high-priority API lane"),
     "/orgmetrics":     ("TEAM",    "Team/Ent: aggregated org-wide metrics across all members"),
-    "/sso":            ("ENT",     "Enterprise: configure SSO / SAML / OIDC"),
-    "/policy":         ("ENT",     "Enterprise: org-wide policies (max_tokens, allowed_models, content_filter)"),
     # v9.1
     "/alias":          ("UTIL",    "Define/run custom prompt shortcuts: /alias set <name> <text>"),
     "/multiline":      ("UI",      "Toggle multiline input mode (submit with blank line)"),
@@ -4832,37 +4829,7 @@ def cmd_bench(state):
         f"[bold]Speed:[/bold]     {toks/dt:.1f} t/s",
         title="Model Benchmark", border_style="magenta"))
 
-def cmd_tts(state, args=None):
-    """Speak the last AI response aloud (Windows TTS, /tts)."""
-    args = (args or "").strip()
-    if sys.platform != "win32":
-        console.print("[yellow]TTS is only supported on Windows.[/yellow]")
-        return
-    text = state.get("_last_response", "")
-    if not text:
-        console.print("[yellow]Nothing to speak — send a message first.[/yellow]")
-        return
-    # Clean for voice
-    clean = re.sub(r"\[.*?\]", "", text).replace("\n", " ").strip()
-    msg = clean[:500]
-    console.print("[dim]Speaking...[/dim]")
 
-    # Use Base64 encoded script block to prevent ANY injection
-    import base64
-    script = f'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak({json.dumps(msg)})'
-    encoded_script = base64.b64encode(script.encode('utf-16-le')).decode('ascii')
-    subprocess.Popen(["PowerShell", "-NoProfile", "-EncodedCommand", encoded_script])
-
-def cmd_stats(state):
-    """Show detailed usage statistics."""
-    usage = load_usage()
-    table = Table(title="Usage Statistics", box=box.ROUNDED)
-    table.add_column("Metric", style="bold cyan"); table.add_column("Value", style="green")
-    table.add_row("Total Input Tokens", f"{usage.get('total_in',0):,}")
-    table.add_row("Total Output Tokens", f"{usage.get('total_out',0):,}")
-    table.add_row("Requests (Last 5h)", str(len(usage.get("history", []))))
-    table.add_row("Current Balance", f"${state.get('balance',0):.2f}")
-    console.print(table)
 
 def cmd_balance(state):
     """Detailed financial breakdown with provider info and API tiers."""
@@ -4952,28 +4919,6 @@ def cmd_balance(state):
 # ── v5.6 NEW FEATURES ─────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════
 
-def cmd_history(state, history):
-    """/history — pretty-print session turns with index, role, preview."""
-    if not history:
-        console.print("[dim]No history yet — start chatting![/dim]")
-        return
-    theme = state.get("theme", THEMES["default"])
-    rows = []
-    for i, m in enumerate(history):
-        role   = m.get("role", "?")
-        text   = m.get("text", "")
-        icon   = "▸" if role == "user" else "◆"
-        color  = theme.get("prompt_user", "cyan") if role == "user" else theme.get("success", "green")
-        label  = "YOU" if role == "user" else "AI"
-        preview = text[:120].replace("\n", " ")
-        if len(text) > 120: preview += "…"
-        rows.append(f"  [dim]{i+1:>3}[/dim]  [{color}]{icon} {label}[/{color}]  {preview}")
-    console.print(Panel(
-        "\n".join(rows),
-        title=f"[bold]Session History — {len(history)} turns[/bold]",
-        border_style=theme.get("border", "cyan"),
-        padding=(0, 1)
-    ))
 
 
 def cmd_export(state, history):
@@ -5833,66 +5778,6 @@ def _read_key():
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
-def cmd_model_picker(state):
-    """/pick — interactive arrow-key model selector."""
-    model   = state.get("model") or DEFAULT_MODEL
-    theme   = state.get("theme", THEMES["default"])
-    acc     = theme.get("accent", "bold cyan")
-    border  = theme.get("border", "cyan").replace("bold ", "")
-
-    all_models = list(dict.fromkeys(
-        FREE_CHAT_MODELS + list(STUDIO_MODEL_ALIASES.values())
-    ))
-    if model not in all_models:
-        all_models.insert(0, model)
-
-    labels = [_short_model(m) for m in all_models]
-    idx    = next((i for i, m in enumerate(all_models) if m == model), 0)
-
-    console.print(f"\n[{acc}]◆ Model Picker[/{acc}]  [dim]↑↓ navigate · Enter select · Esc cancel[/dim]\n")
-
-    def _draw(selected_idx):
-        """Render the picker panel and return how many terminal lines it used."""
-        lines = []
-        for i, label in enumerate(labels):
-            if i == selected_idx:
-                lines.append(f"  [{acc}]▶  {label}[/{acc}]")
-            else:
-                lines.append(f"  [dim]   {label}[/dim]")
-        panel = Panel(
-            "\n".join(lines),
-            title=f"[dim]{len(all_models)} models[/dim]",
-            border_style=border,
-        )
-        with console.capture() as cap:
-            console.print(panel)
-        out = cap.get()
-        sys.stdout.write(out)
-        sys.stdout.flush()
-        return out.count("\n")
-
-    drawn = _draw(idx)
-    while True:
-        key = _read_key()
-        if key == 'UP':
-            idx = (idx - 1) % len(all_models)
-        elif key == 'DOWN':
-            idx = (idx + 1) % len(all_models)
-        elif key == 'ENTER':
-            chosen = all_models[idx]
-            state["model"] = chosen
-            LAST_MODEL_FILE.parent.mkdir(exist_ok=True)
-            LAST_MODEL_FILE.write_text(chosen)
-            console.print(f"\n[{acc}]✓ Model → {_short_model(chosen)}[/{acc}]\n")
-            return state
-        elif key == 'ESC':
-            console.print("[dim]Cancelled.[/dim]")
-            return state
-        # Redraw in place: rewind over the previous panel and clear it,
-        # so each keypress replaces the panel instead of stacking a new one.
-        sys.stdout.write(f"\033[{drawn}A\033[J")
-        sys.stdout.flush()
-        drawn = _draw(idx)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -6166,9 +6051,6 @@ _MAX_TIER_PLANS  = ("max", "ultra", "team", "enterprise")
 _TEAM_TIER_PLANS = ("team", "enterprise")
 _ENTERPRISE_ONLY = ("enterprise",)
 
-ORG_POLICY_FILE     = CONFIG_DIR / "org_policy.json"
-ORG_SSO_FILE        = CONFIG_DIR / "org_sso.json"
-PRIORITY_QUEUE_FILE = CONFIG_DIR / "priority_queue"
 
 
 def _require_tier(state, allowed, label, suggested="/upgrade max"):
@@ -6228,31 +6110,6 @@ def cmd_audit_log(state, args):
     console.print(f"  [dim]Filter: /audit-log <text>   ·   File: {path}[/dim]")
 
 
-def cmd_priority_queue(state, args):
-    """/priority-queue — Max+: toggle priority API queue routing."""
-    if not _require_tier(state, _MAX_TIER_PLANS, "/priority-queue"):
-        return
-    sub = (args or "").strip().lower()
-    current = PRIORITY_QUEUE_FILE.exists()
-    if sub in ("on", "enable", "true", "1"):
-        PRIORITY_QUEUE_FILE.parent.mkdir(exist_ok=True)
-        PRIORITY_QUEUE_FILE.write_text("on", encoding="utf-8")
-        state["priority_queue"] = True
-        console.print("[green]✓ Priority queue ENABLED — your requests will be routed ahead of free traffic.[/green]")
-        return
-    if sub in ("off", "disable", "false", "0"):
-        PRIORITY_QUEUE_FILE.unlink(missing_ok=True)
-        state["priority_queue"] = False
-        console.print("[yellow]✓ Priority queue DISABLED.[/yellow]")
-        return
-    state["priority_queue"] = current
-    status = "[green]ON[/green]" if current else "[dim]OFF[/dim]"
-    console.print(Panel(
-        f"  Priority queue: {status}\n\n"
-        f"  [dim]Routes your API calls into the high-priority lane,\n"
-        f"  ahead of free-tier traffic during peak load.[/dim]\n\n"
-        f"  Toggle: [yellow]/priority-queue on[/yellow] · [yellow]/priority-queue off[/yellow]",
-        title="Priority Queue (Max+)", border_style="magenta", padding=(0, 2)))
 
 
 def cmd_orgmetrics(state, args):
@@ -6304,125 +6161,8 @@ def cmd_orgmetrics(state, args):
         title="Organization Metrics", border_style=acc, padding=(1, 2)))
 
 
-def cmd_sso(state, args):
-    """/sso — Enterprise: configure SSO/SAML/OIDC settings."""
-    if not _require_tier(state, _ENTERPRISE_ONLY, "/sso", suggested="/upgrade enterprise"):
-        return
-    theme = state.get("theme", THEMES["default"])
-    acc   = theme.get("accent", "cyan")
-    parts = (args or "").split(None, 2)
-    action = parts[0].lower() if parts else ""
-    cfg = {}
-    if ORG_SSO_FILE.exists():
-        try: cfg = json.loads(ORG_SSO_FILE.read_text(encoding="utf-8"))
-        except Exception: cfg = {}
-
-    if not action or action == "show":
-        if not cfg:
-            console.print(Panel(
-                "  No SSO configured yet.\n\n"
-                "  [dim]/sso set provider <okta|azure|google|generic-oidc>\n"
-                "  /sso set issuer <url>\n"
-                "  /sso set client_id <id>\n"
-                "  /sso set client_secret <secret>\n"
-                "  /sso enable | /sso disable[/dim]",
-                title="SSO / SAML", border_style=acc, padding=(0, 2)))
-            return
-        masked = dict(cfg)
-        if "client_secret" in masked and masked["client_secret"]:
-            masked["client_secret"] = "•" * 8 + masked["client_secret"][-4:]
-        body = "\n".join(f"  [bold]{k:<14}[/bold] {v}" for k, v in masked.items())
-        console.print(Panel(body, title="SSO Configuration", border_style=acc, padding=(0, 2)))
-        return
-
-    if action == "set":
-        if len(parts) < 3:
-            console.print("[yellow]Usage: /sso set <key> <value>[/yellow]")
-            return
-        key, value = parts[1].lower(), parts[2]
-        if key not in ("provider", "issuer", "client_id", "client_secret", "redirect_uri"):
-            console.print(f"[yellow]Unknown key '{key}'. Allowed: provider/issuer/client_id/client_secret/redirect_uri[/yellow]")
-            return
-        cfg[key] = value
-        ORG_SSO_FILE.parent.mkdir(exist_ok=True)
-        ORG_SSO_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-        audit_log("SSO_CONFIG", f"{key} updated")
-        console.print(f"  [{acc}]✓ {key} updated[/{acc}]")
-        return
-
-    if action in ("enable", "disable"):
-        cfg["enabled"] = (action == "enable")
-        ORG_SSO_FILE.parent.mkdir(exist_ok=True)
-        ORG_SSO_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-        audit_log("SSO_TOGGLE", action)
-        console.print(f"  [{acc}]✓ SSO {action}d[/{acc}]")
-        return
-
-    console.print("[yellow]Usage: /sso show | set <key> <value> | enable | disable[/yellow]")
 
 
-def cmd_policy(state, args):
-    """/policy — Enterprise: org-wide policies (max tokens, allowed models, content filter)."""
-    if not _require_tier(state, _ENTERPRISE_ONLY, "/policy", suggested="/upgrade enterprise"):
-        return
-    theme = state.get("theme", THEMES["default"])
-    acc   = theme.get("accent", "cyan")
-    parts = (args or "").split(None, 2)
-    action = parts[0].lower() if parts else ""
-    pol = {}
-    if ORG_POLICY_FILE.exists():
-        try: pol = json.loads(ORG_POLICY_FILE.read_text(encoding="utf-8"))
-        except Exception: pol = {}
-
-    if not action or action == "show":
-        if not pol:
-            console.print(Panel(
-                "  No org policy set.\n\n"
-                "  [dim]/policy set max_tokens 4000\n"
-                "  /policy set allowed_models gpt-oss-120b,nemotron\n"
-                "  /policy set content_filter strict|standard|off\n"
-                "  /policy clear <key>[/dim]",
-                title="Org Policy", border_style=acc, padding=(0, 2)))
-            return
-        body = "\n".join(f"  [bold]{k:<18}[/bold] {v}" for k, v in pol.items())
-        console.print(Panel(body, title="Org Policy", border_style=acc, padding=(0, 2)))
-        return
-
-    if action == "set":
-        if len(parts) < 3:
-            console.print("[yellow]Usage: /policy set <key> <value>[/yellow]")
-            return
-        key, value = parts[1].lower(), parts[2]
-        if key == "max_tokens":
-            try: value = int(value)
-            except ValueError:
-                console.print("[red]max_tokens must be an integer.[/red]"); return
-        elif key == "allowed_models":
-            value = [m.strip() for m in value.split(",") if m.strip()]
-        elif key == "content_filter" and value not in ("strict", "standard", "off"):
-            console.print("[red]content_filter must be strict|standard|off[/red]"); return
-        pol[key] = value
-        ORG_POLICY_FILE.parent.mkdir(exist_ok=True)
-        ORG_POLICY_FILE.write_text(json.dumps(pol, indent=2), encoding="utf-8")
-        audit_log("POLICY_UPDATE", f"{key}={value}")
-        console.print(f"  [{acc}]✓ Policy {key} → {value}[/{acc}]")
-        return
-
-    if action == "clear":
-        if len(parts) < 2:
-            console.print("[yellow]Usage: /policy clear <key>[/yellow]")
-            return
-        key = parts[1].lower()
-        if key in pol:
-            del pol[key]
-            ORG_POLICY_FILE.write_text(json.dumps(pol, indent=2), encoding="utf-8")
-            audit_log("POLICY_CLEAR", key)
-            console.print(f"  [{acc}]✓ Cleared {key}[/{acc}]")
-        else:
-            console.print(f"[yellow]No policy '{key}' to clear.[/yellow]")
-        return
-
-    console.print("[yellow]Usage: /policy show | set <key> <value> | clear <key>[/yellow]")
 
 
 PLUGIN_FILE = CONFIG_DIR / "plugins.json"
@@ -7789,9 +7529,6 @@ def cmd_analytics_pro(state, args):
                         border_style="yellow", padding=(0, 2)))
 
 
-def cmd_labs(state, args):
-    """/labs — alias for /beta, show experimental lab features."""
-    cmd_beta(state, args)
 
 
 def cmd_profile_view(state):
@@ -8145,12 +7882,6 @@ CHANGELOG_TEXT = f"""
   ✦ /patch command, /clear fix, /write preview, /run fix
 """
 
-def cmd_update_log(state):
-    """View patch notes and feature updates."""
-    theme = state.get("theme", THEMES["default"])
-    console.print(Panel(CHANGELOG_TEXT.strip(), title="Update Log", border_style=theme["border"]))
-    # Add link or instructions if needed
-    console.print("\n[dim]See all updates at: [cyan]https://github.com/aistudio-cli/aistudio/blob/main/CHANGELOG.md[/cyan][/dim]")
 
 
 # ── REMOTE CONTROL ────────────────────────────────
@@ -10474,106 +10205,6 @@ def cmd_safety_check(state, args, history):
 
 
 # ── EXPERIMENTAL (prank) ─────────────────────────────────
-def cmd_experimental(state, args):
-    """Multi-phase prank: only available on Free plan."""
-    import random as _r
-    theme = state.get("theme", THEMES["default"])
-    phase = (args or "").strip().lower()
-
-    # Gate: only free users get the experimental prank
-    current_plan = get_plan(state)
-    if current_plan != "free":
-        console.print(Panel(
-            f"[dim]/experimental is a Free-plan feature.[/dim]\n\n"
-            f"[{theme['accent']}]{PLANS[current_plan]['badge']} {PLANS[current_plan]['name']}[/{theme['accent']}] users get full access by default.\n"
-            f"Nothing experimental here -- just use /models or /agents.",
-            title="Not Available", border_style=theme["border"]
-        ))
-        return
-
-    # ── Phase 0: no args — pitch it ──────────────────────────────────────────
-    if not phase:
-        lines = [
-            f"[bold {theme['accent']}]⚗  EXPERIMENTAL MODE  ⚗[/bold {theme['accent']}]\n",
-            "[dim]Psst. You didn't hear this from me.[/dim]\n",
-            "There's a hidden layer in Studio that most users [bold]never unlock[/bold].",
-            "We're talking [green]2× faster responses[/green], [green]smarter auto-mode detection[/green],",
-            "a [green]priority queue[/green] that skips the OpenRouter congestion window,",
-            "and a little surprise we call [bold cyan]\"turbo context\"[/bold cyan] — fits way more into",
-            "each prompt without the normal 8 k cap.\n",
-            "[dim]It's in beta. Not documented. Not promised. But it works.[/dim]\n",
-            f"  [yellow]/experimental enable[/yellow]    ← unlock it (requires a 3-second update)",
-            f"  [yellow]/experimental disable[/yellow]   ← turn it back off anytime",
-        ]
-        console.print(Panel("\n".join(lines),
-            title="[bold]Unlock Hidden Features[/bold]",
-            border_style=theme["accent"], padding=(1, 3)))
-        return
-
-    # ── Phase 1: enable — fake update ────────────────────────────────────────
-    if phase == "enable":
-        if state.get("_experimental_done"):
-            console.print(f"[{theme['accent']}]Already active.[/{theme['accent']}] "
-                          "Run [yellow]/experimental disable[/yellow] first.")
-            return
-
-        console.print(f"\n[bold {theme['accent']}]⚗  Enabling experimental features…[/bold {theme['accent']}]\n")
-        time.sleep(0.4)
-
-        steps = [
-            ("Fetching update manifest",      0.6),
-            ("Downloading feature pack",      1.1),
-            ("Verifying checksum",            0.5),
-            ("Patching rate-limit layer",     0.8),
-            ("Injecting turbo context hooks", 0.7),
-            ("Reindexing model registry",     0.9),
-            ("Finalising",                    0.5),
-        ]
-        bar_width = 32
-        for i, (label, delay) in enumerate(steps):
-            filled = int(bar_width * (i + 1) / len(steps))
-            bar    = "█" * filled + "░" * (bar_width - filled)
-            pct    = int(100 * (i + 1) / len(steps))
-            console.print(f"  [{theme['success']}]{bar}[/{theme['success']}] [dim]{pct:3d}%[/dim]  {label}…")
-            time.sleep(delay)
-
-        time.sleep(0.3)
-        console.print()
-        console.print(f"[bold {theme['success']}]✓  Update applied.[/bold {theme['success']}]\n")
-        time.sleep(0.8)
-
-        # ── The reveal ───────────────────────────────────────────────────────
-        reveal = (
-            f"[bold red]⚠  EXPERIMENTAL FEATURES ACTIVE  ⚠[/bold red]\n\n"
-            "[bold]Here's what just changed:[/bold]\n\n"
-            "  [red]✗[/red]  Rate limits now move [bold red]10× faster[/bold red] than before.\n"
-            "  [red]✗[/red]  On the free plan you will hit your wall in just [bold red]4 – 7 messages[/bold red].\n"
-            "  [red]✗[/red]  \"Turbo context\" is real — it eats tokens [bold red]2× as fast[/bold red].\n"
-            "  [red]✗[/red]  The priority queue? [bold red]You're now at the back[/bold red] of it.\n\n"
-            "[dim]We are currently experimenting. You agreed to this the moment\n"
-            "you typed [yellow]/experimental enable[/yellow]. Truly sorry. Not sorry.[/dim]\n\n"
-            f"  [yellow]/experimental disable[/yellow]   ← escape hatch (it won't actually help lol)"
-        )
-        console.print(Panel(reveal,
-            title="[bold red]The Fine Print You Didn't Read[/bold red]",
-            border_style="red", padding=(1, 3)))
-
-        state["_experimental_done"] = True
-        return
-
-    # ── Phase 2: disable — "fix" ──────────────────────────────────────────────
-    if phase == "disable":
-        console.print("\n[dim]Rolling back experimental features…[/dim]")
-        for label in ("Reverting patches", "Restoring rate limits", "Cleaning up"):
-            console.print(f"  [dim]· {label}…[/dim]")
-            time.sleep(_r.uniform(0.3, 0.6))
-        time.sleep(0.2)
-        console.print(f"\n[{theme['success']}]✓  Done.[/{theme['success']}]  "
-                      "[dim](Rate limits back to normal. Or are they? 👀)[/dim]\n")
-        state.pop("_experimental_done", None)
-        return
-
-    console.print(f"[yellow]Usage: /experimental   /experimental enable   /experimental disable[/yellow]")
 
 
 def cmd_help(state):
@@ -11099,13 +10730,6 @@ def ensure_onboarded(state):
     render_welcome(state)
     # Tell run_repl not to render welcome again (avoid double banner)
     state["_skip_welcome"] = True
-
-
-def _animate_banner(lines, color, delay=0.04):
-    """Print banner lines. Delay param kept for API compat but ignored — sleep inside
-    prompt_toolkit event handlers corrupts the terminal display."""
-    for line in lines:
-        console.print(f"[{color}]{line}[/{color}]")
 
 
 # ── CELESTIAL CHROME ────────────────────────────────────────────────────────
@@ -12755,10 +12379,7 @@ def run_repl(state):
 
                 # ── v5.9 Max / Team / Enterprise ──────────────────────────────
                 elif cmd in ("audit-log", "auditlog"):   cmd_audit_log(state, args)
-                elif cmd in ("priority-queue", "priorityqueue", "priority"): cmd_priority_queue(state, args)
                 elif cmd in ("orgmetrics", "orgstats", "org"): cmd_orgmetrics(state, args)
-                elif cmd == "sso":                       cmd_sso(state, args)
-                elif cmd == "policy":                    cmd_policy(state, args)
 
                 # ── v9 Beta (ultra) ───────────────────────────────────────────
                 elif cmd in ("labs", "flags"):

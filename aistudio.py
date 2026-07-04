@@ -2731,6 +2731,16 @@ def check_update_eligibility(state):
         return wait_days == 0, wait_days
     except Exception: return False, 99
 
+def estimate_context_tokens(state, history):
+    """Rough context size in tokens (chars/4): system prompt + conversation."""
+    try:
+        chars = len(build_system_prompt(state) or "")
+    except Exception:
+        chars = 0
+    chars += sum(len(m.get("text", "")) for m in history)
+    return chars // 4
+
+
 def ai_respond(state, prompt, history, silent=False):
     allowed, count = check_rate_limit(state)
     if not allowed:
@@ -2932,6 +2942,7 @@ def ai_respond(state, prompt, history, silent=False):
         history.append({"role":"model","text":text})
         state["_last_response"] = text
         state["_last_tokens"] = {"in": in_t, "out": out_t, "sec": round(time.time()-t0, 2)}
+        state["_ctx_tokens"] = estimate_context_tokens(state, history)
         state["_working"] = False
         return text, history
 
@@ -6607,7 +6618,7 @@ def cmd_timer(state, args):
 # ── /statusline ────────────────────────────────────────────────────────────────
 _STATUSLINE_DEFAULTS = _STATUSLINE_DEFAULTS_LAZY   # single source: studio/data.py
 _STATUSLINE_ALL      = {"model","plan","stream","branch","tokens","in_tokens","out_tokens",
-                         "mem","mode","agent","timer","fast","working","cwd"}
+                         "mem","mode","agent","timer","fast","working","cwd","ctx"}
 
 def cmd_statusline(state, args):
     """/statusline [show|hide|reset|list] [field,...] — configure the toolbar."""
@@ -10800,6 +10811,134 @@ def _render_celestial_welcome(ui, theme, short, mode_str, ws_short, plan_cfg,
     console.print()
 
 
+# ── WELCOME CHROME ──────────────────────────────────────────────────────────
+# One layout skeleton, many skins. Every UI style is a palette + motif on the
+# same card/line/rule renderer — no style hand-draws its own box math.
+# accent: titles + hint commands · value: the model name · border: panel frame.
+# None means "inherit from the active theme" (studio/gemini adapt to /theme).
+_WELCOME_HINT = "/enter .   /models   /connect   /vibe   /help"
+
+_WELCOME_SKINS = {
+    "studio":       {"kind": "card", "icon": "◆",  "title": "STUDIO"},
+    "gemini":       {"kind": "card", "icon": "✦",  "title": "AI STUDIO"},
+    "codex":        {"kind": "card", "icon": "$>", "title": "STUDIO CODEX",
+                     "accent": "green", "border": "green", "dense": True},
+    "nova":         {"kind": "card", "icon": "⚡", "title": "NOVA STUDIO",
+                     "accent": "magenta", "border": "magenta", "value": "cyan"},
+    "foxxia":       {"kind": "card", "icon": "🦊", "title": "FOXXIA",
+                     "accent": "#f97316", "border": "#f97316", "value": "#fbbf24",
+                     "tag": "Dev Studio", "signature": "Foxxed909"},
+    "strawberry":   {"kind": "card", "icon": "🍓", "title": "STRAWBERRY",
+                     "accent": "#e11d48", "border": "#e11d48", "value": "#fb7185",
+                     "tag": "Dev Studio"},
+    "darkred":      {"kind": "card", "icon": "🩸", "title": "DARK RED",
+                     "accent": "#dc143c", "border": "#8b0000", "value": "#dc143c",
+                     "tag": "Dev Studio"},
+    "sophia":       {"kind": "card", "icon": "💜", "title": "SOPHIA",
+                     "accent": "#c084fc", "border": "#6b21a8", "value": "#c084fc"},
+    "godson":       {"kind": "card", "icon": "✝",  "title": "GOD OWN SON",
+                     "accent": "#fde68a", "border": "#b45309", "value": "#fde68a",
+                     "tag": "Dev Studio"},
+    "badhappening": {"kind": "card", "icon": "⚠",  "title": "BAD HAPPENING",
+                     "accent": "#ea580c", "border": "#ea580c", "value": "#84cc16"},
+    "rain":         {"kind": "card", "icon": "░",  "title": "RAIN STUDIO",
+                     "accent": "#00FF41", "border": "#00FF41", "value": "#00FFFF",
+                     "tag": "the terminal breathes",
+                     "motif": ("[dim #00FF41]│[/dim #00FF41][bold #00FF41]█[/bold #00FF41]"
+                               "[dim #00FF41]╎[/dim #00FF41][bold #00FFFF]▓[/bold #00FFFF]"
+                               "[dim #00FF41]│[/dim #00FF41][bold #00FF41]░[/bold #00FF41]"
+                               "[dim #00FF41]╎[/dim #00FF41][bold #00FFFF]│[/bold #00FFFF]"
+                               "[dim #00FF41]█[/dim #00FF41][bold #00FF41]░[/bold #00FF41]")},
+    "claude":       {"kind": "rule"},
+    "ghost":        {"kind": "line", "icon": "◌", "title": "ghost studio"},
+    "zen":          {"kind": "line", "zen": True},
+    "downcli":      {"kind": "line", "icon": "▼", "title": "down cli",
+                     "accent": "#9ca3af", "value": "#6b7280"},
+}
+
+
+def _welcome_card(skin, ctx):
+    """Shared Panel welcome: label column + value column + one hint row."""
+    theme  = ctx["theme"]
+    acc    = skin.get("accent") or ctx["acc"]
+    border = skin.get("border") or ctx["border_c"]
+    val_c  = skin.get("value") or theme.get("success", "white")
+    plan   = ctx["plan_cfg"]
+    dirline = ctx["ws_short"] + (f"  ⎇ {ctx['branch']}" if ctx["branch"] else "")
+
+    rows = [
+        ("model", f"[{val_c}]{ctx['short']}[/{val_c}]  [dim]· {ctx['mode_str']}[/dim]"),
+        ("dir",   f"[dim]{dirline}[/dim]"),
+        ("plan",  f"[{plan['color']}]{plan['badge']} {plan['name']}[/{plan['color']}]"
+                  f"  [dim]· {ctx['msg_str']} msgs[/dim]"),
+    ]
+    if skin.get("dense") or ctx["stream_m"] != "auto":
+        rows.append(("stream", f"[dim]{ctx['stream_m']}[/dim]"))
+    if skin.get("dense"):
+        rows.append(("perms", f"[dim]{ctx['perms']}[/dim]"))
+
+    body_lines = [f"  [dim]{label:<7}[/dim] {value}" for label, value in rows]
+    if skin.get("motif"):
+        body_lines.append("")
+        body_lines.append(f"  {skin['motif']}")
+    body_lines.append("")
+    body_lines.append(f"  [dim]{_WELCOME_HINT}[/dim]")
+
+    tag   = skin.get("tag")
+    title = (f"[bold {acc}]{skin['icon']}  {skin['title']}[/bold {acc}]"
+             + (f"  [dim {acc}]╱ {tag}[/dim {acc}]" if tag else "")
+             + f"  [dim]v{VERSION}[/dim]")
+    sig      = skin.get("signature") or ctx["username"]
+    subtitle = f"[dim {acc}]{sig} · {plan['badge']} {plan['name']}[/dim {acc}]"
+    console.print()
+    console.print(Panel("\n".join(body_lines), title=title, subtitle=subtitle,
+                        border_style=border, padding=(0, 1)))
+    console.print()
+
+
+def _welcome_line(skin, ctx):
+    """Minimal welcome: one or two quiet lines, no frame."""
+    if skin.get("zen"):
+        zen_char = ctx["state"].get("_zen_char", "$")
+        console.print()
+        console.print(
+            f"  [dim]{zen_char}[/dim]  [white]AI Studio CLI[/white]  "
+            f"[dim]v{VERSION}  ·  {ctx['plan_cfg']['name']}  ·  {ctx['short']}  ·  {ctx['ws_short']}[/dim]")
+        console.print()
+        return
+    acc   = skin.get("accent", "dim white")
+    val_c = skin.get("value", "dim")
+    plan  = ctx["plan_cfg"]
+    console.print()
+    console.print(f"  [{acc}]{skin['icon']}  {skin['title']}  v{VERSION}[/{acc}]")
+    console.print(
+        f"  [{val_c}]{ctx['short']}  ·  {ctx['mode_str']}  ·  "
+        f"{plan['badge']} {plan['name']}  ·  {ctx['ws_short']}[/{val_c}]")
+    console.print(f"  [dim]{_WELCOME_HINT}[/dim]")
+    console.print()
+
+
+def _welcome_rule(skin, ctx):
+    """Claude-style welcome: ruled header, label column, no panel frame."""
+    theme = ctx["theme"]
+    acc   = ctx["acc"]
+    plan  = ctx["plan_cfg"]
+    console.print()
+    console.print(
+        f"  [{acc}]◆[/{acc}]  [bold white]AI Studio CLI[/bold white]  [dim]v{VERSION}[/dim]  "
+        f"[{acc}]{plan['badge']} {plan['name']}[/{acc}]")
+    console.print(f"  [{acc}]{'─' * 58}[/{acc}]")
+    console.print()
+    console.print(f"  [dim]model[/dim]    [{theme['success']}]{ctx['short']}[/{theme['success']}]")
+    console.print(f"  [dim]dir[/dim]      [white]{ctx['ws_short']}[/white]")
+    console.print(f"  [dim]via[/dim]      [dim]{ctx['mode_str']}[/dim]")
+    console.print(f"  [dim]stream[/dim]   [dim]{ctx['stream_m']}[/dim]")
+    console.print(f"  [dim]msgs[/dim]     [dim]{ctx['msg_str']}[/dim]")
+    console.print()
+    console.print(f"  [dim]{_WELCOME_HINT}[/dim]")
+    console.print()
+
+
 def render_welcome(state):
     """Render startup screen — plan-aware, ui-aware."""
     theme    = state.get("theme", THEMES["default"])
@@ -10837,326 +10976,37 @@ def render_welcome(state):
             f"[{acc}]/upgrade[/{acc}] [dim]to keep getting new features.[/dim]"
         )
 
-    # ── STUDIO ──────────────────────────────────────────────────────────────
-    if ui == "studio":
-        lines = [
-            f"  [bold]{short}[/bold]  [dim]{mode_str}[/dim]",
-            f"  [dim]{ws_short}[/dim]",
-        ]
-        if mlimit < 99999:
-            lines.append(f"  [dim]{msg_str} messages[/dim]")
-        lines.append("")
-        lines.append(f"  [dim]/enter · /models · /vibe · /help[/dim]")
-        console.print()
-        console.print(Panel(
-            "\n".join(lines),
-            title=f"[bold {border_c}]AI Studio CLI  v{VERSION}[/bold {border_c}]"
-                  f"  {plan_badge}",
-            border_style=border_c,
-            padding=(1, 2),
-        ))
-        return
+    _git_branch = ""
+    try:
+        r = subprocess.run(["git", "branch", "--show-current"],
+                           capture_output=True, text=True, timeout=1, cwd=ws_str)
+        if r.returncode == 0:
+            _git_branch = r.stdout.strip()
+    except Exception:
+        pass
 
-    # ── CLAUDE ──────────────────────────────────────────────────────────────
-    if ui == "claude":
-        bar = f"[{acc}]{'─' * 58}[/{acc}]"
-        console.print()
-        console.print(f"  [{acc}]◆[/{acc}]  [bold white]AI Studio CLI[/bold white]  [dim]v{VERSION}[/dim]  [{acc}]{plan_cfg['badge']} {plan_cfg['name']}[/{acc}]")
-        console.print(f"  {bar}")
-        console.print()
-        console.print(f"  [dim]model[/dim]    [{theme['success']}]{short}[/{theme['success']}]")
-        console.print(f"  [dim]dir[/dim]      [white]{ws_short}[/white]")
-        console.print(f"  [dim]via[/dim]      [dim]{mode_str}[/dim]")
-        console.print(f"  [dim]stream[/dim]   [dim]{stream_m}[/dim]")
-        console.print(f"  [dim]msgs[/dim]     [dim]{msg_str}[/dim]")
-        console.print()
-        console.print(f"  [{acc}]/enter .[/{acc}]  [{acc}]/read[/{acc}]  [{acc}]/patch[/{acc}]  [{acc}]/agent[/{acc}]  [{acc}]/fif[/{acc}]  [{acc}]/models[/{acc}]  [{acc}]/recap[/{acc}]  [{acc}]/help[/{acc}]")
-        console.print()
-        return
+    ctx = {
+        "short": short, "mode_str": mode_str, "ws_short": ws_short,
+        "plan_cfg": plan_cfg, "msg_str": msg_str, "sess_n": sess_n,
+        "username": username, "stream_m": stream_m, "perms": perms,
+        "branch": _git_branch, "theme": theme, "acc": acc,
+        "border_c": border_c, "plan_badge": plan_badge, "state": state,
+    }
 
-    # ── ZEN ────────────────────────────────────────────────────────────────
-    if ui == "zen":
-        zen_char = state.get("_zen_char", "$")
-        console.print()
-        console.print(f"  [dim]{zen_char}[/dim]  [white]AI Studio CLI[/white]  [dim]v{VERSION}  ·  {plan_cfg['name']}  ·  {short}  ·  {ws_short}[/dim]")
-        console.print()
-        return
-
-    # ── CODEX ──────────────────────────────────────────────────────────────
-    if ui == "codex":
-        git_branch = ""
-        try:
-            r = subprocess.run(["git", "branch", "--show-current"],
-                               capture_output=True, text=True, timeout=2,
-                               cwd=ws_str)
-            if r.returncode == 0 and r.stdout.strip():
-                git_branch = r.stdout.strip()
-        except Exception:
-            pass
-
-        git_line = f"\ngit          {git_branch}" if git_branch else ""
-        bar = "─" * 54
-        body = (
-            f"[bold green]$>[/bold green] [bold]AI Studio CLI  v{VERSION}[/bold]  "
-            f"[dim]{plan_cfg['badge']} {plan_cfg['name']}[/dim]\n"
-            f"[dim]{bar}[/dim]\n"
-            f"[green]model[/green]        {short}\n"
-            f"[green]provider[/green]     {mode_str}\n"
-            f"[green]stream[/green]       {stream_m}\n"
-            f"[green]dir[/green]          {ws_short}\n"
-            f"[green]perms[/green]        {perms}"
-            f"{git_line}\n"
-            f"[green]messages[/green]     {msg_str}\n"
-            f"[dim]{bar}[/dim]\n"
-            "[dim]agents  ·  berry  silicon  cockroach  savannah[/dim]\n"
-            "[dim]cmds    ·  /models /enter /patch /fif /vibe /help[/dim]\n"
-            "[dim]tip     ·  /ui studio|claude|gemini|nova|foxxia[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold green]// Studio v{VERSION}[/bold green]",
-            border_style="green",
-        ))
-        return
-
-    # ── GHOST ──────────────────────────────────────────────────────────────
-    if ui == "ghost":
-        console.print()
-        console.print(f"  [dim white]◌  ghost studio  v{VERSION}[/dim white]")
-        console.print(f"  [dim]{'·' * 40}[/dim]")
-        console.print(f"  [dim]model    {short}[/dim]")
-        console.print(f"  [dim]via      {mode_str}[/dim]")
-        console.print(f"  [dim]plan     {plan_cfg['badge']} {plan_cfg['name']}[/dim]")
-        console.print(f"  [dim]dir      {ws_short}[/dim]")
-        console.print(f"  [dim]{'·' * 40}[/dim]")
-        console.print(f"  [dim]/enter · /models · /agent berry · /help[/dim]")
-        console.print()
-        return
-
-    # ── NOVA ──────────────────────────────────────────────────────────────
-    if ui == "nova":
-        nova_body = (
-            f"  [bold magenta]◆ Model[/bold magenta]    [cyan]{short}[/cyan]  [dim]· {mode_str}[/dim]\n"
-            f"  [bold magenta]◆ Dir[/bold magenta]      [dim]{ws_short}[/dim]\n"
-            f"  [bold magenta]◆ Plan[/bold magenta]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs[/dim]\n"
-            f"  [bold magenta]◆ Stream[/bold magenta]   [dim]{stream_m}[/dim]\n\n"
-            f"  [dim magenta]/enter .   /models   /agent berry   /vibe   /arena   /help[/dim magenta]"
-        )
-        console.print(Panel(
-            nova_body,
-            title=f"[bold magenta]⚡  NOVA  STUDIO  CLI  v{VERSION}[/bold magenta]",
-            subtitle=f"[dim magenta]{plan_cfg['badge']} {plan_cfg['name']}[/dim magenta]",
-            border_style="magenta",
-            padding=(0, 2),
-        ))
-        console.print()
-        return
-
-    # ── FOXXIA ──────────────────────────────────────────────────────────────
-    if ui == "foxxia":
-        fox_body = (
-            f"  [bold #fbbf24]Model[/bold #fbbf24]    [#fbbf24]{short}[/#fbbf24]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #fbbf24]Dir[/bold #fbbf24]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #fbbf24]Plan[/bold #fbbf24]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            fox_body,
-            title=f"[bold #f97316]🦊  FOXXIA[/bold #f97316]  [dim #fbbf24]╱  Dev Studio  ·  v{VERSION}[/dim #fbbf24]",
-            subtitle=f"[dim #f97316]Foxxed909  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #f97316]",
-            border_style="#f97316",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #f97316]/enter .   /models   /agent berry   /vibe   /help[/dim #f97316]")
-        console.print()
-        return
-
-    # ── STRAWBERRY ──────────────────────────────────────────────────────────
-    if ui == "strawberry":
-        berry_body = (
-            f"  [bold #fb7185]Model[/bold #fb7185]    [#fb7185]{short}[/#fb7185]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #fb7185]Dir[/bold #fb7185]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #fb7185]Plan[/bold #fb7185]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            berry_body,
-            title=f"[bold #e11d48]🍓  STRAWBERRY[/bold #e11d48]  [dim #fb7185]╱  Dev Studio  ·  v{VERSION}[/dim #fb7185]",
-            subtitle=f"[dim #e11d48]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #e11d48]",
-            border_style="#e11d48",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #e11d48]/enter .   /models   /agent berry   /vibe   /help[/dim #e11d48]")
-        console.print()
-        return
-
-    # ── DARK RED ────────────────────────────────────────────────────────────
-    if ui == "darkred":
-        body = (
-            f"  [bold #dc143c]Model[/bold #dc143c]    [#dc143c]{short}[/#dc143c]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #dc143c]Dir[/bold #dc143c]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #dc143c]Plan[/bold #dc143c]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold #dc143c]🩸  DARK RED[/bold #dc143c]  [dim #8b0000]╱  Dev Studio  ·  v{VERSION}[/dim #8b0000]",
-            subtitle=f"[dim #8b0000]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #8b0000]",
-            border_style="#8b0000",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #8b0000]/enter .   /models   /agent berry   /vibe   /help[/dim #8b0000]")
-        console.print()
-        return
-
-    # ── SOPHIA ──────────────────────────────────────────────────────────────
-    if ui == "sophia":
-        body = (
-            f"  [bold #c084fc]Model[/bold #c084fc]    [#c084fc]{short}[/#c084fc]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #c084fc]Dir[/bold #c084fc]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #c084fc]Plan[/bold #c084fc]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold #c084fc]💜  SOPHISTICATED SOPHIA[/bold #c084fc]  [dim #a855f7]╱  v{VERSION}[/dim #a855f7]",
-            subtitle=f"[dim #6b21a8]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #6b21a8]",
-            border_style="#6b21a8",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #6b21a8]/enter .   /models   /agent berry   /vibe   /help[/dim #6b21a8]")
-        console.print()
-        return
-
-    # ── GOD OWN SON ─────────────────────────────────────────────────────────
-    if ui == "godson":
-        body = (
-            f"  [bold #fde68a]Model[/bold #fde68a]    [#fde68a]{short}[/#fde68a]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #fde68a]Dir[/bold #fde68a]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #fde68a]Plan[/bold #fde68a]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold #fde68a]✝  GOD OWN SON[/bold #fde68a]  [dim #b45309]╱  Dev Studio  ·  v{VERSION}[/dim #b45309]",
-            subtitle=f"[dim #b45309]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #b45309]",
-            border_style="#b45309",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #b45309]/enter .   /models   /agent berry   /vibe   /help[/dim #b45309]")
-        console.print()
-        return
-
-    # ── DOWN CLI ────────────────────────────────────────────────────────────
-    if ui == "downcli":
-        console.print()
-        console.print(f"  [#9ca3af]▼  down cli  v{VERSION}[/#9ca3af]")
-        console.print(f"  [dim]{'╌' * 40}[/dim]")
-        console.print(f"  [#6b7280]model    {short}[/#6b7280]")
-        console.print(f"  [#6b7280]via      {mode_str}[/#6b7280]")
-        console.print(f"  [#6b7280]plan     {plan_cfg['badge']} {plan_cfg['name']}[/#6b7280]")
-        console.print(f"  [#6b7280]dir      {ws_short}[/#6b7280]")
-        console.print(f"  [dim]{'╌' * 40}[/dim]")
-        console.print(f"  [dim #6b7280]/enter · /models · /agent berry · /help[/dim #6b7280]")
-        console.print()
-        return
-
-    # ── BAD HAPPENING ───────────────────────────────────────────────────────
-    if ui == "badhappening":
-        body = (
-            f"  [bold #ea580c]Model[/bold #ea580c]    [#84cc16]{short}[/#84cc16]"
-            f"  [dim]·  {mode_str}[/dim]\n"
-            f"  [bold #ea580c]Dir[/bold #ea580c]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #ea580c]Plan[/bold #ea580c]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim]{msg_str} msgs  ·  session #{sess_n}[/dim]"
-        )
-        console.print(Panel(
-            body,
-            title=f"[bold #ea580c]⚠  BAD HAPPENING[/bold #ea580c]  [dim #84cc16]╱  v{VERSION}[/dim #84cc16]",
-            subtitle=f"[dim #ea580c]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #ea580c]",
-            border_style="#ea580c",
-            padding=(0, 2),
-        ))
-        console.print("  [dim #ea580c]/enter .   /models   /agent berry   /vibe   /help[/dim #ea580c]")
-        console.print()
-        return
-
-    # ── RAIN ────────────────────────────────────────────────────────────────
-    if ui == "rain":
-        console.print(Panel(
-            f"[bold #00FF41]R  A  I  N   S  T  U  D  I  O[/bold #00FF41]\n"
-            f"[dim #00FF41]v{VERSION}  ·  the terminal breathes[/dim #00FF41]",
-            border_style="#00FF41",
-            title="[bold #00FF41]░ ░ ░[/bold #00FF41]",
-            subtitle=f"[dim #00FFFF]{username}  ·  {plan_cfg['badge']} {plan_cfg['name']}[/dim #00FFFF]",
-            padding=(0, 2),
-        ))
-        console.print()
-        noise = (
-            "[dim #00FF41]│[/dim #00FF41]"
-            "[bold #00FF41]█[/bold #00FF41]"
-            "[dim #00FF41]╎[/dim #00FF41]"
-            "[bold #00FFFF]▓[/bold #00FFFF]"
-            "[dim #00FF41]│[/dim #00FF41]"
-            "[bold #00FF41]░[/bold #00FF41]"
-            "[dim #00FF41]╎[/dim #00FF41]"
-            "[bold #00FFFF]│[/bold #00FFFF]"
-            "[dim #00FF41]█[/dim #00FF41]"
-            "[bold #00FF41]░[/bold #00FF41]"
-            "[dim #00FF41]╎[/dim #00FF41]"
-            "[bold #00FFFF]▓[/bold #00FFFF]"
-        )
-        console.print(f"  {noise}")
-        console.print()
-        info = (
-            f"  [bold #00FF41]░ Model[/bold #00FF41]    [#00FFFF]{short}[/#00FFFF]"
-            f"  [dim #00FF41]· {mode_str}[/dim #00FF41]\n"
-            f"  [bold #00FF41]░ Dir[/bold #00FF41]      [dim]{ws_short}[/dim]\n"
-            f"  [bold #00FF41]░ Plan[/bold #00FF41]     [{plan_cfg['color']}]{plan_cfg['badge']} {plan_cfg['name']}[/{plan_cfg['color']}]"
-            f"  [dim #00FF41]{msg_str} msgs[/dim #00FF41]\n"
-            f"  [bold #00FF41]░ Stream[/bold #00FF41]   [dim #00FF41]{stream_m}[/dim #00FF41]\n"
-        )
-        console.print(Panel(
-            info,
-            border_style="#00FF41",
-            padding=(0, 1),
-        ))
-        console.print(
-            "  [dim #00FF41]/enter .   /models   /agent berry   /vibe   /help[/dim #00FF41]\n"
-        )
-        return
-
-    # ── CELESTIAL COLLECTION (unified redesigned chrome) ─────────────────────
     if ui in CELESTIAL_STYLES:
         _render_celestial_welcome(
             ui, theme, short, mode_str, ws_short, plan_cfg,
             perms, stream_m, msg_str, sess_n, username,
         )
         return
-
-    # ── GEMINI (default) ────────────────────────────────────────────────────
-    # Redesigned inline instead of delegating to get_banner
-    console.print()
-    console.print(Panel(
-        f"  [{acc}]◆  AI Studio CLI  v{VERSION}[/{acc}]\n\n"
-        f"  {plan_badge}  [dim]·  {mode_str}[/dim]\n\n"
-        f"  [bold]Model[/bold]     [{theme['success']}]{short}[/{theme['success']}]\n"
-        f"  [bold]Dir[/bold]       [dim]{ws_short}[/dim]\n"
-        f"  [bold]Stream[/bold]    [dim]{stream_m}[/dim]\n"
-        f"  [bold]Perms[/bold]     [dim]{perms}[/dim]\n"
-        f"  [bold]Messages[/bold]  [dim]{msg_str}[/dim]\n\n"
-        f"  [dim]/enter .   /models   /agent berry   /vibe   /help[/dim]",
-        title=f"[bold {border_c}]AI Studio CLI[/bold {border_c}]",
-        border_style=border_c,
-        padding=(0, 1),
-    ))
-    console.print()
+    skin = _WELCOME_SKINS.get(ui) or _WELCOME_SKINS["gemini"]
+    kind = skin.get("kind", "card")
+    if kind == "rule":
+        _welcome_rule(skin, ctx)
+    elif kind == "line":
+        _welcome_line(skin, ctx)
+    else:
+        _welcome_card(skin, ctx)
 
 
 def cmd_agents(state):
@@ -11324,6 +11174,12 @@ def _make_toolbar(state):
                 parts.append(f"{lt.get('in',0)}↓t")
             if show("tokens"):
                 parts.append(f"{lt.get('sec',0)}s")
+
+        # Context meter (estimated tokens in play; nudge /compact when heavy)
+        ctx_t = state.get("_ctx_tokens", 0)
+        if show("ctx") and ctx_t:
+            ctx_fmt = f"{ctx_t/1000:.1f}k" if ctx_t >= 1000 else str(ctx_t)
+            parts.append(f"ctx:{ctx_fmt}" + (" <b>/compact</b>" if ctx_t >= 24000 else ""))
 
         # Mode
         if show("mode") and chat_mode and chat_mode != "normal":

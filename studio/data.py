@@ -527,7 +527,7 @@ CHAT_MODES = {
 }
 
 # ── Statusline defaults (used by toolbar when state has no override) ──────────
-_STATUSLINE_DEFAULTS_LAZY = {"model", "plan", "stream", "branch", "tokens", "timer", "mode", "agent", "fast"}
+_STATUSLINE_DEFAULTS_LAZY = {"model", "plan", "stream", "branch", "tokens", "ctx", "timer", "mode", "agent", "fast"}
 
 VIBE_PRESETS = {
     # ── Core vibes ───────────────────────────────────────────────────────────

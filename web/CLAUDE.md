@@ -46,6 +46,15 @@ GC_MODELS in index.html must use IDs from the list above.
 - Group Chat sends each model in parallel via `Promise.allSettled`; responses are NOT saved to `messages[]` or conversation history
 - `_cmConnect` only reconnects on error if `_cmOpen === true` (panel open)
 
+## Design system (v11 redesign)
+- ALL colors come from the :root tokens in index.html (warm dark #131211, terracotta
+  --acc #d97757, IBM Plex Sans/Mono). Never hardcode palette values — the v10 "Gemini
+  layer" full of #4285f4/#19c37d/#e8eaed hardcodes is exactly what the v11 retheme removed.
+- Hover/pressed states use --hover/--hover2/--hover3 (warm-tinted alphas), not rgba(255,255,255,x).
+- Monospace (--font-mono) is the voice for model names, plan badges, and metadata chips.
+- No gradients, no glows, no glassmorphism. One accent, used sparingly.
+- Toasts stack bottom-right (.toast-wrap); nothing may overlap the composer or header.
+
 ## Known gotchas
 - `globalLimit` `skip` must be a single function combining localhost bypass AND path bypass — duplicate property kills the first
 - `/api/research` double-`[DONE]`: the data handler must NOT re-emit `[DONE]` from upstream; only the `end` event sends the final `[DONE]`

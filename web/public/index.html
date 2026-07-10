@@ -1716,6 +1716,43 @@ body.gm-ui-active .file-pre-name{min-width:0}
   .toast,.toast-wrap{max-width:calc(100vw - 32px)}
 }
 
+/* ── Backstage Pass ── */
+.bp-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;
+  align-items:center;justify-content:center;z-index:300;padding:20px}
+.bp-ov.on{display:flex}
+.bp-box{width:100%;max-width:360px;background:var(--bg-elev);border:1px solid var(--border2);
+  border-radius:var(--r-lg);padding:26px 24px;box-shadow:var(--shadow-lg)}
+.bp-title{font-size:17px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:9px}
+.bp-title svg{width:18px;height:18px;color:var(--acc)}
+.bp-sub{font-size:12.5px;color:var(--text2);margin:6px 0 16px;line-height:1.55}
+.bp-input{width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r-sm);
+  padding:11px 13px;color:var(--text);font-size:14px;outline:none;font-family:var(--font-mono);
+  transition:border-color .15s}
+.bp-input:focus{border-color:var(--acc)}
+.bp-btn{width:100%;margin-top:10px;background:var(--acc);border:none;border-radius:var(--r-sm);
+  padding:11px;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;
+  transition:filter .15s}
+.bp-btn:hover{filter:brightness(1.07)}
+.bp-btn:disabled{opacity:.5;cursor:wait}
+.bp-status{min-height:18px;font-size:12.5px;margin-top:10px;color:var(--text2)}
+.bp-status.err{color:var(--danger)}
+.bp-reveal{display:none;text-align:center;padding:6px 0 2px}
+.bp-reveal.on{display:block;animation:bpIn .3s cubic-bezier(.22,1,.36,1)}
+@keyframes bpIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.bp-reveal.on{animation:none}}
+.bp-tier{font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--acc);
+  text-transform:uppercase;letter-spacing:.04em;margin:4px 0 2px}
+.bp-note{font-size:12.5px;color:var(--text2)}
+.bp-fine{font-size:11px;color:var(--text3);margin-top:14px;text-align:center}
+.bp-close{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--text3);
+  font-size:18px;cursor:pointer;padding:4px}
+.bp-close:hover{color:var(--text)}
+.bp-link{display:flex;align-items:center;gap:8px;margin:2px 7px;padding:8px 11px;border-radius:var(--r-sm);
+  background:none;border:none;color:var(--text2);font-size:12.5px;cursor:pointer;font-family:inherit;
+  width:calc(100% - 14px);text-align:left;transition:background .12s,color .12s}
+.bp-link:hover{background:var(--hover2);color:var(--text)}
+.bp-link svg{width:14px;height:14px;color:var(--acc)}
+
 </style>
 </head>
 <body data-theme="dark">
@@ -1815,6 +1852,10 @@ body.gm-ui-active .file-pre-name{min-width:0}
       </div>
       <span class="sf-upgrade-arrow">✦</span>
     </a>
+    <button class="bp-link" onclick="openBackstage()" title="Redeem a pass — no account needed">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 9a3 3 0 0 1 0 6v3a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-3a3 3 0 0 1 0-6V6a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1z"/><line x1="13" y1="5" x2="13" y2="19" stroke-dasharray="2 3"/></svg>
+      Backstage Pass
+    </button>
     <div class="sf-user-row" onclick="openSettings()">
       <div class="sf-avatar" id="sfAvatar">N</div>
       <span class="sf-user-name" id="sfUserName">Nifemi Foxx</span>
@@ -1827,6 +1868,29 @@ body.gm-ui-active .file-pre-name{min-width:0}
 </div>
 <div class="mob-overlay" id="mobOverlay" onclick="closeSidebarMobile()"></div>
 <div class="drop-zone" id="dropZone"><div class="drop-zone-msg">Drop image to attach</div></div>
+<div class="bp-ov" id="bpOv" onclick="if(event.target===this)closeBackstage()">
+  <div class="bp-box" style="position:relative">
+    <button class="bp-close" onclick="closeBackstage()" title="Close">×</button>
+    <div class="bp-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 9a3 3 0 0 1 0 6v3a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-3a3 3 0 0 1 0-6V6a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1z"/><line x1="13" y1="5" x2="13" y2="19" stroke-dasharray="2 3"/></svg>
+      Backstage Pass
+    </div>
+    <div class="bp-sub">Got a pass? The door staff will check the list and call your tier. No account needed.</div>
+    <div id="bpForm">
+      <input class="bp-input" id="bpInput" placeholder="enter your pass" autocomplete="off"
+             onkeydown="if(event.key==='Enter')redeemPass()"/>
+      <button class="bp-btn" id="bpBtn" onclick="redeemPass()">Check the door list</button>
+      <div class="bp-status" id="bpStatus"></div>
+    </div>
+    <div class="bp-reveal" id="bpReveal">
+      <div class="bp-note">the door list says</div>
+      <div class="bp-tier" id="bpTier">—</div>
+      <div class="bp-note" id="bpNote"></div>
+      <button class="bp-btn" style="margin-top:14px" onclick="closeBackstage()">Take the stage</button>
+    </div>
+    <div class="bp-fine">Passes unlock this device only — sign in later to sync across devices.</div>
+  </div>
+</div>
 <div class="toast-wrap" id="toastWrap"></div>
 
 <!-- ── Main ──────────────────────────────────────────────────────────────────── -->
@@ -3971,6 +4035,42 @@ function _checkPlanUpdates(){
   }
 }
 document.addEventListener("DOMContentLoaded", ()=>{ _checkPlanUpdates(); _restoreCustomization(); _gmInit(); });
+
+// ── Backstage Pass ────────────────────────────────────────────────────────────
+function openBackstage(){
+  document.getElementById("bpOv").classList.add("on");
+  document.getElementById("bpForm").style.display="";
+  document.getElementById("bpReveal").classList.remove("on");
+  document.getElementById("bpStatus").textContent="";
+  const inp=document.getElementById("bpInput"); inp.value=""; setTimeout(()=>inp.focus(),50);
+}
+function closeBackstage(){ document.getElementById("bpOv").classList.remove("on"); }
+async function redeemPass(){
+  const inp=document.getElementById("bpInput"), btn=document.getElementById("bpBtn"),
+        st=document.getElementById("bpStatus");
+  const code=(inp.value||"").trim();
+  if(!code){ st.textContent="Type your pass first."; st.className="bp-status err"; return; }
+  btn.disabled=true; st.className="bp-status"; st.textContent="Checking the door list…";
+  try{
+    const r=await fetch("/api/code/redeem",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({code})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ st.textContent=d.error||"That pass isn't on the door list."; st.className="bp-status err"; btn.disabled=false; return; }
+    localStorage.setItem("studioPlan", d.tier);
+    if(d.allAccess){
+      localStorage.setItem("studioLabAccess","1");
+      localStorage.setItem("zeroAccess","1");
+    }
+    if(typeof _setPlanPill==="function") _setPlanPill(d.tier);
+    document.getElementById("bpForm").style.display="none";
+    document.getElementById("bpTier").textContent = d.allAccess ? "ALL ACCESS" : d.tier;
+    document.getElementById("bpNote").textContent = d.note || "";
+    document.getElementById("bpReveal").classList.add("on");
+  }catch(e){
+    st.textContent="Couldn't reach the door. Try again."; st.className="bp-status err";
+  }
+  btn.disabled=false;
+}
 
 // ── Sidebar upgrade pill ──────────────────────────────────────────────────────
 const _PLAN_NAMES = {free:"Free",starter:"Starter",pro:"Pro",dev:"Dev",max:"Max",ultra:"Ultra",team:"Team",enterprise:"Enterprise",creator:"Creator"};

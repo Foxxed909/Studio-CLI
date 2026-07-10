@@ -1094,6 +1094,43 @@ app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ user: req.user, plan: sub?.plan || "free", sub: sub || null });
 });
 
+// ── Backstage Pass — code redemption, no account needed ──────────────────────
+// A pass grants a device-local tier. Regular passes roll a weighted random
+// draw server-side; the All-Access phrase skips the draw and opens everything.
+// Codes: STAGE_CODES env (comma-separated) merged with built-in defaults.
+// All-Access phrase overridable via STAGE_ALL_ACCESS_CODE.
+const passLimit = rateLimit({ windowMs: 10 * 60 * 1000, max: 10,
+  message: { error: "Too many attempts — the door staff need a break. Try again in a few minutes." } });
+
+const _normCode = (c) => String(c || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+const BACKSTAGE_CODES = new Set(
+  ("opening-night,front-row,encore,soundcheck," + (process.env.STAGE_CODES || ""))
+    .split(",").map(_normCode).filter(Boolean));
+const ALL_ACCESS = _normCode(process.env.STAGE_ALL_ACCESS_CODE || "I don't have the time");
+
+// Weighted draw: mostly Starter/Pro, occasionally Dev/Max, rare Ultra.
+const PASS_DRAW = [["starter", 35], ["pro", 30], ["dev", 20], ["max", 12], ["ultra", 3]];
+function drawTier() {
+  let roll = Math.random() * PASS_DRAW.reduce((a, [, w]) => a + w, 0);
+  for (const [tier, w] of PASS_DRAW) { roll -= w; if (roll < 0) return tier; }
+  return "starter";
+}
+
+app.post("/api/code/redeem", passLimit, express.json({ limit: "2kb" }), (req, res) => {
+  const code = _normCode((req.body || {}).code);
+  if (!code) return res.status(400).json({ error: "No code given" });
+  if (code === ALL_ACCESS) {
+    return res.json({ ok: true, allAccess: true, tier: "creator", pass: "All-Access Pass",
+                      note: "The stage door opens. Everything is unlocked on this device." });
+  }
+  if (!BACKSTAGE_CODES.has(code)) {
+    return res.status(404).json({ error: "That pass isn't on the door list." });
+  }
+  const tier = drawTier();
+  res.json({ ok: true, allAccess: false, tier, pass: "Backstage Pass",
+             note: "Enjoy the show." });
+});
+
 // ── Stage Beta — capped seats, server-enforced ───────────────────────────────
 // Studio Stage Beta is limited to BETA_MAX_SEATS testers (default 10). Seats
 // are stored in a JSON file next to the server; on ephemeral hosts set

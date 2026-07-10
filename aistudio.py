@@ -1431,7 +1431,7 @@ ALL_COMMANDS = [
     "/ls","/cd","/pwd","/cat","/find","/grep","/mkdir","/rm","/cp","/mv","/diff","/tree","/summary",
     "/shell","/run","/git","/watch",
     "/save","/load","/history","/remember","/memory","/context","/forget",
-    "/compare","/persona","/mode","/model","/models","/cli","/openrouter","/claude","/connect","/login","/logout-cloud","/theme",
+    "/compare","/persona","/mode","/model","/models","/cli","/openrouter","/claude","/connect","/login","/logout-cloud","/redeem","/theme",
     "/ui","/stream",
     "/workspace","/perm",
     "/cache",
@@ -1581,6 +1581,7 @@ COMMAND_METADATA = {
     "/vibe":           ("UI",      "One-shot UI + theme preset (e.g. /vibe foxxia)"),
     "/connect":        ("AI",      "Use your existing Claude/ChatGPT/Gemini subscription via its CLI"),
     "/login":          ("ME",      "Sign in with Google (Studio Stage account sync)"),
+    "/redeem":         ("ME",      "Backstage Pass: redeem a code for a tier — no account needed"),
     "/logout-cloud":   ("ME",      "Disconnect Studio Stage account"),
     "/quickstart":     ("HELP",    "Show 5-step guide tailored to your plan"),
     "/restart":        ("SYS",     "Restart Studio in-place (apply updates without closing terminal)"),
@@ -2329,6 +2330,44 @@ def cmd_login(state, args=""):
     save_profile(prof)
     console.print(f"  [{theme['success']}]✓ Signed in as {info['email']}[/{theme['success']}]"
                   f"  [dim]· synced to profile[/dim]")
+    return state
+
+
+def cmd_redeem(state, args=""):
+    """/redeem <code> — Backstage Pass: redeem a code for a tier, no account needed."""
+    theme = state.get("theme", THEMES["default"])
+    acc   = theme.get("accent", "cyan")
+    code  = (args or "").strip()
+    if not code:
+        code = _safe_input("  pass › ").strip()
+    if not code:
+        console.print("[yellow]Usage: /redeem <code>[/yellow]")
+        return state
+    try:
+        payload = json.dumps({"code": code}).encode()
+        req = request.Request(f"{STAGE_URL}/api/code/redeem", data=payload,
+                              headers={"Content-Type": "application/json"}, method="POST")
+        with request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib_error.HTTPError as e:
+        try:
+            msg = json.loads(e.read().decode()).get("error", "")
+        except Exception:
+            msg = ""
+        console.print(f"[yellow]{msg or 'That pass is not on the door list.'}[/yellow]")
+        return state
+    except Exception as e:
+        console.print(f"[red]Couldn't reach the door ({STAGE_URL}): {e}[/red]")
+        console.print("[dim]Set STUDIO_STAGE_URL if your Stage server lives elsewhere.[/dim]")
+        return state
+    tier = data.get("tier", "free")
+    set_plan(state, tier)
+    label = "ALL ACCESS" if data.get("allAccess") else tier.upper()
+    console.print(Panel(
+        f"  [dim]the door list says[/dim]\n"
+        f"  [bold {acc}]{label}[/bold {acc}]\n"
+        f"  [dim]{data.get('note', '')}[/dim]",
+        title="[bold]🎟  Backstage Pass[/bold]", border_style=acc, padding=(0, 2)))
     return state
 
 
@@ -12403,6 +12442,7 @@ def run_repl(state):
                     state = cmd_models(state)
                 elif cmd == "connect":  state = cmd_connect(state, args)
                 elif cmd == "login":         state = cmd_login(state, args)
+                elif cmd in ("redeem", "pass"): state = cmd_redeem(state, args)
                 elif cmd == "logout-cloud":  state = cmd_logout_cloud(state, args)
                 elif cmd == "cli":
                     if args=="on":

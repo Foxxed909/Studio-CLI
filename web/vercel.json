@@ -1,17 +1,11 @@
 {
   "version": 2,
   "builds": [
-    { "src": "server.js", "use": "@vercel/node", "config": { "maxDuration": 60 } }
+    { "src": "server.js", "use": "@vercel/node", "config": { "maxDuration": 60, "memory": 512 } }
   ],
   "routes": [
     { "src": "/(.*)", "dest": "/server.js" }
   ],
-  "functions": {
-    "server.js": {
-      "maxDuration": 60,
-      "memory": 512
-    }
-  },
   "env": {
     "NODE_ENV": "production"
   }

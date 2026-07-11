@@ -27,6 +27,7 @@ web/
 - Rate limits: `chatLimit` (60 req/min) on `/api/chat`, `keyLimit` (5/15 min) on `/api/key`, `globalLimit` (200 req/min, skips localhost AND the chat/research/health/stats paths)
 - CSP: `unsafe-inline` scripts allowed (single-file HTML pattern); `connectSrc` is `'self'` only — all external AI calls are server-side
 - `/api/community/stream` — SSE broadcast, in-memory store (60 rolling messages), no persistence
+- `/api/code/redeem` — Backstage Pass: no auth, 10 req/10 min. Codes normalize to [a-z0-9] (case/punctuation-insensitive). Built-ins + `STAGE_CODES` env; All-Access phrase via `STAGE_ALL_ACCESS_CODE` (default is the owner's secret phrase in server.js). Regular passes draw a weighted random tier server-side
 
 ## ALLOWED_MODELS (server enforced)
 Free: llama-3.3-70b-instruct:free, gemma-3-27b-it:free, qwen3-coder:free, gemma-3-12b-it:free,

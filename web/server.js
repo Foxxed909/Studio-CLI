@@ -11,12 +11,14 @@ const rateLimit = require("express-rate-limit");
 const Stripe = require("stripe");
 const { createClient } = require("@supabase/supabase-js");
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY || "");
+// Stripe is optional — without a key the server still boots; billing routes 503.
+const stripe = process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_KEY || ""
-);
+// Supabase is optional — without env config the server still boots;
+// authenticated routes 503 (or use DEV_SKIP_AUTH on localhost).
+const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+  : null;
 
 // ── Auth middleware — verifies Supabase JWT ───────────────────────────────────
 // DEV_SKIP_AUTH=true in .env + localhost-only → bypasses JWT check for local testing.
@@ -28,6 +30,7 @@ async function requireAuth(req, res, next) {
   }
   const token = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!token) return res.status(401).json({ error: "Not authenticated" });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Auth not configured" });
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data?.user) return res.status(401).json({ error: "Invalid session" });
   req.user = data.user;
@@ -183,6 +186,7 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), (req,
   }
   let event;
   try {
+    if (!stripe) return res.status(503).json({ error: "Billing not configured" });
     event = stripe.webhooks.constructEvent(req.body, sig, secret);
   } catch (err) {
     return res.status(400).json({ error: `Webhook Error: ${err.message}` });
@@ -813,6 +817,7 @@ app.get("/api/debug", async (req, res) => {
   // Supabase DB connectivity check (lightweight — just fetches the auth settings)
   let dbStatus = "unknown";
   try {
+    if (!supabaseAdmin) throw new Error("Supabase not configured");
     const { error } = await supabaseAdmin.auth.getUser("probe");
     // A 400/401 means the server responded (connection good); actual network errors throw
     dbStatus = error?.status === 400 || error?.message?.includes("invalid") ? "connected" : "connected";
@@ -1145,6 +1150,7 @@ app.post("/api/stripe/create-checkout", requireAuth, async (req, res) => {
 
   try {
     const host = `${req.protocol}://${req.get("host")}`;
+    if (!stripe) return res.status(503).json({ error: "Billing not configured" });
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode:                 "subscription",
@@ -1170,6 +1176,7 @@ app.get("/api/stripe/plan", async (req, res) => {
   if (!isLocalRequest(req)) {
     const token = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
     if (!token) return res.status(401).json({ error: "Authentication required" });
+    if (!supabaseAdmin) return res.status(503).json({ error: "Auth not configured" });
     const { data, error } = await supabaseAdmin.auth.getUser(token);
     if (error || !data?.user) return res.status(401).json({ error: "Invalid session" });
     if (data.user.email?.toLowerCase() !== email.toLowerCase().trim()) {
@@ -1191,6 +1198,7 @@ app.get("/dashboard", async (req, res) => {
   // Remote: require auth token
   const token = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!token) return res.status(401).send("Sign in required to view the dashboard.");
+  if (!supabaseAdmin) return res.status(503).send("Auth not configured.");
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data?.user) return res.status(401).send("Invalid session — please sign in again.");
   res.sendFile(path.join(__dirname, "public", "dashboard.html"));

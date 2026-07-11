@@ -11,16 +11,17 @@
   var css = document.createElement("style");
   css.textContent =
     "#qdock{position:fixed;right:14px;bottom:96px;display:flex;flex-direction:column;gap:8px;z-index:60}" +
+    "@media(max-width:900px){#qdock,#qcount{display:none!important}}" +
     ".qd-btn{width:38px;height:38px;border-radius:50%;background:var(--surface2,#161a22);" +
     "border:1px solid var(--border,rgba(148,163,184,.2));color:var(--text,#e7ebf0);cursor:pointer;" +
     "font-size:15px;display:flex;align-items:center;justify-content:center;transition:.15s;box-shadow:0 2px 10px rgba(0,0,0,.4)}" +
-    ".qd-btn:hover{border-color:var(--acc,#22d3ee);transform:translateY(-1px)}" +
+    ".qd-btn:hover{border-color:var(--acc,#d97757);transform:translateY(-1px)}" +
     "#scOv{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:70}" +
     "#scOv.on{display:flex}#scBox{max-width:440px;width:90%;background:var(--surface,#0f1117);" +
     "border:1px solid var(--border,rgba(148,163,184,.2));border-radius:14px;padding:22px;color:var(--text,#e7ebf0)}" +
-    "#scBox h3{margin:0 0 12px}#scBox .k{display:flex;justify-content:space-between;font-size:13px;color:var(--text2,#9aa4b2);padding:4px 0}" +
-    "#scBox code{background:#0a0d13;border:1px solid var(--border,#333);border-radius:5px;padding:1px 7px;color:var(--acc,#22d3ee)}" +
-    "#qcount{position:fixed;right:60px;bottom:24px;font-size:11px;color:var(--text2,#9aa4b2);z-index:60;pointer-events:none}" +
+    "#scBox h3{margin:0 0 12px}#scBox .k{display:flex;justify-content:space-between;font-size:13px;color:var(--text2,#b9b2a8);padding:4px 0}" +
+    "#scBox code{background:#0a0d13;border:1px solid var(--border,#333);border-radius:5px;padding:1px 7px;color:var(--acc,#d97757)}" +
+    "#qcount{position:fixed;right:60px;bottom:24px;font-size:11px;color:var(--text2,#b9b2a8);z-index:60;pointer-events:none}" +
     "body.studio-focus .sidebar{display:none!important}";
   document.head.appendChild(css);
 
@@ -99,17 +100,17 @@
     ov.innerHTML =
       '<div style="max-width:420px;width:90%;background:var(--surface,#141416);border:1px solid var(--border,#333);border-radius:16px;padding:22px;color:var(--text,#ededee)">' +
       '<h3 style="margin:0 0 4px">Send feedback</h3>' +
-      '<p style="color:var(--text2,#9aa4b2);font-size:13px;margin:0 0 14px">Bugs, ideas, or love — it lands in the team inbox.</p>' +
+      '<p style="color:var(--text2,#b9b2a8);font-size:13px;margin:0 0 14px">Bugs, ideas, or love — it lands in the team inbox.</p>' +
       '<div style="display:flex;gap:6px;margin-bottom:10px">' +
       ["bug", "idea", "praise", "other"].map(function (k, i) {
         return '<button data-k="' + k + '" class="qfbk-b" style="flex:1;padding:7px;border-radius:8px;border:1px solid var(--border,#333);background:' +
-          (i === 0 ? "var(--acc,#22d3ee);color:#04121a" : "transparent;color:var(--text2,#9aa4b2)") +
+          (i === 0 ? "var(--acc,#d97757);color:#04121a" : "transparent;color:var(--text2,#b9b2a8)") +
           ';cursor:pointer;font:inherit;font-size:12px;text-transform:capitalize">' + k + "</button>";
       }).join("") + "</div>" +
       '<textarea id="qfbm" rows="4" placeholder="What\'s on your mind?" style="width:100%;background:#0a0d13;border:1px solid var(--border,#333);border-radius:10px;color:var(--text,#ededee);padding:11px;font:inherit;font-size:14px;resize:vertical;outline:0"></textarea>' +
       '<div id="qfbe" style="color:#f87171;font-size:12px;min-height:16px;margin-top:6px"></div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">' +
-      '<button class="qfb-cancel" style="background:none;border:1px solid var(--border,#333);color:var(--text2,#9aa4b2);border-radius:9px;padding:9px 15px;cursor:pointer;font:inherit">Cancel</button>' +
+      '<button class="qfb-cancel" style="background:none;border:1px solid var(--border,#333);color:var(--text2,#b9b2a8);border-radius:9px;padding:9px 15px;cursor:pointer;font:inherit">Cancel</button>' +
       '<button class="qfb-send" style="background:var(--ink,#ededee);color:var(--bg,#0a0a0b);border:0;border-radius:9px;padding:9px 18px;cursor:pointer;font:inherit;font-weight:600">Send</button>' +
       "</div></div>";
     document.body.appendChild(ov);
@@ -118,7 +119,7 @@
       btn.onclick = function () {
         kind = btn.getAttribute("data-k");
         ov.querySelectorAll(".qfbk-b").forEach(function (b) { b.style.background = "transparent"; b.style.color = "var(--text2,#9aa4b2)"; });
-        btn.style.background = "var(--acc,#22d3ee)"; btn.style.color = "#04121a";
+        btn.style.background = "var(--acc,#d97757)"; btn.style.color = "#04121a";
       };
     });
     ov.querySelector(".qfb-cancel").onclick = function () { ov.remove(); };

@@ -1,0 +1,45 @@
+name: Deploy Studio Stage
+
+# Deploys web/ to the existing Vercel project ("web", foxxed909's projects)
+# on every push to main that touches web/. Requires ONE repo secret:
+#   VERCEL_TOKEN — create at https://vercel.com/account/tokens
+# Org and project IDs are not secrets; they are pinned below.
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/deploy-vercel.yml"]
+  workflow_dispatch:
+
+env:
+  VERCEL_ORG_ID: team_nnj5MNKwGpt3MY6YnuRulsMt
+  VERCEL_PROJECT_ID: prj_WpfiOqHI8bb3eco4jCzooal2hSRW
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — secret present
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "::error::VERCEL_TOKEN secret is not set. Create a token at vercel.com/account/tokens and add it in Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Vercel CLI
+        run: npm i -g vercel@latest
+
+      - name: Pull project settings
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy to production
+        run: vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }}

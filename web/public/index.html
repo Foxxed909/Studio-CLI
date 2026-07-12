@@ -4,6 +4,13 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Studio Stage</title>
+<meta name="description" content="AI chat with OpenRouter, Gemini, Claude, and more"/>
+<meta name="theme-color" content="#d97757"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Studio"/>
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect fill='%23131211' width='180' height='180'/><text x='50%' y='50%' font-size='108' font-weight='bold' fill='%23d97757' text-anchor='middle' dominant-baseline='middle' font-family='system-ui'>S</text></svg>"/>
+<link rel="manifest" href="/manifest.json"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"/>
@@ -1947,6 +1954,11 @@ body.gm-ui-active .file-pre-name{min-width:0}
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+    <button class="ib" id="installBtn" onclick="promptInstall()" title="Install app" style="display:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
       </svg>
     </button>
     <!-- right side actions -->
@@ -5040,6 +5052,39 @@ function _gmInit() {
   // Init default mode checkmark (Flash-Lite)
   const defTChk = document.getElementById("gmTCheck-flashlite");
   if(defTChk) defTChk.style.visibility = "visible";
+
+  // PWA: Register service worker
+  if('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js').catch(err => {
+      console.log('Service worker registration failed:', err);
+    });
+  }
+
+  // PWA: Handle install prompt
+  let _installPrompt = null;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    _installPrompt = e;
+    const btn = document.getElementById('installBtn');
+    if(btn) btn.style.display = 'flex';
+  });
+  window.addEventListener('appinstalled', () => {
+    _installPrompt = null;
+    const btn = document.getElementById('installBtn');
+    if(btn) btn.style.display = 'none';
+  });
+
+  function promptInstall() {
+    if(!_installPrompt) return;
+    _installPrompt.prompt();
+    _installPrompt.userChoice.then(choice => {
+      if(choice.outcome === 'accepted') {
+        _installPrompt = null;
+        const btn = document.getElementById('installBtn');
+        if(btn) btn.style.display = 'none';
+      }
+    });
+  }
 }
 </script>
 <script src="/studio-extras.js"></script>

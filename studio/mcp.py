@@ -12,6 +12,7 @@ import os
 import subprocess
 import threading
 import time
+import queue
 
 from studio.paths import CONFIG_DIR
 
@@ -52,15 +53,23 @@ class MCPClient:
         self.proc    = None
         self._id     = 0
         self._lock   = threading.Lock()
+        self._stdout_queue = queue.Queue()
+        self._reader_thread = None
+        self._stderr_thread = None
+        self._stderr_lines = []
 
     # ── lifecycle ──────────────────────────────────────────────────────────
     def start(self, timeout=10):
         full_env = {**os.environ, **{k: str(v) for k, v in self.env.items()}}
         self.proc = subprocess.Popen(
             [self.command, *self.args],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, bufsize=1, env=full_env, cwd=self.cwd,
         )
+        self._reader_thread = threading.Thread(target=self._read_stdout, daemon=True)
+        self._reader_thread.start()
+        self._stderr_thread = threading.Thread(target=self._drain_stderr, daemon=True)
+        self._stderr_thread.start()
         # MCP handshake
         self._request("initialize", {
             "protocolVersion": "2024-11-05",
@@ -86,6 +95,24 @@ class MCPClient:
     def __exit__(self, *exc):
         self.close()
 
+    def _read_stdout(self):
+        if not self.proc or not self.proc.stdout:
+            return
+        try:
+            for line in self.proc.stdout:
+                self._stdout_queue.put(line)
+        finally:
+            self._stdout_queue.put(None)
+
+    def _drain_stderr(self):
+        if not self.proc or not self.proc.stderr:
+            return
+        for line in self.proc.stderr:
+            clean = line.rstrip()
+            if clean:
+                self._stderr_lines.append(clean)
+                del self._stderr_lines[:-20]
+
     # ── JSON-RPC plumbing ───────────────────────────────────────────────────
     def _write(self, obj):
         if not self.proc or not self.proc.stdin:
@@ -101,11 +128,19 @@ class MCPClient:
             self._id += 1
             rid = self._id
             self._write({"jsonrpc": "2.0", "id": rid, "method": method, "params": params})
-            deadline = time.time() + timeout
-            while time.time() < deadline:
-                line = self.proc.stdout.readline()
-                if line == "" and self.proc.poll() is not None:
-                    raise RuntimeError("MCP server exited unexpectedly")
+            deadline = time.monotonic() + timeout
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(f"MCP request '{method}' timed out after {timeout}s")
+                try:
+                    line = self._stdout_queue.get(timeout=remaining)
+                except queue.Empty:
+                    raise TimeoutError(f"MCP request '{method}' timed out after {timeout}s")
+                if line is None:
+                    detail = " | ".join(self._stderr_lines[-3:])
+                    suffix = f": {detail}" if detail else ""
+                    raise RuntimeError(f"MCP server exited unexpectedly{suffix}")
                 line = line.strip()
                 if not line:
                     continue
@@ -117,8 +152,9 @@ class MCPClient:
                     if "error" in msg:
                         raise RuntimeError(msg["error"].get("message", "MCP error"))
                     return msg.get("result", {})
-                # ignore notifications / other-id messages
-            raise TimeoutError(f"MCP request '{method}' timed out after {timeout}s")
+                # Notifications and other request IDs remain ignored because
+                # requests are serialized by _lock.
+
 
     # ── high-level API ────────────────────────────────────────────────────────
     def list_tools(self):

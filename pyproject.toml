@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "studiocli"
+version = "11.0.0"
+description = "AI-powered terminal for developers"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "rich>=13.9,<15",
+  "prompt-toolkit>=3.0.48,<4",
+  "cryptography>=43,<47",
+]
+
+[project.optional-dependencies]
+files = [
+  "openpyxl>=3.1,<4",
+  "python-docx>=1.1,<2",
+  "Pillow>=10,<13",
+  "pyfiglet>=1.0,<2",
+]
+
+[project.scripts]
+studio = "aistudio:main"
+aistudio = "aistudio:main"
+
+[tool.setuptools]
+py-modules = ["aistudio"]
+
+[tool.setuptools.packages.find]
+include = ["studio*"]

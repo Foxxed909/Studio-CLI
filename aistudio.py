@@ -414,6 +414,9 @@ def save_edit_perm(mode):
 
 def check_write_allowed(state, path="a file", verb="write"):
     """Return True if the write should proceed. Prompt if needed."""
+    if state.get("autonomous"):
+        console.print(f"[dim yellow]⚡ Auto-approved: {verb} → {path}[/dim yellow]")
+        return True
     mode = state.get("edit_perm") or load_edit_perm()
     if mode in ("auto", "yolo", "bypass"):
         return True
@@ -4623,11 +4626,12 @@ def cmd_diff(state, f1, f2):
 # ── SHELL / RUN ───────────────────────────────────
 def cmd_shell(state, cmd, history):
     console.print(f"[dim]$ {cmd}[/dim]")
+    cwd = state.get("workspace_root") or "."
     try:
         cmd_list = shlex.split(cmd)
     except ValueError:
         cmd_list = cmd.split()
-    result = subprocess.run(cmd_list, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    result = subprocess.run(cmd_list, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
     output = result.stdout + result.stderr
     console.print(output or "[dim](no output)[/dim]")
     if output and result.returncode != 0:
@@ -4641,12 +4645,13 @@ def cmd_run(state, path, history):
     except Exception as e:
         console.print(f"[red]{e}[/red]")
         return history
+    cwd     = state.get("workspace_root") or "."
     ext     = p.suffix.lower()
     runners = {".py":["python"], ".js":["node"], ".ts":["npx","ts-node"], ".sh":["bash"], ".bat":[str(p)]}
     runner  = runners.get(ext)
     if not runner: console.print(f"[yellow]Don't know how to run {ext} files[/yellow]"); return history
     console.print(f"[dim]Running {p}...[/dim]")
-    result = subprocess.run(runner + [str(p)], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    result = subprocess.run(runner + [str(p)], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
     output = result.stdout + result.stderr
     console.print(output or "[dim](no output)[/dim]")
     if output and result.returncode != 0:
@@ -4658,6 +4663,7 @@ def cmd_run(state, path, history):
 
 # ── GIT ───────────────────────────────────────────
 def cmd_git(state, args, history):
+    cwd = state.get("workspace_root") or "."
     if not args:
         console.print(Panel(
             "  [yellow]/git status[/yellow]         — show status\n"
@@ -4670,28 +4676,28 @@ def cmd_git(state, args, history):
         return history
 
     if args == "commit":
-        diff = subprocess.run(["git", "diff", "--cached"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+        diff = subprocess.run(["git", "diff", "--cached"], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd).stdout
         if not diff:
-            diff = subprocess.run(["git", "diff"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
+            diff = subprocess.run(["git", "diff"], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd).stdout
         if not diff: console.print("[yellow]No changes to commit[/yellow]"); return history
         prompt   = f"Write a concise git commit message for these changes:\n\n{diff[:3000]}\n\nFormat: type(scope): description\nJust the message, nothing else."
         response, history = ai_respond(state, prompt, history)
         if response:
             msg = response.strip().split("\n")[0]
             if console.input(f"\n[bold]Commit with: '[cyan]{msg}[/cyan]'? (y/n): [/bold]").strip().lower() == "y":
-                r = subprocess.run(["git", "commit", "-am", msg], capture_output=True, text=True, encoding="utf-8", errors="replace")
+                r = subprocess.run(["git", "commit", "-am", msg], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
                 console.print(r.stdout or r.stderr)
         return history
 
     if args == "explain":
-        log  = subprocess.run(["git", "log", "--oneline", "-10"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
-        diff = subprocess.run(["git", "diff", "HEAD~1"], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout[:3000]
+        log  = subprocess.run(["git", "log", "--oneline", "-10"], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd).stdout
+        diff = subprocess.run(["git", "diff", "HEAD~1"], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd).stdout[:3000]
         prompt = f"Explain these recent git changes:\n\nLog:\n{log}\n\nDiff:\n{diff}"
         _, history = ai_respond(state, prompt, history)
         return history
 
     console.print(f"[dim]$ git {args}[/dim]")
-    r      = subprocess.run(["git"] + shlex.split(args), capture_output=True, text=True, encoding="utf-8", errors="replace")
+    r      = subprocess.run(["git"] + shlex.split(args), capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
     output = r.stdout + r.stderr
     console.print(output or "[dim](no output)[/dim]")
     if r.returncode != 0 and output:
@@ -4709,8 +4715,11 @@ def cmd_watch(state, path, history):
         _watch_stop.set()
         console.print("[yellow]✓ Watch stopped[/yellow]")
         return history
-    p = Path(path)
-    if not p.exists(): console.print(f"[red]Not found: {path}[/red]"); return history
+    try:
+        p = resolve_path(state, path, must_exist=True)
+    except Exception as e:
+        console.print(f"[red]{e}[/red]")
+        return history
 
     _watch_stop.clear()
     last_mtime = p.stat().st_mtime
@@ -5497,39 +5506,43 @@ def cmd_summarize(state, history):
 
 
 def cmd_autonomous(state, args, history):
-    """/autonomous — toggle autonomous mode: skips write permissions, runs FIF+PATCH loops."""
-    currently = state.get("autonomous", False)
+    """/autonomous — explicitly enable unattended writes, then optionally run a task."""
+    currently = bool(state.get("autonomous", False))
     args = (args or "").strip()
-    if args.lower() in ("off", "0", "false", "stop"):
+    lowered = args.lower()
+
+    if lowered in ("off", "0", "false", "stop"):
         state["autonomous"] = False
         _unpatch_autonomous_writes()
         console.print("[green]✓ Autonomous mode OFF — permission checks restored.[/green]")
         return history
-    if args.lower() in ("on", "1", "true", "start", ""):
-        if not currently:
-            console.print(Panel(
-                "[bold yellow]⚡ AUTONOMOUS MODE[/bold yellow]\n\n"
-                "In this mode Studio CLI will:\n"
-                "  [red]•[/red] Skip all write-permission prompts\n"
-                "  [red]•[/red] Auto-apply patches without confirmation\n"
-                "  [red]•[/red] Run FIF → PATCH loops unattended\n\n"
-                "[dim]Use [bold]/autonomous off[/bold] to restore normal behaviour.[/dim]",
-                border_style="yellow", padding=(1, 2)
-            ))
-            confirm = console.input("  Enable autonomous mode? [dim](y/n)[/dim]: ").strip().lower()
-            if confirm != "y":
-                console.print("[dim]Cancelled.[/dim]")
-                return history
-        state["autonomous"] = True
-        _patch_autonomous_writes(state)
-        console.print("[bold yellow]⚡ Autonomous mode ON[/bold yellow]  [dim]— all writes auto-approved[/dim]")
-        return history
-    # If a task is provided after /autonomous <task>, run it directly
-    task = args
+
+    task = "" if lowered in ("", "on", "1", "true", "start") else args
+
+    # Any transition into autonomous mode requires the same explicit confirmation,
+    # including the shorthand form: /autonomous <task>.
+    if not currently:
+        console.print(Panel(
+            "[bold yellow]⚡ AUTONOMOUS MODE[/bold yellow]\n\n"
+            "In this mode Studio CLI will:\n"
+            "  [red]•[/red] Skip all write-permission prompts\n"
+            "  [red]•[/red] Auto-apply patches without confirmation\n"
+            "  [red]•[/red] Run FIF → PATCH loops unattended\n\n"
+            "[dim]Use [bold]/autonomous off[/bold] to restore normal behaviour.[/dim]",
+            border_style="yellow", padding=(1, 2)
+        ))
+        confirm = _safe_input("  Enable autonomous mode? (y/n): ").strip().lower()
+        if confirm != "y":
+            console.print("[dim]Cancelled.[/dim]")
+            return history
+
     state["autonomous"] = True
     _patch_autonomous_writes(state)
-    console.print(f"[bold yellow]⚡ Autonomous[/bold yellow]  running: [dim]{task}[/dim]")
-    _, history = ai_respond(state, task, history)
+    console.print("[bold yellow]⚡ Autonomous mode ON[/bold yellow]  [dim]— all writes auto-approved[/dim]")
+
+    if task:
+        console.print(f"[bold yellow]⚡ Autonomous[/bold yellow]  running: [dim]{task}[/dim]")
+        _, history = ai_respond(state, task, history)
     return history
 
 
@@ -5715,32 +5728,16 @@ def cmd_creator_analytics(state):
             console.print(fb_tbl)
 
 
-# ─── honour autonomous mode in check_write_allowed ────────────────────────
-_orig_check_write_allowed = None
-
+# ─── autonomous compatibility hooks ──────────────────────────────────────────
+# Older call sites invoke these helpers after toggling autonomous mode. Policy is
+# now evaluated directly inside check_write_allowed(), avoiding global monkey
+# patches whose closure could retain stale session state.
 def _patch_autonomous_writes(state):
-    """Monkey-patch check_write_allowed to skip prompts when autonomous=True."""
-    global _orig_check_write_allowed, check_write_allowed
-    if _orig_check_write_allowed is None:
-        _orig_check_write_allowed = check_write_allowed
-
-    def _auto_check(*args, **kwargs):
-        if state.get("autonomous"):
-            _path = args[1] if len(args) > 1 else kwargs.get("path", "a file")
-            _verb = args[2] if len(args) > 2 else kwargs.get("verb", "write")
-            console.print(f"[dim yellow]⚡ Auto-approved: {_verb} → {_path}[/dim yellow]")
-            return True
-        return _orig_check_write_allowed(*args, **kwargs)
-
-    check_write_allowed = _auto_check
+    return None
 
 
 def _unpatch_autonomous_writes():
-    """Restore check_write_allowed to the original when autonomous mode is turned off."""
-    global check_write_allowed, _orig_check_write_allowed
-    if _orig_check_write_allowed is not None:
-        check_write_allowed = _orig_check_write_allowed
-        _orig_check_write_allowed = None
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -7347,7 +7344,9 @@ def _cu_take_screenshot() -> tuple[str | None, str | None]:
     # Fallback: PowerShell screenshot (Windows)
     try:
         import io, base64, subprocess, tempfile
-        tmp = tempfile.mktemp(suffix=".png")
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as _tmp:
+            tmp = _tmp.name
+        tmp_path = Path(tmp)
         ps = (
             "[void][reflection.assembly]::LoadWithPartialName('System.Drawing');"
             "[void][reflection.assembly]::LoadWithPartialName('System.Windows.Forms');"
@@ -7357,12 +7356,14 @@ def _cu_take_screenshot() -> tuple[str | None, str | None]:
             "$g.CopyFromScreen($screen.Location,[System.Drawing.Point]::Empty,$screen.Size);"
             f"$bmp.Save('{tmp}');"
         )
-        subprocess.run(["powershell", "-Command", ps], capture_output=True, timeout=10)
-        if Path(tmp).exists():
-            data = base64.b64encode(Path(tmp).read_bytes()).decode("utf-8")
-            Path(tmp).unlink(missing_ok=True)
-            return data, None
-        return None, "PowerShell screenshot failed"
+        try:
+            subprocess.run(["powershell", "-Command", ps], capture_output=True, timeout=10)
+            if tmp_path.exists() and tmp_path.stat().st_size > 0:
+                data = base64.b64encode(tmp_path.read_bytes()).decode("utf-8")
+                return data, None
+            return None, "PowerShell screenshot failed"
+        finally:
+            tmp_path.unlink(missing_ok=True)
     except Exception as e:
         return None, f"Screenshot error: {e}"
 

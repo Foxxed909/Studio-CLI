@@ -11,6 +11,8 @@ def scan_project(path):
     root  = Path(path).resolve()
     if not root.exists():
         return {"error": f"Not found: {path}"}
+    if not root.is_dir():
+        return {"error": f"Not a directory: {path}"}
     files       = {}
     tree_lines  = []
     total_chars = 0
@@ -22,9 +24,18 @@ def scan_project(path):
             return
         try:
             items = sorted(cur.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))
-        except PermissionError:
+        except OSError:
             return
         for i, item in enumerate(items):
+            # Never follow symlinks while building model context. Even a symlink
+            # located inside the workspace may target private files outside it,
+            # and directory symlinks can also create recursion cycles.
+            try:
+                if item.is_symlink():
+                    continue
+                item.resolve().relative_to(root)
+            except (OSError, ValueError):
+                continue
             last = i == len(items) - 1
             conn = "└── " if last else "├── "
             ext2 = "    " if last else "│   "

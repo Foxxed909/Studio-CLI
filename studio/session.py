@@ -9,13 +9,24 @@ from pathlib import Path
 from datetime import datetime
 
 
+def _chmod_private(path: Path) -> None:
+    """Best-effort owner-only permissions for local state and secret files."""
+    try:
+        path.chmod(0o600)
+    except OSError:
+        # Windows ACLs and some filesystems do not map POSIX modes exactly.
+        pass
+
+
 def _atomic_write(path: Path, text: str, encoding: str = "utf-8") -> None:
     """Write text atomically: temp file + os.replace() prevents corrupt reads on kill/crash."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     try:
         tmp.write_text(text, encoding=encoding)
+        _chmod_private(tmp)
         os.replace(tmp, path)
+        _chmod_private(path)
     except Exception:
         try:
             tmp.unlink(missing_ok=True)
@@ -67,8 +78,7 @@ def save_api_key(user_id_or_key, k=None):
     else:
         user_id = user_id_or_key
     path = Path("profiles") / user_id / "gemini_key"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(k.strip())
+    _atomic_write(path, k.strip())
 
 
 def load_or_key(user_id="default"):
@@ -84,8 +94,7 @@ def save_or_key(user_id_or_key, k=None):
     else:
         user_id = user_id_or_key
     path = Path("profiles") / user_id / "openrouter_key"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(k.strip())
+    _atomic_write(path, k.strip())
 
 
 def load_hf_key():

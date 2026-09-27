@@ -4,7 +4,7 @@ A high-performance AI terminal built in Python. Chat with multiple AI providers,
 
 ```
  ╭─────────────────────────────────────────╮
- │  ✦ StudioCLI  v6.0  ·  studio           │
+ │  ✦ StudioCLI  v11.0 ·  studio           │
  ├─────────────────────────────────────────┤
  │  AI-powered terminal for developers     │
  ╰─────────────────────────────────────────╯
@@ -22,9 +22,11 @@ Installs deps, deploys to `AppData`, and registers `studio` / `aistudio` as glob
 
 **Anywhere (Python 3.12+)**
 ```bash
-pip install rich prompt_toolkit
-python aistudio.py
+pip install -e .
+studio
 ```
+
+Optional file/image helpers can be installed with `pip install -e ".[files]"`.
 
 **Termux (Android)**
 ```bash
@@ -188,7 +190,7 @@ studio -p "explain X"   # headless one-shot (pipe-friendly: cat log | studio -p 
 ### Pro / Enterprise
 | Command | Description |
 |---|---|
-| `/vault <op>` | Local secrets store — base64-obfuscated, not encrypted (`set` `get` `delete` `list`) |
+| `/vault <op>` | Local secrets store — Fernet-encrypted when `cryptography` is installed; explicit base64 fallback otherwise (`set` `get` `delete` `list`) |
 | `/team <op>` | Team management, local-only (`invite` `remove` `list` `role`) |
 | `/audit-log` | Full audit trail (Max+) |
 | `/orgmetrics` | Local multi-profile analytics (Team+) |
@@ -246,11 +248,11 @@ Switch with `/theme <name>` or use a `/vibe` preset:
 
 | Plan | Price | Messages | Images |
 |---|---|---|---|
-| Free | $0 | 10 / session | 1 / 3h |
-| Starter | $5 | 100 / session | 3 / 3h |
-| Pro | $18 | 500 / session | 10 / 3h |
-| Dev | $35 | 2,000 / session | 50 / 3h |
-| Max | $80 | 5,000 / session | 100 / 3h |
+| Free | $0 | 1,000 / session | 1 / 3h |
+| Starter | $5 | 3,000 / session | 3 / 3h |
+| Pro | $18 | 10,000 / session | 10 / 3h |
+| Dev | $35 | 25,000 / session | 50 / 3h |
+| Max | $80 | 50,000 / session | 100 / 3h |
 | Ultra | $250 | Unlimited | Unlimited |
 | Team | $400 | Unlimited | Unlimited |
 | Enterprise | Custom | Unlimited | Unlimited |

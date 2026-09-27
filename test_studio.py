@@ -1,5 +1,5 @@
 """
-StudioCLI v5.9 — full command test harness.
+StudioCLI — full command test harness.
 - Tests every non-interactive cmd_* function
 - Skips cmd_models / cmd_model_picker (arrow-key pickers, require TTY)
 - Skips API-call commands (no key in test env)
@@ -444,6 +444,70 @@ run("celestial themes present + complete keys",            test_new_themes_prese
 run("celestial UI styles registered",                      test_celestial_ui_styles_registered)
 run("all UI styles build prompts (hex HTML fix)",          test_all_prompts_build_for_every_ui)
 run("celestial welcome screens render",                    test_celestial_welcome_renders)
+
+
+def test_project_scanner_does_not_follow_symlinks():
+    import tempfile
+    with tempfile.TemporaryDirectory() as root_dir, tempfile.TemporaryDirectory() as outside_dir:
+        root = Path(root_dir)
+        secret = Path(outside_dir) / "secret.py"
+        secret.write_text("TOP_SECRET_SENTINEL = 1\n", encoding="utf-8")
+        link = root / "leak.py"
+        try:
+            link.symlink_to(secret)
+        except (OSError, NotImplementedError):
+            return  # Symlink creation may require extra privilege on Windows.
+        ctx = aistudio.scan_project(root)
+        assert "leak.py" not in ctx.get("files", {}), "scanner followed a symlink"
+        assert "TOP_SECRET_SENTINEL" not in aistudio.format_project_context(ctx), "external symlink content leaked into context"
+
+
+def test_autonomous_task_requires_confirmation():
+    st = make_state()
+    st["autonomous"] = False
+    with mock.patch("aistudio._safe_input", return_value="n"), \
+         mock.patch("aistudio.ai_respond") as respond:
+        out = aistudio.cmd_autonomous(st, "fix everything", [])
+    assert out == []
+    assert st.get("autonomous") is False
+    respond.assert_not_called()
+
+
+def test_autonomous_policy_is_state_based():
+    st = make_state()
+    st["autonomous"] = True
+    with mock.patch("aistudio._safe_input", side_effect=AssertionError("should not prompt")):
+        assert aistudio.check_write_allowed(st, "x.py", "write") is True
+
+
+def test_shell_run_git_use_workspace_cwd():
+    for fn in (aistudio.cmd_shell, aistudio.cmd_run, aistudio.cmd_git):
+        src = inspect.getsource(fn)
+        assert 'state.get("workspace_root")' in src, f"{fn.__name__} does not derive cwd from workspace"
+        assert "cwd=" in src, f"{fn.__name__} does not pass cwd to subprocess"
+
+
+def test_mcp_timeout_is_wall_clock_bounded():
+    import tempfile, time
+    from studio.mcp import MCPClient
+    start = time.monotonic()
+    cli = MCPClient(sys.executable, ["-c", "import time; time.sleep(5)"])
+    try:
+        try:
+            cli.start(timeout=0.2)
+            raise AssertionError("silent MCP server unexpectedly completed handshake")
+        except TimeoutError:
+            pass
+    finally:
+        cli.close()
+    assert time.monotonic() - start < 2.0, "MCP timeout was blocked by stdout.readline()"
+
+
+run("project scanner blocks symlink escapes",                 test_project_scanner_does_not_follow_symlinks)
+run("/autonomous <task> requires confirmation",              test_autonomous_task_requires_confirmation)
+run("autonomous write policy is state-based",                test_autonomous_policy_is_state_based)
+run("shell/run/git execute from workspace cwd",              test_shell_run_git_use_workspace_cwd)
+run("MCP request timeout is wall-clock bounded",             test_mcp_timeout_is_wall_clock_bounded)
 
 # ══════════════════════════════════════════════════════════════
 # 20. v9.7 new commands (Speak merge, Git/VCS, Context, Fun)

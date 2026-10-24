@@ -2087,7 +2087,7 @@ body.gm-ui-active .file-pre-name{min-width:0}
           </div>
         </div>
         <div class="empty-greet" id="gmGreeting">What are we building?</div>
-        <div class="empty-sub">Free models · no signup · streaming</div>
+        <div class="empty-sub">Free models · sign in or BYOK · streaming</div>
         <div class="suggest-grid">
           <button class="suggest" onclick="fillChip('Write a function to ')">
             <div class="suggest-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
@@ -3217,7 +3217,7 @@ const EMPTY_HTML=`
   <div class="empty" id="empty">
     <div class="empty-mark">S</div>
     <div class="empty-greet">What are we building?</div>
-    <div class="empty-sub">Free models · no signup · streaming</div>
+    <div class="empty-sub">Free models · sign in or BYOK · streaming</div>
     <div class="suggest-grid">
       <button class="suggest" onclick="fillChip('Write a function to ')">
         <div class="suggest-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
@@ -3705,7 +3705,9 @@ async function _runAI(title,_retry=0,_img=undefined,_pf=undefined){
   const timeoutMs=chatTimeoutMs(img,pf);
   const _ato=setTimeout(()=>_ac.abort(),timeoutMs);
   try{
-    const headers={"Content-Type":"application/json"};if(s.key)headers["Authorization"]=`Bearer ${s.key}`;
+    const headers={"Content-Type":"application/json"};
+    if(s.key) headers["Authorization"]=`Bearer ${s.key}`;
+    else { const tok=_stageToken(); if(tok) headers["Authorization"]=`Bearer ${tok}`; }
     const resp=await fetch("/api/chat",{method:"POST",headers,signal:_ac.signal,
       body:JSON.stringify({messages:sendMessages,model,persona:s.persona,
         system_override:(()=>{
@@ -3887,6 +3889,11 @@ function toggleComputer(){
   const allowed = ["max","ultra","team","enterprise","creator"];
   if(!allowed.includes(plan)){
     document.getElementById("compOverlay").classList.add("open");
+    return;
+  }
+  const localHost=["localhost","127.0.0.1","::1"].includes(location.hostname);
+  if(!localHost){
+    showToast("Computer Use currently requires the local Studio CLI bridge + Companion extension.","info");
     return;
   }
   const panel = document.getElementById("cuPanel");
@@ -4115,10 +4122,13 @@ function _setPlanPill(plan){
   // Sync from server if email saved
   const email = localStorage.getItem("studioEmail");
   if(email){
-    fetch("/api/stripe/plan?email=" + encodeURIComponent(email))
-      .then(r => r.json())
-      .then(d => { if(d.plan){ localStorage.setItem("studioPlan", d.plan); _setPlanPill(d.plan); } })
-      .catch(()=>{});
+    const tok=_stageToken();
+    if(tok){
+      fetch("/api/stripe/plan",{headers:{Authorization:"Bearer "+tok}})
+        .then(r => r.ok ? r.json() : Promise.reject(r.status))
+        .then(d => { if(d.plan){ localStorage.setItem("studioPlan", d.plan); _setPlanPill(d.plan); } })
+        .catch(()=>{});
+    }
   }
 })();
 
@@ -4194,7 +4204,8 @@ async function lcpApplyFix(){
   btn.disabled=true;btn.textContent="Fixing…";
   const s=loadSettings();
   const headers={"Content-Type":"application/json"};
-  if(s.key)headers["Authorization"]=`Bearer ${s.key}`;
+  if(s.key) headers["Authorization"]=`Bearer ${s.key}`;
+  else { const tok=_stageToken(); if(tok) headers["Authorization"]=`Bearer ${tok}`; }
   const fixPrompt=`Here is the current HTML/CSS/JS code:\n\n\`\`\`html\n${currentCode.slice(0,12000)}\n\`\`\`\n\nApply this change: ${suggestion}\n\nReturn ONLY the complete updated HTML file. No explanation, no markdown fences — just the raw HTML.`;
   try{
     const resp=await fetch("/api/chat",{method:"POST",headers,
@@ -4386,21 +4397,30 @@ async function saveSettings(){
   const emailVal=document.getElementById("emailInput").value.trim().toLowerCase();
   if(emailVal){
     localStorage.setItem("studioEmail",emailVal);
-    fetch("/api/stripe/plan?email="+encodeURIComponent(emailVal))
-      .then(r=>r.json())
-      .then(d=>{
-        if(d.plan){localStorage.setItem("studioPlan",d.plan);_setPlanPill(d.plan);}
-        const planNames={free:"Free",starter:"Starter",pro:"Pro",dev:"Dev",max:"Max",ultra:"Ultra",team:"Team",enterprise:"Enterprise",creator:"Creator ✦"};
-        document.getElementById("planStatus").textContent=`Plan updated: ${planNames[d.plan]||d.plan||"free"}`;
-      }).catch(()=>{});
+    const tok=_stageToken();
+    if(tok){
+      fetch("/api/stripe/plan",{headers:{Authorization:"Bearer "+tok}})
+        .then(r=>r.ok?r.json():Promise.reject(r.status))
+        .then(d=>{
+          if(d.plan){localStorage.setItem("studioPlan",d.plan);_setPlanPill(d.plan);}
+          const planNames={free:"Free",starter:"Starter",pro:"Pro",dev:"Dev",max:"Max",ultra:"Ultra",team:"Team",enterprise:"Enterprise",creator:"Creator ✦"};
+          document.getElementById("planStatus").textContent=`Plan updated: ${planNames[d.plan]||d.plan||"free"}`;
+        }).catch(()=>{});
+    }
   }
 
   const key=document.getElementById("keyInput").value.trim();
   const status=document.getElementById("keyStatus");
   if(key&&!key.startsWith("sk-or-")){status.textContent="Key must start with sk-or-";status.className="key-status err";return;}
   if(key){
-    try{const r=await fetch("/api/key",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key})});if(r.ok)document.getElementById("banner").classList.remove("on");}catch{}
-    status.textContent="✓ Key saved";status.className="key-status ok";
+    const localHost=["localhost","127.0.0.1","::1"].includes(location.hostname);
+    if(localHost){
+      try{const r=await fetch("/api/key",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key})});if(r.ok)document.getElementById("banner").classList.remove("on");}catch{}
+    } else {
+      document.getElementById("banner").classList.remove("on");
+    }
+    status.textContent=localHost?"✓ Key saved":"✓ Key saved in this browser";
+    status.className="key-status ok";
     setTimeout(()=>{status.className="key-status";},3000);
   }
   const ns={key,persona:document.getElementById("personaSel").value,
@@ -4626,17 +4646,16 @@ cinEl.addEventListener("paste",e=>{
 });
 
 // ── Community Chat ────────────────────────────────────────────────────────────
-let _cmEvt = null; // SSE source
+let _cmTimer = null;
 let _cmOpen = false;
+const _cmSeen = new Set();
 
 function openCommunity() {
   _cmOpen = true;
   document.getElementById("cmDrawer").classList.add("open");
-  // Restore saved name
   const saved = localStorage.getItem("studioCmName");
   if (saved) document.getElementById("cmNameInp").value = saved;
-  if (!_cmEvt) _cmConnect();
-  // Clear badge
+  _cmStartPolling();
   const badge = document.getElementById("cmOnlineBadge");
   badge.style.display = "none";
   setTimeout(() => document.getElementById("cmInp").focus(), 300);
@@ -4645,39 +4664,36 @@ function openCommunity() {
 function closeCommunity() {
   _cmOpen = false;
   document.getElementById("cmDrawer").classList.remove("open");
+  if (_cmTimer) { clearTimeout(_cmTimer); _cmTimer = null; }
 }
 
-function _cmConnect() {
-  _cmEvt = new EventSource("/api/community/stream");
-  _cmEvt.onmessage = e => {
+function _cmStartPolling() {
+  if (_cmTimer) clearTimeout(_cmTimer);
+  const poll = async () => {
     try {
-      const d = JSON.parse(e.data);
-      if (d.type === "init") {
-        _cmSetCount(d.count);
-        d.messages.forEach(m => _cmRender(m, false));
-        _cmScrollBottom();
-      } else if (d.type === "message") {
-        _cmRender(d, true);
-        if (!_cmOpen) {
-          const badge = document.getElementById("cmOnlineBadge");
-          badge.style.display = "flex";
-          badge.textContent = parseInt(badge.textContent || "0") + 1;
+      const r = await fetch("/api/community/history", { cache: "no-store" });
+      if (r.ok) {
+        const d = await r.json();
+        let added = 0;
+        for (const msg of (d.messages || [])) {
+          if (_cmSeen.has(msg.id)) continue;
+          _cmSeen.add(msg.id);
+          _cmRender(msg, _cmSeen.size > (d.messages || []).length);
+          added++;
         }
-      } else if (d.type === "count") {
         _cmSetCount(d.count);
+        if (added) _cmScrollBottom();
       }
     } catch {}
+    if (_cmOpen) _cmTimer = setTimeout(poll, 3000);
   };
-  _cmEvt.onerror = () => {
-    // Reconnect after 5s only if the panel is still open
-    _cmEvt.close(); _cmEvt = null;
-    setTimeout(() => { if (_cmOpen) _cmConnect(); }, 5000);
-  };
+  poll();
 }
 
 function _cmSetCount(n) {
-  document.getElementById("cmCount").textContent = n + " online";
-  if (_cmOpen) document.getElementById("cmOnlineBadge").textContent = n;
+  const label = Number.isFinite(n) ? n + " online" : "Live";
+  document.getElementById("cmCount").textContent = label;
+  if (_cmOpen) document.getElementById("cmOnlineBadge").textContent = Number.isFinite(n) ? n : "";
 }
 
 function _cmRender(msg, animate) {
@@ -4711,14 +4727,19 @@ async function cmSend() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, text })
     });
+    const d = await r.json().catch(() => ({}));
     if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      toast(e.error || "Could not send message.");
-    } else { _cmScrollBottom(); }
+      toast(d.error || "Could not send message.");
+    } else {
+      if (d.message && !_cmSeen.has(d.message.id)) {
+        _cmSeen.add(d.message.id);
+        _cmRender(d.message, true);
+      }
+      _cmScrollBottom();
+    }
   } catch { toast("Network error — message not sent."); }
 }
 
-// Auto-resize community input + Enter to send
 document.addEventListener("DOMContentLoaded", () => {
   const inp = document.getElementById("cmInp");
   if (!inp) return;

@@ -1275,9 +1275,7 @@ Return [] if the instruction is already satisfied or cannot be done safely.`;
 
 // UI → server: list active sessions
 app.get("/api/computer/sessions", (req, res) => {
-  const ip = req.ip || "";
-  const isLocal = ip === "::1" || ip === "127.0.0.1" || ip === "::ffff:127.0.0.1";
-  if (!isLocal) return res.status(403).json({ error: "Forbidden" });
+  if (!isLocalRequest(req)) return res.status(403).json({ error: "Forbidden" });
   const sessions = [];
   for (const [id, s] of _cuSessions) {
     sessions.push({ sessionId: id, url: s.url, title: s.title, hasScreenshot: !!s.screenshot,

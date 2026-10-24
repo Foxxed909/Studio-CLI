@@ -24,7 +24,7 @@ PLANS = {
         "msg_limit":   1000,
         "img_per_3h":  1,
         "credits":     100,
-        "models":      ["nvidia/nemotron-3-super-120b-a12b:free"],
+        "models":      ["nvidia/nemotron-3-super-120b-a12b:free", "nvidia/nemotron-3-ultra-550b-a55b:free"],
         "color":       "dim",
         "badge":       "○",
         "web_search":  False,
@@ -33,7 +33,7 @@ PLANS = {
         "computer_use": False,
         "live_code":   False,
         "frozen_at":   "v12",
-        "features":    ["1,000 messages / session", "1 image / 3 hrs", "Nemotron only", "Updates through v12", "100 credits/mo"],
+        "features":    ["1,000 messages / session", "1 image / 3 hrs", "Nemotron 3 Super + Ultra", "Updates through v12", "100 credits/mo"],
         "limitations": ["No model switching", "No premium agents", "No /arena", "No /beta", "No web search", "Frozen at v12 — no updates after"],
     },
     "pro": {

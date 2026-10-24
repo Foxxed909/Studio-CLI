@@ -14,7 +14,7 @@
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.1.0",
     "stripe": "^22.1.1",
-    "@vercel/connect": "^2.5.2"
+    "@vercel/connect": "2.5.5"
   },
   "overrides": {
     "zod": "4.6.7"

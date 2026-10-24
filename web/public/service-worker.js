@@ -1,4 +1,4 @@
-const CACHE_NAME = "studio-stage-v3";
+const CACHE_NAME = "studio-stage-v4";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -7,9 +7,9 @@ const APP_SHELL = [
   "/stage-polish.css",
   "/mobile-runtime.js",
   "/studio-extras.js",
-  "/icons/studio-192.svg",
-  "/icons/studio-512.svg",
-  "/icons/studio-maskable.svg"
+  "/icons/studio-192.png",
+  "/icons/studio-512.png",
+  "/icons/studio-maskable-512.png"
 ];
 
 self.addEventListener("install", (event) => {

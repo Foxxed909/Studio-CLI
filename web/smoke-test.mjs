@@ -37,7 +37,7 @@ assert.ok(studioData.includes(NEMOTRON_ULTRA), "CLI free plan must include Nemot
 
 assert.equal(manifest.display, "standalone", "PWA must install in standalone mode");
 assert.equal(manifest.orientation, "any", "PWA must support portrait and landscape");
-assert.ok(manifest.icons?.some((icon) => icon.purpose === "maskable"), "PWA must provide a maskable Android icon");
+assert.ok(manifest.icons?.some((icon) => icon.purpose === "maskable" && icon.type === "image/png"), "PWA must provide a PNG maskable Android icon");
 assert.match(index, /viewport-fit=cover/, "Stage must opt into iPhone/Android safe areas");
 assert.ok(index.lastIndexOf("/stage-polish.css") > index.lastIndexOf("</style>"),
   "polish stylesheet must load after core Stage styles");
@@ -48,7 +48,7 @@ assert.match(mobileRuntime, /visualViewport/, "mobile runtime must handle softwa
 assert.match(mobileRuntime, /beforeinstallprompt/, "Android PWA install flow must be supported");
 assert.match(serviceWorker, /url\.pathname\.startsWith\("\/api\/"\)/,
   "service worker must keep API traffic network-only");
-assert.equal(packageJson.dependencies?.["@vercel/connect"], "^2.5.2",
+assert.equal(packageJson.dependencies?.["@vercel/connect"], "2.5.5",
   "Vercel Connect SDK must be pinned in Stage dependencies");
 assert.match(server, /app\.get\("\/api\/connectors", requireAuth/,
   "connector catalog must require Studio authentication");

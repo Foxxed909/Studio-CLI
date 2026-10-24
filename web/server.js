@@ -413,6 +413,7 @@ const FREE_MODELS = [
   { id: "openai/gpt-oss-20b:free",                                    name: "GPT OSS 20B",      badge: "FREE" },
   { id: "openai/gpt-oss-120b:free",                                   name: "GPT OSS 120B",     badge: "FREE" },
   { id: "nvidia/nemotron-3-super-120b-a12b:free",                     name: "Nemotron 120B",    badge: "FREE" },
+  { id: "nvidia/nemotron-3-ultra-550b-a55b:free",                     name: "Nemotron 3 Ultra", badge: "FREE" },
   { id: "meta-llama/llama-3.3-70b-instruct:free",                     name: "Llama 3.3 70B",    badge: "FREE" },
   { id: "google/gemma-3-27b-it:free",                                  name: "Gemma 3 27B",      badge: "FREE" },
   { id: "qwen/qwen3-coder:free",                                       name: "Qwen3 Coder",      badge: "FREE" },

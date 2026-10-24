@@ -235,3 +235,40 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
   }
   #themeFX{display:none!important}
 }
+
+
+/* Connector hub — compact infrastructure rows, not marketing cards. */
+.connector-stack{display:grid;gap:9px}
+.connector-card{
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;
+  border:1px solid var(--border);border-radius:12px;background:var(--surface);padding:12px 13px;
+  transition:border-color .18s var(--ease-out-expo),background .18s var(--ease-out-expo)}
+.connector-card:hover{border-color:var(--border2);background:var(--surface2)}
+.connector-mark{
+  width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  background:var(--hover2);border:1px solid var(--hover3);font-family:var(--font-mono);
+  font-size:12px;font-weight:700;color:var(--text);box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+.connector-main{min-width:0}
+.connector-name{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:650;color:var(--text)}
+.connector-desc{font-size:11.5px;color:var(--text3);line-height:1.45;margin-top:3px}
+.connector-state{
+  display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 7px;
+  border:1px solid var(--border);font:10px/1.2 var(--font-mono);color:var(--text3);white-space:nowrap}
+.connector-state.connected{color:var(--success,#7fb685);border-color:color-mix(in srgb,var(--success,#7fb685) 40%,transparent)}
+.connector-state.ready{color:var(--acc);border-color:var(--acc-soft)}
+.connector-state.missing{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 36%,transparent)}
+.connector-action{
+  min-height:36px;border:1px solid var(--border2);border-radius:9px;background:var(--surface2);
+  color:var(--text);padding:0 12px;cursor:pointer;font:600 12px/1 var(--font-ui);
+  transition:background .16s var(--ease-out-expo),border-color .16s var(--ease-out-expo),transform .12s var(--ease-out-expo)}
+.connector-action:hover{background:var(--hover3);border-color:var(--border3)}
+.connector-action:active{transform:scale(.97)}
+.connector-action[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+.connector-note{
+  margin-top:12px;padding:10px 12px;border-left:2px solid var(--border2);
+  color:var(--text3);font-size:11.5px;line-height:1.55}
+.connector-skeleton{font-size:12px;color:var(--text3);padding:12px 2px}
+@media(max-width:560px){
+  .connector-card{grid-template-columns:auto minmax(0,1fr);align-items:start}
+  .connector-action{grid-column:1/-1;width:100%;min-height:44px}
+}

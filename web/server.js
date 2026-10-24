@@ -1493,6 +1493,107 @@ app.get("/testing", (_req, res) => res.sendFile(path.join(__dirname, "public", "
 app.get("/landing",  (_req, res) => res.sendFile(path.join(__dirname, "public", "landing.html")));
 app.get("/pricing",  (_req, res) => res.sendFile(path.join(__dirname, "public", "pricing.html")));
 
+// ── Connectors — Vercel Connect, user-scoped and server-side only ────────────
+const STUDIO_CONNECTORS = {
+  github: {
+    label: "GitHub",
+    env: "CONNECTOR_GITHUB",
+    description: "Repositories, issues, pull requests, checks and developer workflows.",
+  },
+  google: {
+    label: "Google / Gmail",
+    env: "CONNECTOR_GOOGLE",
+    description: "Gmail plus Google Drive, Calendar, Sheets, YouTube and other Google APIs.",
+  },
+  vercel: {
+    label: "Vercel",
+    env: "CONNECTOR_VERCEL",
+    description: "Projects, deployments and Vercel platform workflows.",
+  },
+};
+
+function connectorConfig(provider) {
+  const def = STUDIO_CONNECTORS[provider];
+  if (!def) return null;
+  const connector = String(process.env[def.env] || "").trim();
+  return { ...def, connector, configured: !!connector };
+}
+
+function connectorSubject(user) {
+  return { type: "user", id: String(user.id) };
+}
+
+function requestOrigin(req) {
+  const forwarded = String(req.get("x-forwarded-proto") || "").split(",")[0].trim();
+  const protocol = forwarded || req.protocol || "https";
+  return `${protocol}://${req.get("host")}`;
+}
+
+async function connectSdk() {
+  return import("@vercel/connect");
+}
+
+app.get("/api/connectors", requireAuth, (req, res) => {
+  const providers = Object.entries(STUDIO_CONNECTORS).map(([id]) => {
+    const cfg = connectorConfig(id);
+    return {
+      id,
+      label: cfg.label,
+      description: cfg.description,
+      configured: cfg.configured,
+    };
+  });
+  res.json({ providers, runtime: process.env.VERCEL ? "vercel" : "local" });
+});
+
+app.get("/api/connectors/:provider/status", requireAuth, async (req, res) => {
+  const cfg = connectorConfig(req.params.provider);
+  if (!cfg) return res.status(404).json({ error: "Unknown connector" });
+  if (!cfg.configured) return res.json({ provider: req.params.provider, configured: false, connected: false });
+  try {
+    const { getTokenResponse } = await connectSdk();
+    const token = await getTokenResponse(cfg.connector, { subject: connectorSubject(req.user) });
+    res.json({
+      provider: req.params.provider,
+      configured: true,
+      connected: true,
+      expiresAt: token?.expiresAt || null,
+    });
+  } catch (err) {
+    if (err?.name === "UserAuthorizationRequiredError" || /authoriz/i.test(err?.name || "")) {
+      return res.json({ provider: req.params.provider, configured: true, connected: false });
+    }
+    _captureError(`connectors/${req.params.provider}/status`, err);
+    res.status(503).json({ error: "Connector status unavailable", configured: true, connected: false });
+  }
+});
+
+app.post("/api/connectors/:provider/authorize", requireAuth, async (req, res) => {
+  const provider = req.params.provider;
+  const cfg = connectorConfig(provider);
+  if (!cfg) return res.status(404).json({ error: "Unknown connector" });
+  if (!cfg.configured) {
+    return res.status(503).json({
+      error: "Connector is not attached to this deployment yet",
+      setup: `Set ${cfg.env} to the attached Vercel Connect connector UID.`,
+    });
+  }
+  try {
+    const { startAuthorization } = await connectSdk();
+    const callbackUrl = `${requestOrigin(req)}/index.html?connector=${encodeURIComponent(provider)}`;
+    const result = await startAuthorization(
+      cfg.connector,
+      { subject: connectorSubject(req.user) },
+      { callbackUrl }
+    );
+    if (!result?.url) throw new Error("Authorization URL was not returned");
+    res.json({ url: result.url });
+  } catch (err) {
+    _captureError(`connectors/${provider}/authorize`, err);
+    res.status(503).json({ error: "Could not start connector authorization" });
+  }
+});
+
 // ── Feedback / Inbox ───────────────────────────────────────────────────────
 const FEEDBACK = []; // local fallback only
 

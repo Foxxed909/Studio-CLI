@@ -22,6 +22,10 @@ jobs:
       - name: Generate reproducible Stage lockfile
         working-directory: web
         run: npm install --package-lock-only --ignore-scripts
+      - name: Verify connector dependency resolution
+        working-directory: web
+        run: npm ls @vercel/connect @vercel/oidc zod
+
       - name: Audit production dependencies
         working-directory: web
         run: npm audit --omit=dev

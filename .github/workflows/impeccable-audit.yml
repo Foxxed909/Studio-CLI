@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run deterministic interface audit
+      - name: Run deterministic interface audit (post-mobile pass)
         run: |
           set +e
           tool=".agents/skills/impeccable/scripts/impeccable"

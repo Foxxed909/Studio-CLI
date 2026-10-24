@@ -23,17 +23,47 @@ const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_
 // ── Auth middleware — verifies Supabase JWT ───────────────────────────────────
 // DEV_SKIP_AUTH=true in .env + localhost-only → bypasses JWT check for local testing.
 // Both conditions must hold — env var alone is not enough, prevents accidental exposure.
-async function requireAuth(req, res, next) {
+function bearerToken(req) {
+  return (req.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
+}
+
+function requestOpenRouterKey(req) {
+  const token = bearerToken(req);
+  return token.startsWith("sk-or-") && token.length <= 128 ? token : null;
+}
+
+async function authenticatedUser(req) {
   if (process.env.DEV_SKIP_AUTH === "true" && isLocalRequest(req)) {
-    req.user = { id: "dev-local", email: "dev@localhost", devBypass: true };
-    return next();
+    return { id: "dev-local", email: "dev@localhost", app_metadata: {}, devBypass: true };
   }
-  const token = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
-  if (!token) return res.status(401).json({ error: "Not authenticated" });
-  if (!supabaseAdmin) return res.status(503).json({ error: "Auth not configured" });
+  const token = bearerToken(req);
+  if (!token || token.startsWith("sk-or-") || !supabaseAdmin) return null;
   const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user) return res.status(401).json({ error: "Invalid session" });
-  req.user = data.user;
+  return error ? null : (data?.user || null);
+}
+
+async function requireAuth(req, res, next) {
+  const user = await authenticatedUser(req);
+  if (!user) {
+    if (!supabaseAdmin && !(process.env.DEV_SKIP_AUTH === "true" && isLocalRequest(req))) {
+      return res.status(503).json({ error: "Auth not configured" });
+    }
+    return res.status(401).json({ error: "Not authenticated" });
+  }
+  req.user = user;
+  next();
+}
+
+async function requireAdmin(req, res, next) {
+  const user = await authenticatedUser(req);
+  if (!user) return res.status(401).json({ error: "Not authenticated" });
+  const configured = String(process.env.STUDIO_ADMIN_EMAILS || "")
+    .split(",").map((v) => v.trim().toLowerCase()).filter(Boolean);
+  const allowed = new Set([..._CREATOR_EMAILS, ...configured]);
+  if (!allowed.has(String(user.email || "").toLowerCase())) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  req.user = user;
   next();
 }
 
@@ -340,12 +370,9 @@ const TURBO_MODEL       = "openai/gpt-4o-mini";
 
 // ── Key resolution ──────────────────────────────────────────────────────────
 function resolveKey(req) {
-  // 0a. Authorization: Bearer sk-or-… header
-  const authHeader = req && req.get("Authorization");
-  if (authHeader && authHeader.startsWith("Bearer sk-or-")) {
-    const k = authHeader.slice(7).trim();
-    if (k.length <= 128) return k;
-  }
+  // 0a. Authorization: Bearer sk-or-… header (BYOK)
+  const explicit = req ? requestOpenRouterKey(req) : null;
+  if (explicit) return explicit;
   // 0b. X-OR-Key header (legacy, local only — not advertised to remote callers)
   const headerKey = req && req.get("X-OR-Key");
   if (headerKey && headerKey.startsWith("sk-or-") && headerKey.length <= 128 && isLocalRequest(req)) return headerKey;
@@ -486,6 +513,24 @@ const ALLOWED_MODELS = new Set([
   ...PAID_MODELS.map(m => m.id),
   WEB_SEARCH_MODEL, DEEP_RESEARCH_MODEL, TURBO_MODEL,
 ]);
+const FREE_MODEL_IDS = new Set(FREE_MODELS.map((m) => m.id));
+const PAID_MODEL_IDS = new Set(PAID_MODELS.map((m) => m.id));
+const STARTER_MODEL_IDS = new Set([
+  "openai/gpt-4o-mini",
+  "anthropic/claude-sonnet-4-6",
+  "google/gemini-2.5-pro",
+]);
+
+function planAtLeast(plan, required) {
+  return (PLAN_ORDER[plan] ?? 0) >= (PLAN_ORDER[required] ?? Number.MAX_SAFE_INTEGER);
+}
+
+function canUseRequestedModel(plan, model) {
+  if (!model || FREE_MODEL_IDS.has(model)) return true;
+  if (STARTER_MODEL_IDS.has(model)) return planAtLeast(plan, "starter");
+  if (PAID_MODEL_IDS.has(model)) return planAtLeast(plan, "pro");
+  return false;
+}
 
 // Strip any non-user/assistant roles to prevent system prompt injection via messages array
 function sanitizeMessages(msgs) {
@@ -497,7 +542,7 @@ function sanitizeMessages(msgs) {
     }));
 }
 
-app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
+app.post("/api/chat", chatLimit, async (req, res) => {
   const { messages, model, persona, stream = true,
           temperature, max_tokens, system_override, image,
           top_p, frequency_penalty, presence_penalty, stop,
@@ -513,18 +558,59 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
     return res.status(400).json({ error: "Image too large (max ~3MB)." });
   }
 
-  const apiKey = resolveKey(req);
-  if (!apiKey) {
-    return res.status(401).json({ error: "no_key", message: "No OpenRouter API key found. Set one in the Settings panel." });
+  const byokKey = requestOpenRouterKey(req);
+  const user = byokKey ? null : await authenticatedUser(req);
+  let plan = "free";
+  if (user?.email) {
+    try {
+      plan = (await resolvePlanForEmail(user.email)).plan;
+    } catch (err) {
+      _captureError("chat/plan", err);
+      return res.status(503).json({ error: "Could not verify account plan" });
+    }
   }
 
-  // ── Model selection with feature overrides ─────────────────────────────
+  let apiKey = byokKey;
+  if (!apiKey) {
+    if (user) apiKey = process.env.OPENROUTER_API_KEY || null;
+    else apiKey = process.env.ANON_OPENROUTER_API_KEY || null;
+  }
+  if (!apiKey) {
+    return res.status(401).json({
+      error: "no_key",
+      message: user
+        ? "Hosted AI key is not configured. Add your OpenRouter key in Settings."
+        : "Sign in or add your OpenRouter key in Settings to use hosted chat.",
+    });
+  }
+
+  // ── Model selection with server-side entitlement enforcement ────────────
   let resolvedModel = model || FREE_MODELS[0].id;
-  // Reject unknown models — prevents billing abuse via expensive unlisted models
-  if (model && !web_search && !ALLOWED_MODELS.has(model)) {
+  if (model && !ALLOWED_MODELS.has(model)) {
     return res.status(400).json({ error: "Unknown model" });
   }
-  if (web_search) resolvedModel = WEB_SEARCH_MODEL;
+
+  // BYOK pays OpenRouter directly and bypasses Studio plan gates.
+  if (!byokKey) {
+    if (!user && !FREE_MODEL_IDS.has(resolvedModel)) {
+      return res.status(401).json({ error: "signin_required", message: "Sign in to use paid models." });
+    }
+    if (!canUseRequestedModel(plan, resolvedModel)) {
+      return res.status(403).json({ error: "upgrade_required", message: `Your ${plan} plan does not include this model.` });
+    }
+    if (web_search && !planAtLeast(plan, "pro")) {
+      return res.status(403).json({ error: "upgrade_required", message: "Web Search requires Pro or higher." });
+    }
+    if (deep_research && !planAtLeast(plan, "pro")) {
+      return res.status(403).json({ error: "upgrade_required", message: "Deep Research requires Pro or higher." });
+    }
+    if (turbo && !planAtLeast(plan, "starter")) {
+      return res.status(403).json({ error: "upgrade_required", message: "Turbo requires Starter or higher." });
+    }
+  }
+
+  if (deep_research) resolvedModel = DEEP_RESEARCH_MODEL;
+  else if (web_search) resolvedModel = WEB_SEARCH_MODEL;
 
   const baseSystem = (persona && PERSONAS[persona]) ? PERSONAS[persona].system : PERSONAS.default.system;
   // system_override capped at 2000 chars — prevents prompt injection blowout
@@ -554,7 +640,7 @@ app.post("/api/chat", chatLimit, requireApiSecret, (req, res) => {
     }
   }
 
-  const requestedMaxTokens = Number(max_tokens) || 4096;
+  const requestedMaxTokens = Math.min(Math.max(Number(max_tokens) || 4096, 128), 16000);
   const resolvedMaxTokens = turbo
     ? Math.min(Math.max(requestedMaxTokens, 8192), 16000)
     : requestedMaxTokens;
@@ -888,56 +974,115 @@ app.get("/api/debug", async (req, res) => {
   });
 });
 
-// ── Community Chat — SSE broadcast (no extra packages) ───────────────────────
-const _cmClients = new Map();   // clientId → res
-const _cmMessages = [];         // rolling last 60
+// ── Serverless runtime storage (Supabase Storage) ────────────────────────────
+const RUNTIME_BUCKET = process.env.SUPABASE_RUNTIME_BUCKET || "studio-runtime";
+let _runtimeBucketReady = false;
 
-function _cmBroadcast(payload) {
-  const line = `data: ${JSON.stringify(payload)}\n\n`;
-  for (const [id, res] of _cmClients) {
-    try { res.write(line); } catch { _cmClients.delete(id); }
+async function ensureRuntimeBucket() {
+  if (!supabaseAdmin) return false;
+  if (_runtimeBucketReady) return true;
+  const { error: getError } = await supabaseAdmin.storage.getBucket(RUNTIME_BUCKET);
+  if (getError) {
+    const { error: createError } = await supabaseAdmin.storage.createBucket(RUNTIME_BUCKET, { public: false });
+    if (createError && !/already|exists|duplicate/i.test(createError.message || "")) throw createError;
   }
+  _runtimeBucketReady = true;
+  return true;
 }
 
-app.get("/api/community/stream", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  _cmClients.set(id, res);
-  // Send recent history + current count to newcomer
-  res.write(`data: ${JSON.stringify({ type: "init", messages: _cmMessages, count: _cmClients.size })}\n\n`);
-  // Tell everyone else the count went up
-  _cmBroadcast({ type: "count", count: _cmClients.size });
-  req.on("close", () => {
-    _cmClients.delete(id);
-    _cmBroadcast({ type: "count", count: _cmClients.size });
+async function putRuntimeJson(objectPath, value) {
+  if (!(await ensureRuntimeBucket())) return false;
+  const body = Buffer.from(JSON.stringify(value));
+  const { error } = await supabaseAdmin.storage.from(RUNTIME_BUCKET).upload(objectPath, body, {
+    contentType: "application/json",
+    upsert: true,
   });
+  if (error) throw error;
+  return true;
+}
+
+async function readRuntimeJson(objectPath) {
+  if (!(await ensureRuntimeBucket())) return null;
+  const { data, error } = await supabaseAdmin.storage.from(RUNTIME_BUCKET).download(objectPath);
+  if (error || !data) return null;
+  return JSON.parse(await data.text());
+}
+
+// ── Community Chat — serverless-safe polling + durable message objects ────────
+const _cmMessages = []; // local fallback only
+
+async function loadCommunityMessages() {
+  if (!supabaseAdmin) return _cmMessages.slice(-60);
+  await ensureRuntimeBucket();
+  const { data, error } = await supabaseAdmin.storage.from(RUNTIME_BUCKET).list("community", {
+    limit: 60,
+    sortBy: { column: "name", order: "desc" },
+  });
+  if (error) throw error;
+  const messages = [];
+  for (const entry of (data || []).reverse()) {
+    const msg = await readRuntimeJson(`community/${entry.name}`);
+    if (msg) messages.push(msg);
+  }
+  return messages.sort((a, b) => a.ts - b.ts).slice(-60);
+}
+
+async function storeCommunityMessage(msg) {
+  if (!supabaseAdmin) {
+    _cmMessages.push(msg);
+    if (_cmMessages.length > 60) _cmMessages.splice(0, _cmMessages.length - 60);
+    return;
+  }
+  const name = `${String(msg.ts).padStart(13, "0")}-${msg.id}.json`;
+  await putRuntimeJson(`community/${name}`, msg);
+  const { data } = await supabaseAdmin.storage.from(RUNTIME_BUCKET).list("community", {
+    limit: 100,
+    sortBy: { column: "name", order: "desc" },
+  });
+  const stale = (data || []).slice(60).map((entry) => `community/${entry.name}`);
+  if (stale.length) await supabaseAdmin.storage.from(RUNTIME_BUCKET).remove(stale);
+}
+
+app.get("/api/community/history", async (_req, res) => {
+  try {
+    const messages = await loadCommunityMessages();
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ messages, count: null });
+  } catch (err) {
+    _captureError("community/history", err);
+    res.status(503).json({ error: "Community history unavailable" });
+  }
 });
 
 const _cmLimit = rateLimit({ windowMs: 10_000, max: 5, standardHeaders: false, legacyHeaders: false,
-  handler: (req, res) => res.status(429).json({ error: "Slow down — 5 messages per 10 s max." }) });
+  handler: (_req, res) => res.status(429).json({ error: "Slow down — 5 messages per 10 s max." }) });
 
-app.post("/api/community/message", _cmLimit, express.json({ limit: "4kb" }), (req, res) => {
-  // Strip all HTML/script content before storing — prevents stored XSS via SSE broadcast
+app.post("/api/community/message", _cmLimit, express.json({ limit: "4kb" }), async (req, res) => {
   const name = String(req.body?.name || "Anonymous")
     .trim()
     .replace(/[^a-zA-Z0-9 _.'\-@]/g, "")
     .slice(0, 24) || "Anonymous";
   const text = String(req.body?.text || "")
     .trim()
-    .replace(/<[^>]*>/g, "")           // strip HTML tags
-    .replace(/javascript:/gi, "")      // strip JS URIs
-    .replace(/on\w{1,20}\s*=/gi, "")   // strip event handlers
+    .replace(/<[^>]*>/g, "")
+    .replace(/javascript:/gi, "")
+    .replace(/on\w{1,20}\s*=/gi, "")
     .slice(0, 500);
   if (!text) return res.status(400).json({ error: "empty" });
-  const msg = { type: "message", id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    name, text, ts: Date.now() };
-  _cmMessages.push(msg);
-  if (_cmMessages.length > 60) _cmMessages.splice(0, _cmMessages.length - 60);
-  _cmBroadcast(msg);
-  res.json({ ok: true });
+  const msg = {
+    type: "message",
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name,
+    text,
+    ts: Date.now(),
+  };
+  try {
+    await storeCommunityMessage(msg);
+    res.json({ ok: true, message: msg });
+  } catch (err) {
+    _captureError("community/message", err);
+    res.status(503).json({ error: "Could not save community message" });
+  }
 });
 
 // ── Computer Use — in-memory session store ────────────────────────────────────
@@ -1329,63 +1474,123 @@ app.get("/testing", (_req, res) => res.sendFile(path.join(__dirname, "public", "
 app.get("/landing",  (_req, res) => res.sendFile(path.join(__dirname, "public", "landing.html")));
 app.get("/pricing",  (_req, res) => res.sendFile(path.join(__dirname, "public", "pricing.html")));
 
-// ── Feedback / Inbox (in-memory + best-effort file persistence) ───────────────
-const FEEDBACK = [];
-const FEEDBACK_FILE = path.join(__dirname, "..", "logs", "feedback.json");
-try {
-  const fs = require("fs");
-  if (fs.existsSync(FEEDBACK_FILE)) {
-    const d = JSON.parse(fs.readFileSync(FEEDBACK_FILE, "utf8"));
-    if (Array.isArray(d)) FEEDBACK.push(...d.slice(-200));
+// ── Feedback / Inbox ───────────────────────────────────────────────────────
+const FEEDBACK = []; // local fallback only
+
+async function feedbackUser(req) {
+  if (isLocalRequest(req)) return { id: "local", email: "local@studio", app_metadata: {}, local: true };
+  return authenticatedUser(req);
+}
+
+async function appendUserFeedback(user, item) {
+  if (user.local || !supabaseAdmin) {
+    FEEDBACK.push(item);
+    if (FEEDBACK.length > 200) FEEDBACK.splice(0, FEEDBACK.length - 200);
+    return;
   }
-} catch (_) {}
-function saveFeedback() {
-  try {
-    const fs = require("fs");
-    const dir = path.dirname(FEEDBACK_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(FEEDBACK_FILE, JSON.stringify(FEEDBACK.slice(-200), null, 2));
-  } catch (_) {}
+  const { data, error } = await supabaseAdmin.auth.admin.getUserById(user.id);
+  if (error) throw error;
+  const currentMeta = data?.user?.app_metadata || {};
+  const items = Array.isArray(currentMeta.studio_feedback) ? currentMeta.studio_feedback.slice(-49) : [];
+  items.push(item);
+  const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+    app_metadata: { ...currentMeta, studio_feedback: items },
+  });
+  if (updateError) throw updateError;
 }
-function feedbackInternalOK(req) {
-  try { if (isLocalRequest(req)) return true; } catch (_) {}
-  return req.get("X-Internal") === "ZERO-2026";
+
+async function listAllAuthUsers() {
+  if (!supabaseAdmin) return [];
+  const users = [];
+  let page = 1;
+  for (;;) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    const batch = data?.users || [];
+    users.push(...batch);
+    if (batch.length < 1000) break;
+    page++;
+  }
+  return users;
 }
-// Anyone can submit feedback
-app.post("/api/feedback", (req, res) => {
-  const { message, kind, email, page } = req.body || {};
+
+app.post("/api/feedback", async (req, res) => {
+  const user = await feedbackUser(req);
+  if (!user) return res.status(401).json({ error: "Sign in to send feedback on the hosted app." });
+  const { message, kind, page } = req.body || {};
   const text = String(message || "").trim().slice(0, 2000);
   if (!text) return res.status(400).json({ error: "Empty feedback" });
   const item = {
     id: "fb_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    ownerId: user.id,
     kind: ["bug", "idea", "praise", "other"].includes(kind) ? kind : "other",
     message: text,
-    email: String(email || "").slice(0, 120),
+    email: String(user.email || "").slice(0, 120),
     page: String(page || "").slice(0, 200),
     ts: Date.now(),
     read: false,
   };
-  FEEDBACK.push(item);
-  if (FEEDBACK.length > 200) FEEDBACK.splice(0, FEEDBACK.length - 200);
-  saveFeedback();
-  res.json({ ok: true, id: item.id });
+  try {
+    await appendUserFeedback(user, item);
+    res.json({ ok: true, id: item.id });
+  } catch (err) {
+    _captureError("feedback/create", err);
+    res.status(503).json({ error: "Could not save feedback" });
+  }
 });
-// Internal-only: read the inbox (localhost or X-Internal secret)
-app.get("/api/feedback", (req, res) => {
-  if (!feedbackInternalOK(req)) return res.status(403).json({ error: "internal only" });
-  res.json({
-    items: FEEDBACK.slice().reverse(),
-    count: FEEDBACK.length,
-    unread: FEEDBACK.filter(f => !f.read).length,
-  });
+
+app.get("/api/feedback", requireAdmin, async (_req, res) => {
+  try {
+    if (!supabaseAdmin) {
+      return res.json({ items: FEEDBACK.slice().reverse(), count: FEEDBACK.length, unread: FEEDBACK.filter((f) => !f.read).length });
+    }
+    const users = await listAllAuthUsers();
+    const items = users.flatMap((user) => {
+      const feedback = Array.isArray(user.app_metadata?.studio_feedback) ? user.app_metadata.studio_feedback : [];
+      return feedback.map((item) => ({ ...item, ownerId: item.ownerId || user.id, email: item.email || user.email || "" }));
+    }).sort((a, b) => b.ts - a.ts);
+    res.json({ items, count: items.length, unread: items.filter((f) => !f.read).length });
+  } catch (err) {
+    _captureError("feedback/list", err);
+    res.status(503).json({ error: "Could not load feedback" });
+  }
 });
-app.post("/api/feedback/read", (req, res) => {
-  if (!feedbackInternalOK(req)) return res.status(403).json({ error: "internal only" });
+
+app.post("/api/feedback/read", requireAdmin, async (req, res) => {
   const { id, all } = req.body || {};
-  if (all) FEEDBACK.forEach(f => (f.read = true));
-  else { const it = FEEDBACK.find(f => f.id === id); if (it) it.read = true; }
-  saveFeedback();
-  res.json({ ok: true });
+  try {
+    if (!supabaseAdmin) {
+      if (all) FEEDBACK.forEach((f) => (f.read = true));
+      else {
+        const item = FEEDBACK.find((f) => f.id === id);
+        if (item) item.read = true;
+      }
+      return res.json({ ok: true });
+    }
+    const users = await listAllAuthUsers();
+    for (const user of users) {
+      const meta = user.app_metadata || {};
+      const feedback = Array.isArray(meta.studio_feedback) ? meta.studio_feedback : [];
+      let changed = false;
+      const next = feedback.map((item) => {
+        if (all || item.id === id) {
+          changed = true;
+          return { ...item, read: true };
+        }
+        return item;
+      });
+      if (changed) {
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+          app_metadata: { ...meta, studio_feedback: next },
+        });
+        if (error) throw error;
+      }
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    _captureError("feedback/read", err);
+    res.status(503).json({ error: "Could not update feedback" });
+  }
 });
 
 // Export for Vercel serverless

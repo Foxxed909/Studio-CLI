@@ -67,7 +67,10 @@ function done(session) {
   if (!cliMode) {
     document.getElementById("title").textContent = "Signed in ✓";
     document.getElementById("sub").textContent = "Taking you to Studio Stage…";
-    setTimeout(() => location.replace("/index.html"), 700);
+    const next = sessionStorage.getItem("studio_login_next");
+    sessionStorage.removeItem("studio_login_next");
+    const destination = next && next.startsWith("/") && !next.startsWith("//") ? next : "/index.html";
+    setTimeout(() => location.replace(destination), 700);
     return;
   }
   sessionStorage.removeItem("studio_cli_login");

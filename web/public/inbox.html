@@ -57,14 +57,20 @@ h1{font-size:24px;margin-bottom:2px}
 </head>
 <body>
 <script>
-(function(){
-  var ALLOW=["jasminefoxx799@gmail.com","studio@foxxia.dev"], CODE="ZERO-2026";
-  var email=(localStorage.getItem("studioEmail")||"").trim().toLowerCase();
-  var qp=new URLSearchParams(location.search).get("code");
-  if(qp && qp===CODE) localStorage.setItem("zeroAccess","1");
-  window.INBOX_OK = ALLOW.indexOf(email)>=0 || localStorage.getItem("zeroAccess")==="1";
-  document.documentElement.setAttribute("data-zero-theme", localStorage.getItem("zeroTheme")||"dark");
-})();
+function stageToken(){
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(key && key.startsWith("sb-") && key.endsWith("-auth-token")){
+        const value=JSON.parse(localStorage.getItem(key));
+        return value?.access_token || value?.currentSession?.access_token || null;
+      }
+    }
+  }catch{}
+  return null;
+}
+window.INBOX_TOKEN = stageToken();
+document.documentElement.setAttribute("data-zero-theme", localStorage.getItem("zeroTheme")||"dark");
 </script>
 
 <header>
@@ -90,22 +96,16 @@ h1{font-size:24px;margin-bottom:2px}
 </main>
 
 <script>
-if(!window.INBOX_OK){
+if(!window.INBOX_TOKEN){
   document.body.innerHTML='<div class="gate"><div class="gbox">'
     +'<div style="font-size:30px;margin-bottom:10px">📥</div>'
     +'<h2 style="margin-bottom:10px;font-size:20px">Internal inbox</h2>'
-    +'<p style="color:var(--ink2);margin-bottom:18px;font-size:14px">This inbox is for internal testers. Enter your access code.</p>'
-    +'<div style="display:flex;gap:8px;justify-content:center"><input id="c" placeholder="Access code"><button id="g">Unlock</button></div>'
-    +'<div id="e" style="color:#f87171;font-size:13px;min-height:18px;margin-top:10px"></div>'
-    +'<a href="/index.html" style="color:var(--ink3);font-size:13px">← Back to Studio</a></div></div>';
-  var go=function(){var v=(document.getElementById("c").value||"").trim();
-    if(v==="ZERO-2026"){localStorage.setItem("zeroAccess","1");location.reload();}
-    else document.getElementById("e").textContent="Invalid code.";};
-  document.getElementById("g").addEventListener("click",go);
-  document.getElementById("c").addEventListener("keydown",function(ev){if(ev.key==="Enter")go();});
+    +'<p style="color:var(--ink2);margin-bottom:18px;font-size:14px">Sign in with an authorized Studio admin account to continue.</p>'
+    +'<a class="btn solid" href="/login.html?next=%2Finbox.html">Sign in</a>'
+    +'<div style="margin-top:16px"><a href="/index.html" style="color:var(--ink3);font-size:13px">← Back to Studio</a></div></div></div>';
 }else{
   var ITEMS=[], FILTER="all";
-  var HEADERS={"X-Internal":"ZERO-2026"};
+  var HEADERS={"Authorization":"Bearer "+window.INBOX_TOKEN};
   function esc(s){return (s||"").replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
   function ago(ts){var s=(Date.now()-ts)/1000;if(s<60)return"just now";if(s<3600)return Math.floor(s/60)+"m ago";
     if(s<86400)return Math.floor(s/3600)+"h ago";return Math.floor(s/86400)+"d ago";}
@@ -126,18 +126,27 @@ if(!window.INBOX_OK){
   }
   window.markRead=function(id){fetch("/api/feedback/read",{method:"POST",
     headers:Object.assign({"Content-Type":"application/json"},HEADERS),body:JSON.stringify({id:id})})
-    .then(()=>{var it=ITEMS.find(x=>x.id===id);if(it)it.read=true;updSub();render();});};
+    .then(r=>{if(!r.ok)throw new Error(String(r.status));return r.json();})
+    .then(()=>{var it=ITEMS.find(x=>x.id===id);if(it)it.read=true;updSub();render();})
+    .catch(()=>{document.getElementById("sub").textContent="Could not update feedback.";});};
   window.markAll=function(){fetch("/api/feedback/read",{method:"POST",
     headers:Object.assign({"Content-Type":"application/json"},HEADERS),body:JSON.stringify({all:true})})
-    .then(()=>{ITEMS.forEach(x=>x.read=true);updSub();render();});};
+    .then(r=>{if(!r.ok)throw new Error(String(r.status));return r.json();})
+    .then(()=>{ITEMS.forEach(x=>x.read=true);updSub();render();})
+    .catch(()=>{document.getElementById("sub").textContent="Could not update feedback.";});};
   function updSub(){var u=ITEMS.filter(x=>!x.read).length;
     document.getElementById("sub").textContent=ITEMS.length+" message"+(ITEMS.length!==1?"s":"")+" · "+u+" unread";
     document.getElementById("unreadBtn").textContent=u?("Mark all read ("+u+")"):"All read";}
   window.load=function(){
-    fetch("/api/feedback",{headers:HEADERS}).then(r=>r.ok?r.json():Promise.reject(r.status))
+    fetch("/api/feedback",{headers:HEADERS}).then(async r=>{
+      if(r.ok)return r.json();
+      if(r.status===401)throw new Error("Sign in required");
+      if(r.status===403)throw new Error("Admin access required");
+      throw new Error("HTTP "+r.status);
+    })
       .then(d=>{ITEMS=d.items||[];updSub();render();})
-      .catch(e=>{document.getElementById("sub").textContent="Could not load inbox ("+e+").";
-        document.getElementById("list").innerHTML='<div class="empty">The server may not be running, or access was denied.</div>';});
+      .catch(e=>{document.getElementById("sub").textContent=e.message||"Could not load inbox.";
+        document.getElementById("list").innerHTML='<div class="empty">Access denied or the inbox service is unavailable.</div>';});
   };
   load();
 }

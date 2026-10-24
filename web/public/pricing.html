@@ -334,7 +334,7 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
   </div>
   <div class="faq-item">
     <div class="faq-q">When will paid plans be available?</div>
-    <div class="faq-a">Paid plans are coming soon. Join the waitlist by sending an email to the team or following Studio on GitHub. Free tier features remain free forever.</div>
+    <div class="faq-a">Paid plans are available through secure Stripe Checkout. Sign in first, then choose monthly or annual billing. Free tier features remain available without a paid subscription.</div>
   </div>
   <div class="faq-item">
     <div class="faq-q">Can I bring my own OpenRouter key?</div>
@@ -414,12 +414,30 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
     el._t = setTimeout(() => { el.className = ''; }, 3500);
   }
 
-  // ── Sync plan from server if email known ───────────────────────────────────
+  function stageToken(){
+    try {
+      for(let i=0;i<localStorage.length;i++){
+        const key=localStorage.key(i);
+        if(key && key.startsWith('sb-') && key.endsWith('-auth-token')){
+          const value=JSON.parse(localStorage.getItem(key));
+          return value?.access_token || value?.currentSession?.access_token || null;
+        }
+      }
+    } catch {}
+    return null;
+  }
+  function authHeaders(){
+    const token=stageToken();
+    return token ? { Authorization: 'Bearer ' + token } : {};
+  }
+
+  // ── Sync plan from authenticated account ──────────────────────────────────
   const savedEmail = localStorage.getItem('studioEmail');
-  if(savedEmail){
-    fetch('/api/stripe/plan?email=' + encodeURIComponent(savedEmail))
-      .then(r => r.json())
-      .then(d => { if(d.plan && d.plan !== 'free') { localStorage.setItem('studioPlan', d.plan); renderPlan(d.plan); } })
+  const token = stageToken();
+  if(savedEmail && token){
+    fetch('/api/stripe/plan', { headers: authHeaders() })
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(d => { if(d.plan) { localStorage.setItem('studioPlan', d.plan); renderPlan(d.plan); } })
       .catch(() => {});
   }
 
@@ -476,14 +494,21 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
   async function startCheckout(){
     const email = document.getElementById('emailInput').value.trim();
     if(!email || !email.includes('@')){ toast('Enter a valid email first.', true); return; }
+    const token = stageToken();
+    if(!token){
+      toast('Sign in before upgrading.', true);
+      sessionStorage.setItem('studio_login_next', '/pricing.html');
+      setTimeout(() => { location.href='/login.html?next=%2Fpricing.html'; }, 700);
+      return;
+    }
     const btn = document.getElementById('modalConfirm');
     btn.disabled = true; btn.textContent = 'Redirecting…';
     localStorage.setItem('studioEmail', email);
     try {
       const res  = await fetch('/api/stripe/create-checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: _pendingPlan, email }),
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ plan: _pendingPlan, billing: _annualMode ? 'annual' : 'monthly' }),
       });
       const data = await res.json();
       if(data.url){ window.location.href = data.url; }

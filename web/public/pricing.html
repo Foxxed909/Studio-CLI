@@ -16,17 +16,17 @@ nav{position:sticky;top:0;z-index:100;background:rgba(13,13,13,.92);
   backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.07);
   padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px}
 .nav-logo{font-size:15px;font-weight:700;letter-spacing:.01em;display:flex;align-items:center;gap:8px}
-.nav-gem{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#19c37d,#0ea5e9);
+.nav-gem{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#d97757,#0ea5e9);
   display:flex;align-items:center;justify-content:center}
 .nav-gem svg{width:12px;height:12px;stroke:#fff;fill:none}
-.nav-logo span{color:#19c37d}
+.nav-logo span{color:#d97757}
 .nav-links{display:flex;align-items:center;gap:6px}
 .nav-link{color:rgba(255,255,255,.5);font-size:13.5px;padding:7px 12px;
   border-radius:8px;transition:background .15s,color .15s}
 .nav-link:hover{background:rgba(255,255,255,.06);color:#ececec}
-.nav-cta{background:#19c37d;color:#fff;font-size:13.5px;font-weight:600;
+.nav-cta{background:#d97757;color:#131211;font-size:13.5px;font-weight:600;
   padding:8px 18px;border-radius:10px;transition:background .15s}
-.nav-cta:hover{background:#17a86b}
+.nav-cta:hover{background:#c46341}
 
 /* ── Gate banner ─────────────────────────────────────────────────────────── */
 #gateBanner{display:none;background:rgba(251,191,36,.08);border-bottom:1px solid rgba(251,191,36,.2);
@@ -35,23 +35,20 @@ nav{position:sticky;top:0;z-index:100;background:rgba(13,13,13,.92);
 
 /* ── Hero ────────────────────────────────────────────────────────────────── */
 .hero{padding:72px 24px 56px;text-align:center;position:relative}
-.hero::before{content:"";position:absolute;top:-120px;left:50%;transform:translateX(-50%);
-  width:600px;height:600px;background:radial-gradient(ellipse,rgba(25,195,125,.09) 0%,transparent 68%);
-  pointer-events:none;z-index:0}
+.hero::before{content:"";position:absolute;inset:18px 14% auto;height:1px;background:rgba(217,119,87,.24);pointer-events:none;z-index:0}
 .hero-badge{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px;
-  background:rgba(25,195,125,.11);border:1px solid rgba(25,195,125,.24);
-  border-radius:20px;padding:5px 14px;font-size:12px;color:#19c37d;font-weight:600;
+  background:rgba(217,119,87,.11);border:1px solid rgba(217,119,87,.24);
+  border-radius:20px;padding:5px 14px;font-size:12px;color:#d97757;font-weight:600;
   margin-bottom:22px;letter-spacing:.03em}
 h1{position:relative;z-index:1;font-size:clamp(34px,5.5vw,58px);font-weight:700;
   letter-spacing:-.04em;line-height:1.1;margin-bottom:16px}
-h1 span{background:linear-gradient(135deg,#19c37d,#67e8f9);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.hero-sub{position:relative;z-index:1;font-size:clamp(14px,2vw,17px);color:rgba(255,255,255,.48);
+h1 span{color:#d97757}
+.hero-sub{position:relative;z-index:1;font-size:clamp(14px,2vw,17px);color:rgba(255,255,255,.72);
   max-width:480px;margin:0 auto 12px;line-height:1.65}
 .cur-plan-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;
-  color:rgba(255,255,255,.45);padding:4px 12px;border-radius:20px;
+  color:rgba(255,255,255,.68);padding:4px 12px;border-radius:20px;
   border:1px solid rgba(255,255,255,.1);margin-top:10px}
-.cur-plan-pill span{color:#19c37d}
+.cur-plan-pill span{color:#d97757}
 
 /* ── Pricing grid ────────────────────────────────────────────────────────── */
 .pricing-section{max-width:1120px;margin:0 auto;padding:16px 20px 80px}
@@ -60,45 +57,45 @@ h1 span{background:linear-gradient(135deg,#19c37d,#67e8f9);
   padding:22px 18px 20px;display:flex;flex-direction:column;gap:0;
   transition:border-color .2s,transform .15s;position:relative;overflow:hidden}
 .plan-card:hover{border-color:rgba(255,255,255,.16);transform:translateY(-2px)}
-.plan-card.popular{border-color:rgba(25,195,125,.35);background:rgba(25,195,125,.03)}
+.plan-card.popular{border-color:rgba(217,119,87,.35);background:rgba(217,119,87,.03)}
 .plan-card.popular::before{content:"Most Popular";position:absolute;top:0;right:0;
   font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  background:#19c37d;color:#fff;padding:4px 10px;border-radius:0 14px 0 10px}
+  background:#d97757;color:#131211;padding:4px 10px;border-radius:0 14px 0 10px}
 .plan-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;
-  color:rgba(255,255,255,.35);margin-bottom:10px}
+  color:rgba(255,255,255,.64);margin-bottom:10px}
 .plan-name{font-size:18px;font-weight:700;margin-bottom:4px;letter-spacing:-.02em}
 .plan-price{font-size:28px;font-weight:800;letter-spacing:-.04em;margin-bottom:2px}
-.plan-price sub{font-size:12px;font-weight:400;color:rgba(255,255,255,.4);letter-spacing:0}
-.plan-cycle{font-size:11px;color:rgba(255,255,255,.3);margin-bottom:14px}
-.plan-credits{font-size:12.5px;font-weight:700;color:#19c37d;margin-bottom:14px;
-  padding:5px 10px;background:rgba(25,195,125,.1);border-radius:8px;text-align:center}
+.plan-price sub{font-size:12px;font-weight:400;color:rgba(255,255,255,.68);letter-spacing:0}
+.plan-cycle{font-size:11px;color:rgba(255,255,255,.62);margin-bottom:14px}
+.plan-credits{font-size:12.5px;font-weight:700;color:#d97757;margin-bottom:14px;
+  padding:5px 10px;background:rgba(217,119,87,.1);border-radius:8px;text-align:center}
 .plan-features{list-style:none;display:flex;flex-direction:column;gap:6px;flex:1}
-.plan-features li{font-size:12px;color:rgba(255,255,255,.55);display:flex;align-items:flex-start;gap:6px;line-height:1.4}
-.plan-features li::before{content:"✓";color:#19c37d;font-weight:700;flex-shrink:0;font-size:11px;margin-top:1px}
+.plan-features li{font-size:12px;color:rgba(255,255,255,.75);display:flex;align-items:flex-start;gap:6px;line-height:1.4}
+.plan-features li::before{content:"✓";color:#d97757;font-weight:700;flex-shrink:0;font-size:11px;margin-top:1px}
 .plan-features li.dim::before{content:"–";color:rgba(255,255,255,.2)}
 .plan-features li.dim{color:rgba(255,255,255,.25)}
 .plan-cta{margin-top:18px;width:100%;padding:10px;border-radius:10px;border:none;
   font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
 .plan-cta.active-plan{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
   color:rgba(255,255,255,.5);cursor:default}
-.plan-cta.upgrade{background:linear-gradient(135deg,#19c37d,#17a86b);color:#fff}
+.plan-cta.upgrade{background:linear-gradient(135deg,#d97757,#c46341);color:#fff}
 .plan-cta.upgrade:hover{opacity:.88;transform:translateY(-1px)}
 .plan-cta.upgrade-hi{background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff}
 .plan-cta.upgrade-hi:hover{opacity:.88;transform:translateY(-1px)}
 .plan-cta.soon{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
-  color:rgba(255,255,255,.3);cursor:not-allowed}
+  color:rgba(255,255,255,.62);cursor:not-allowed}
 
 /* ── Feature comparison ──────────────────────────────────────────────────── */
 .compare-section{max-width:720px;margin:0 auto;padding:0 20px 80px}
 .compare-title{font-size:20px;font-weight:700;text-align:center;margin-bottom:28px;letter-spacing:-.02em}
 .compare-table{width:100%;border-collapse:collapse}
 .compare-table th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
-  color:rgba(255,255,255,.3);padding:8px 14px;text-align:left;border-bottom:1px solid rgba(255,255,255,.07)}
+  color:rgba(255,255,255,.62);padding:8px 14px;text-align:left;border-bottom:1px solid rgba(255,255,255,.07)}
 .compare-table td{padding:10px 14px;font-size:13px;color:rgba(255,255,255,.65);
   border-bottom:1px solid rgba(255,255,255,.05)}
 .compare-table tr:last-child td{border-bottom:none}
 .compare-table td:first-child{color:rgba(255,255,255,.85);font-weight:500}
-.check{color:#19c37d;font-weight:700}
+.check{color:#d97757;font-weight:700}
 .cross{color:rgba(255,255,255,.18)}
 
 /* ── FAQ ──────────────────────────────────────────────────────────────────── */
@@ -111,7 +108,7 @@ h1 span{background:linear-gradient(135deg,#19c37d,#67e8f9);
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 footer{border-top:1px solid rgba(255,255,255,.07);padding:28px 24px;text-align:center;
   font-size:12px;color:rgba(255,255,255,.25)}
-footer a{color:rgba(255,255,255,.4);transition:color .15s}
+footer a{color:rgba(255,255,255,.68);transition:color .15s}
 footer a:hover{color:#ececec}
 footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
 
@@ -157,9 +154,9 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
       <div id="billingThumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;
         border-radius:50%;background:#fff;transition:transform .2s"></div>
     </div>
-    <span id="lblAnnual" style="color:rgba(255,255,255,.4);font-weight:500">Annual</span>
-    <span id="saveBadge" style="display:none;background:rgba(25,195,125,.2);color:#19c37d;
-      font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid rgba(25,195,125,.3)">
+    <span id="lblAnnual" style="color:rgba(255,255,255,.68);font-weight:500">Annual</span>
+    <span id="saveBadge" style="display:none;background:rgba(217,119,87,.2);color:#d97757;
+      font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid rgba(217,119,87,.3)">
       Save 25%
     </span>
   </div>
@@ -318,7 +315,7 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
 
   <div class="faq-item">
     <div class="faq-q">Is there a discount for annual billing?</div>
-    <div class="faq-a">Yes — switching to annual billing saves you <strong style="color:#19c37d">25%</strong> across all paid plans. Starter drops to $3.75/mo, Pro to $9/mo, Dev to $21.75/mo, Max to $59.25/mo, Ultra to $149/mo. Toggle "Annual" on the pricing page to see discounted prices.</div>
+    <div class="faq-a">Yes — switching to annual billing saves you <strong style="color:#d97757">25%</strong> across all paid plans. Starter drops to $3.75/mo, Pro to $9/mo, Dev to $21.75/mo, Max to $59.25/mo, Ultra to $149/mo. Toggle "Annual" on the pricing page to see discounted prices.</div>
   </div>
   <div class="faq-item">
     <div class="faq-q">What are credits?</div>
@@ -359,24 +356,24 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
 .modal-box{background:#161616;border:1px solid rgba(255,255,255,.1);border-radius:20px;
   padding:32px 28px;width:100%;max-width:380px;box-shadow:0 24px 64px rgba(0,0,0,.6)}
 .modal-title{font-size:17px;font-weight:700;margin-bottom:6px;letter-spacing:-.02em}
-.modal-sub{font-size:13px;color:rgba(255,255,255,.45);margin-bottom:22px;line-height:1.55}
+.modal-sub{font-size:13px;color:rgba(255,255,255,.68);margin-bottom:22px;line-height:1.55}
 .modal-input{width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
   border-radius:10px;padding:11px 14px;font-size:14px;color:#ececec;outline:none;font-family:inherit;
   transition:border-color .15s}
-.modal-input:focus{border-color:rgba(25,195,125,.5)}
+.modal-input:focus{border-color:rgba(217,119,87,.5)}
 .modal-actions{display:flex;gap:10px;margin-top:16px}
 .modal-cancel{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
   border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:rgba(255,255,255,.5);
   cursor:pointer;font-family:inherit;transition:background .15s}
 .modal-cancel:hover{background:rgba(255,255,255,.09)}
-.modal-confirm{flex:2;background:linear-gradient(135deg,#19c37d,#17a86b);border:none;
+.modal-confirm{flex:2;background:linear-gradient(135deg,#d97757,#c46341);border:none;
   border-radius:10px;padding:11px;font-size:13px;font-weight:600;color:#fff;
   cursor:pointer;font-family:inherit;transition:opacity .15s}
 .modal-confirm:hover{opacity:.88}
 .modal-confirm:disabled{opacity:.5;cursor:not-allowed}
 /* ── Toast ───────────────────────────────────────────────────────────────── */
 #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(12px);
-  background:#19c37d;color:#fff;font-size:13px;font-weight:600;padding:11px 22px;
+  background:#d97757;color:#131211;font-size:13px;font-weight:600;padding:11px 22px;
   border-radius:12px;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;z-index:600}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 #toast.error{background:#ef4444}
@@ -448,7 +445,7 @@ footer nav{display:flex;justify-content:center;gap:20px;margin-top:10px}
     document.getElementById('curPlanPill').style.display = 'inline-flex';
 
     const card = document.getElementById('card-' + plan);
-    if(card){ card.style.borderColor = 'rgba(25,195,125,.45)'; card.style.boxShadow = '0 0 0 1px rgba(25,195,125,.2)'; }
+    if(card){ card.style.borderColor = 'rgba(217,119,87,.45)'; card.style.boxShadow = '0 0 0 1px rgba(217,119,87,.2)'; }
 
     ['free','starter','pro','dev','max','ultra'].forEach(p => {
       const btn = document.getElementById('cta-' + p);
@@ -533,10 +530,10 @@ function toggleBilling() {
   const lblM  = document.getElementById('lblMonthly');
   const lblA  = document.getElementById('lblAnnual');
   thumb.style.transform = _annualMode ? 'translateX(18px)' : '';
-  tog.style.background   = _annualMode ? '#19c37d' : 'rgba(255,255,255,.15)';
+  tog.style.background   = _annualMode ? '#d97757' : 'rgba(255,255,255,.15)';
   badge.style.display    = _annualMode ? 'inline-block' : 'none';
-  lblM.style.color = _annualMode ? 'rgba(255,255,255,.4)' : '#ececec';
-  lblA.style.color = _annualMode ? '#19c37d' : 'rgba(255,255,255,.4)';
+  lblM.style.color = _annualMode ? 'rgba(255,255,255,.68)' : '#ececec';
+  lblA.style.color = _annualMode ? '#d97757' : 'rgba(255,255,255,.68)';
   lblM.style.fontWeight = _annualMode ? '500' : '700';
   lblA.style.fontWeight = _annualMode ? '700' : '500';
 

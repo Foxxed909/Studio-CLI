@@ -171,6 +171,9 @@ app.use((_req, res, next) => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function isLocalRequest(req) {
+  // Never grant localhost bypasses inside Vercel Functions. The function may
+  // communicate through an internal loopback/proxy even when the caller is remote.
+  if (process.env.VERCEL) return false;
   const ip = req.ip || req.connection?.remoteAddress || "";
   return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
 }
@@ -247,9 +250,8 @@ const globalLimit = rateLimit({
     res.status(429).json({ error: "Rate limit exceeded.", highLoad: isHighLoad() });
   },
   skip: (req) => {
-    const isLocal = req.ip === "::1" || req.ip === "127.0.0.1" || req.ip === "::ffff:127.0.0.1";
     const hasOwnLimit = ["/api/chat","/api/research","/api/health","/api/stats"].some(p => req.path.startsWith(p));
-    return isLocal || hasOwnLimit;
+    return isLocalRequest(req) || hasOwnLimit;
   },
 });
 
@@ -490,8 +492,7 @@ app.get("/api/config", (req, res) => {
 
 app.post("/api/key", keyLimit, (req, res) => {
   // Only accept from loopback — this endpoint must never be public-facing
-  const ip = req.ip || req.connection?.remoteAddress || "";
-  const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+  const isLocal = isLocalRequest(req);
   const remoteSecret = process.env.ALLOW_REMOTE_KEY;
   const providedSecret = req.get("X-Remote-Key-Secret") || "";
   const allowRemote = remoteSecret && remoteSecret.length >= 16 && providedSecret === remoteSecret;
@@ -930,9 +931,7 @@ app.use((req, res, next) => {
   next();
 });
 app.get("/api/stats", (req, res) => {
-  const ip = req.ip || "";
-  const isLocal = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-  if (!isLocal) return res.status(403).json({ error: "Forbidden" });
+  if (!isLocalRequest(req)) return res.status(403).json({ error: "Forbidden" });
   res.json({ ..._stats, uptime: Math.floor((Date.now() - _startTime) / 1000) });
 });
 

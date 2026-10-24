@@ -33,7 +33,7 @@
   --sidebar:var(--bg-elev);
   --surface:#1f1c19;--surface2:#262320;--surface3:#302c28;
   --border:rgba(240,232,220,.08);--border2:rgba(240,232,220,.14);--border3:rgba(240,232,220,.22);
-  --text:#f0ede8;--text2:rgba(240,237,232,.62);--text3:rgba(240,237,232,.34);--text4:rgba(240,237,232,.18);
+  --text:#f0ede8;--text2:#c8c0ba;--text3:#9c938d;--text4:#716a65;
   --danger:#ef6b5d;--warn:#e0a458;--ok:#7fb685;
   --r:11px;--r-sm:8px;--r-lg:14px;
   --fs:14.5px;--chat-fs:15px;--msg-pad:14px 18px;
@@ -47,7 +47,7 @@
   --bg:#f6f4ef;--bg-elev:#fbfaf6;--sidebar:var(--bg-elev);
   --surface:#ffffff;--surface2:#efece6;--surface3:#e6e2d9;
   --border:rgba(28,24,18,.09);--border2:rgba(28,24,18,.16);--border3:rgba(28,24,18,.28);
-  --text:#1c1814;--text2:rgba(28,24,18,.62);--text3:rgba(28,24,18,.4);--text4:rgba(28,24,18,.22);
+  --text:#1c1814;--text2:#5f5752;--text3:#6b625c;--text4:#756c66;
   --acc:#c46341;--acc-soft:rgba(196,99,65,.12);--acc-glow:rgba(196,99,65,.24);--accent:var(--acc);
   --danger:#dc2626;--warn:#d97706;
   --shadow:0 2px 12px rgba(0,0,0,.08);--shadow-lg:0 8px 36px rgba(0,0,0,.14);
@@ -552,7 +552,7 @@ button,input,textarea,select{font-family:inherit}
 .sp-footer{padding:14px;display:flex;flex-direction:column;gap:7px;
   border-top:1px solid var(--hover)}
 .sp-save{width:100%;background:var(--accent);border:none;border-radius:9px;padding:10px;
-  color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
+  color:#131211;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
   transition:opacity .15s;letter-spacing:-.01em}
 .sp-save:hover{opacity:.85}
 .sp-close-btn{width:100%;background:none;border:1px solid var(--hover3);border-radius:9px;
@@ -585,7 +585,7 @@ button,input,textarea,select{font-family:inherit}
 .sz-btn.sz-active{border-color:var(--accent);color:var(--accent);background:rgba(26,200,126,.07);font-weight:600}
 /* keep legacy names for sections still using them */
 .modal-section{margin-bottom:22px}
-.modal-sec-title{font-size:10px;font-weight:700;color:var(--text3);
+.modal-sec-title{font-size:11px;font-weight:700;color:var(--text3);
   text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px;
   display:flex;align-items:center;gap:8px}
 .modal-sec-title::after{content:"";flex:1;height:1px;background:var(--border)}
@@ -593,7 +593,7 @@ button,input,textarea,select{font-family:inherit}
 .modal-close{background:none;border:none;cursor:pointer;color:var(--text2);padding:3px 8px;border-radius:6px;font-size:19px;line-height:1;transition:color .15s,background .15s;font-family:inherit}
 .modal-close:hover{color:var(--text);background:var(--hover2)}
 .modal-section{margin-bottom:20px}
-.modal-sec-title{font-size:10px;font-weight:700;color:var(--text3);
+.modal-sec-title{font-size:11px;font-weight:700;color:var(--text3);
   text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px;
   display:flex;align-items:center;gap:8px}
 .modal-sec-title::after{content:"";flex:1;height:1px;background:var(--border)}
@@ -647,7 +647,7 @@ button,input,textarea,select{font-family:inherit}
   border-radius:var(--r-sm);padding:11px 13px}
 .stat-val{font-size:20px;font-weight:700;letter-spacing:-.03em;color:var(--text)}
 .stat-lbl{font-size:11px;color:var(--text3);margin-top:2px}
-.beta-badge{font-size:9px;background:rgba(234,179,8,.1);color:#fbbf24;
+.beta-badge{font-size:11px;background:rgba(234,179,8,.1);color:#fbbf24;
   border:1px solid rgba(234,179,8,.28);border-radius:4px;padding:1px 5px;
   margin-left:5px;font-weight:700;letter-spacing:.05em;vertical-align:middle}
 
@@ -1681,11 +1681,11 @@ body.gm-ui-active .file-pre-name{min-width:0}
 
 /* ── v10 Beta badge ── */
 .gm-v10-badge{
-  font-size:10px;font-weight:700;background:linear-gradient(135deg,var(--acc-soft),rgba(52,168,83,.2));
+  font-size:11px;font-weight:700;background:var(--acc-soft);
   color:var(--acc);border:1px solid var(--acc-glow);border-radius:10px;
   padding:2px 7px;letter-spacing:.05em;cursor:pointer;transition:all .15s}
-.gm-v10-badge:hover{background:linear-gradient(135deg,var(--acc-glow),rgba(52,168,83,.3))}
-.gm-v10-badge.gm-beta-on{background:linear-gradient(135deg,rgba(251,188,4,.15),rgba(234,67,53,.15));color:#fbbf24;border-color:rgba(251,188,4,.3)}
+.gm-v10-badge:hover{background:rgba(217,119,87,.22)}
+.gm-v10-badge.gm-beta-on{background:rgba(224,164,88,.13);color:#f2bd73;border-color:rgba(224,164,88,.38)}
 
 /* ── Code blocks in messages ── */
 .msg .code-block-wrap{border-radius:12px;overflow:hidden;margin:10px 0;border:1px solid var(--hover2)}
@@ -1705,7 +1705,7 @@ body.gm-ui-active .file-pre-name{min-width:0}
 .overlay .settings-page{background:#161514}
 .sc-overlay,.lcp-overlay,.gc-overlay{backdrop-filter:blur(8px)}
 /* ── Sidebar nav extras (was inline in markup) ── */
-    .sb-grp{font-size:10px;text-transform:uppercase;letter-spacing:.9px;color:var(--text3);
+    .sb-grp{font-size:11px;text-transform:uppercase;letter-spacing:.9px;color:var(--text3);
       padding:13px 14px 5px;font-weight:600;user-select:none}
     .sb-new-chat.sb-primary{background:var(--accent-dim);color:var(--text);border:1px solid var(--border2);font-weight:600}
     .sb-new-chat.sb-primary:hover{border-color:var(--accent)}

@@ -84,6 +84,9 @@ jobs:
           vcurl "/api/feedback" /tmp/feedback.json
           node -e 'const d=require(process.argv[1]); if(d.error!=="Not authenticated") process.exit(1)' /tmp/feedback.json
 
+          vcurl "/api/connectors" /tmp/connectors.json
+          node -e 'const d=require(process.argv[1]); if(d.error!=="Not authenticated") process.exit(1)' /tmp/connectors.json
+
           vcurl "/api/computer/sessions" /tmp/computer.json
           node -e 'const d=require(process.argv[1]); if(d.error!=="Forbidden") process.exit(1)' /tmp/computer.json
 

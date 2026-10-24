@@ -14,10 +14,18 @@ const { createClient } = require("@supabase/supabase-js");
 // Stripe is optional — without a key the server still boots; billing routes 503.
 const stripe = process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
-// Supabase is optional — without env config the server still boots;
-// authenticated routes 503 (or use DEV_SKIP_AUTH on localhost).
-const supabaseAdmin = (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY)
+// Supabase auth uses the public anon credentials already used by the browser.
+// A service-role key is optional and is reserved for admin/durable-storage features.
+const PUBLIC_SUPABASE_URL = process.env.SUPABASE_URL || "https://yhranfhtggpzgadsyctw.supabase.co";
+const PUBLIC_SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ||
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlocmFuZmh0Z2dwemdhZHN5Y3R3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMzgwMzEsImV4cCI6MjA5NDcxNDAzMX0.Vdp5b706jsbHAQkF5mVu1NUEA6QKs07OiX3o6GxFAnQ";
+const supabaseAuth = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+const supabaseAdmin = process.env.SUPABASE_SERVICE_KEY
+  ? createClient(PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
   : null;
 
 // ── Auth middleware — verifies Supabase JWT ───────────────────────────────────
@@ -37,19 +45,14 @@ async function authenticatedUser(req) {
     return { id: "dev-local", email: "dev@localhost", app_metadata: {}, devBypass: true };
   }
   const token = bearerToken(req);
-  if (!token || token.startsWith("sk-or-") || !supabaseAdmin) return null;
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (!token || token.startsWith("sk-or-")) return null;
+  const { data, error } = await supabaseAuth.auth.getUser(token);
   return error ? null : (data?.user || null);
 }
 
 async function requireAuth(req, res, next) {
   const user = await authenticatedUser(req);
-  if (!user) {
-    if (!supabaseAdmin && !(process.env.DEV_SKIP_AUTH === "true" && isLocalRequest(req))) {
-      return res.status(503).json({ error: "Auth not configured" });
-    }
-    return res.status(401).json({ error: "Not authenticated" });
-  }
+  if (!user) return res.status(401).json({ error: "Not authenticated" });
   req.user = user;
   next();
 }
@@ -914,6 +917,16 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+app.get("/api/capabilities", (_req, res) => {
+  res.json({
+    auth: true,
+    billing: !!stripe,
+    hostedAi: !!process.env.OPENROUTER_API_KEY,
+    anonymousHostedAi: !!process.env.ANON_OPENROUTER_API_KEY,
+    durableRuntime: !!supabaseAdmin,
+  });
+});
+
 // ── /api/stats  — server-side request counters ───────────────────────────────
 const _stats = { chat: 0, search: 0, research: 0, errors: 0 };
 app.use((req, res, next) => {
@@ -1011,7 +1024,10 @@ async function readRuntimeJson(objectPath) {
 const _cmMessages = []; // local fallback only
 
 async function loadCommunityMessages() {
-  if (!supabaseAdmin) return _cmMessages.slice(-60);
+  if (!supabaseAdmin) {
+    if (process.env.VERCEL) return [];
+    return _cmMessages.slice(-60);
+  }
   await ensureRuntimeBucket();
   const { data, error } = await supabaseAdmin.storage.from(RUNTIME_BUCKET).list("community", {
     limit: 60,
@@ -1028,6 +1044,7 @@ async function loadCommunityMessages() {
 
 async function storeCommunityMessage(msg) {
   if (!supabaseAdmin) {
+    if (process.env.VERCEL) throw new Error("Durable community storage requires SUPABASE_SERVICE_KEY");
     _cmMessages.push(msg);
     if (_cmMessages.length > 60) _cmMessages.splice(0, _cmMessages.length - 60);
     return;
@@ -1323,7 +1340,10 @@ const BETA_MAX_SEATS = Math.max(1, parseInt(process.env.BETA_MAX_SEATS || "10", 
 const _localBetaSeats = new Map();
 
 async function listBetaSeats() {
-  if (!supabaseAdmin) return Array.from(_localBetaSeats.values());
+  if (!supabaseAdmin) {
+    if (process.env.VERCEL) throw new Error("Durable beta storage requires SUPABASE_SERVICE_KEY");
+    return Array.from(_localBetaSeats.values());
+  }
   const seats = [];
   let page = 1;
   for (;;) {
@@ -1343,6 +1363,7 @@ async function listBetaSeats() {
 
 async function setBetaSeat(user, enabled) {
   if (!supabaseAdmin) {
+    if (process.env.VERCEL) throw new Error("Durable beta storage requires SUPABASE_SERVICE_KEY");
     if (enabled) _localBetaSeats.set(user.id, { id: user.id, email: user.email || "", joined_at: new Date().toISOString() });
     else _localBetaSeats.delete(user.id);
     return;

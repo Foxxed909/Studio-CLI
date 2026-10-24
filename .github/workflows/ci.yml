@@ -50,6 +50,7 @@ jobs:
         run: |
           node --check server.js
           node --check public/studio-extras.js
+          node --check public/mobile-runtime.js
           node --check public/service-worker.js
           node --check public/extension/background.js
           node --check public/extension/popup.js

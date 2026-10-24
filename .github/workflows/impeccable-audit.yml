@@ -1,0 +1,24 @@
+name: Impeccable UI Audit
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/impeccable-audit.yml"]
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run deterministic interface audit
+        run: |
+          set +e
+          tool=".agents/skills/impeccable/scripts/impeccable"
+          chmod +x "$tool" || true
+          for target in web/public/index.html web/public/landing.html web/public/pricing.html web/public/studiotesting.html; do
+            echo "===== IMPECCABLE: $target ====="
+            "$tool" detect --json "$target"
+            echo
+          done
+          exit 0

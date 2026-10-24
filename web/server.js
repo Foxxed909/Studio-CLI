@@ -49,21 +49,67 @@ const STRIPE_PRICES = {
   ultra:   process.env.STRIPE_PRICE_ULTRA,
 };
 
-// ── Subscription storage (profiles/<email>/subscription.json) ────────────────
-function _subDir(email) {
-  const safe = email.toLowerCase().replace(/[^a-z0-9._@-]/g, "_");
-  const dir = path.join(__dirname, "..", "profiles", safe);
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+const PLAN_ORDER = { free: 0, starter: 1, pro: 2, dev: 3, max: 4, ultra: 5, team: 6, enterprise: 7, creator: 8 };
+const ANNUAL_PLAN_USD = { starter: 45, pro: 108, dev: 261, max: 711, ultra: 1788 };
+const PLAN_LABELS = { starter: "Studio Starter", pro: "Studio Pro", dev: "Studio Dev", max: "Studio Max", ultra: "Studio Ultra" };
+const _planCache = new Map();
+
+function planFromPriceId(priceId) {
+  if (!priceId) return null;
+  for (const [plan, id] of Object.entries(STRIPE_PRICES)) {
+    if (id && id === priceId) return plan;
+  }
+  return null;
 }
-function saveSub(email, data) {
-  const p = path.join(_subDir(email), "subscription.json");
-  fs.writeFileSync(p, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }, null, 2));
+
+function isSubscriptionActive(status) {
+  return ["active", "trialing", "past_due"].includes(status);
 }
-function loadSub(email) {
-  const p = path.join(_subDir(email), "subscription.json");
-  if (!fs.existsSync(p)) return null;
-  try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch { return null; }
+
+/**
+ * Stripe is the production source of truth for paid plans.
+ * This intentionally avoids writing subscription JSON into the Vercel function filesystem.
+ */
+async function resolvePlanForEmail(email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  if (!normalized) return { plan: "free", sub: null };
+  if (_CREATOR_EMAILS.has(normalized)) {
+    return { plan: "creator", sub: { plan: "creator", status: "active" } };
+  }
+
+  const cached = _planCache.get(normalized);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  if (!stripe) return { plan: "free", sub: null };
+
+  let best = { plan: "free", sub: null };
+  const customers = await stripe.customers.list({ email: normalized, limit: 10 });
+  for (const customer of customers.data || []) {
+    const subs = await stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 20 });
+    for (const sub of subs.data || []) {
+      if (!isSubscriptionActive(sub.status)) continue;
+      let plan = sub.metadata?.plan || null;
+      if (!plan) {
+        for (const item of sub.items?.data || []) {
+          plan = planFromPriceId(item.price?.id);
+          if (plan) break;
+        }
+      }
+      if (plan && (PLAN_ORDER[plan] ?? -1) > (PLAN_ORDER[best.plan] ?? -1)) {
+        best = {
+          plan,
+          sub: {
+            id: sub.id,
+            status: sub.status,
+            billing: sub.metadata?.billing || null,
+            current_period_end: sub.current_period_end || null,
+          },
+        };
+      }
+    }
+  }
+
+  _planCache.set(normalized, { value: best, expiresAt: Date.now() + 60_000 });
+  return best;
 }
 
 const app = express();
@@ -194,31 +240,32 @@ app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), (req,
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const { plan, email } = session.metadata || {};
-    if (email && plan) {
-      saveSub(email, {
-        plan,
-        stripeCustomerId:     session.customer,
-        stripeSubscriptionId: session.subscription,
-      });
+    const { plan, email, user_id: userId } = session.metadata || {};
+    if (email) _planCache.delete(String(email).toLowerCase());
+    if (supabaseAdmin && userId && plan) {
+      supabaseAdmin.auth.admin.updateUserById(userId, {
+        app_metadata: {
+          studio_plan: plan,
+          stripe_customer_id: session.customer || null,
+          stripe_subscription_id: session.subscription || null,
+        },
+      }).catch((err) => _captureError("stripe/webhook/user-metadata", err));
     }
   }
 
   if (event.type === "customer.subscription.deleted") {
     const sub = event.data.object;
-    const profilesDir = path.join(__dirname, "..", "profiles");
-    if (fs.existsSync(profilesDir)) {
-      for (const dir of fs.readdirSync(profilesDir)) {
-        const subPath = path.join(profilesDir, dir, "subscription.json");
-        if (!fs.existsSync(subPath)) continue;
-        try {
-          const data = JSON.parse(fs.readFileSync(subPath, "utf8"));
-          if (data.stripeSubscriptionId === sub.id) {
-            saveSub(dir, { ...data, plan: "free", stripeSubscriptionId: null });
-            break;
-          }
-        } catch {}
-      }
+    const userId = sub.metadata?.user_id;
+    const email = sub.metadata?.email;
+    if (email) _planCache.delete(String(email).toLowerCase());
+    if (supabaseAdmin && userId) {
+      supabaseAdmin.auth.admin.updateUserById(userId, {
+        app_metadata: {
+          studio_plan: "free",
+          stripe_customer_id: sub.customer || null,
+          stripe_subscription_id: null,
+        },
+      }).catch((err) => _captureError("stripe/webhook/subscription-deleted", err));
     }
   }
 
@@ -280,14 +327,7 @@ app.use((req, res, next) => {
 
 app.use(globalLimit);
 
-// Block direct access to dashboard.html for non-local callers before static middleware
-app.use((req, res, next) => {
-  if (req.path === "/dashboard.html" && !isLocalRequest(req)) {
-    return res.status(401).send("Sign in required.");
-  }
-  next();
-});
-
+// Dashboard contains browser-local usage data only; it does not expose server-side data.
 app.use(express.static(path.join(__dirname, "public")));
 
 const OPENROUTER_BASE = "https://openrouter.ai/api/v1/chat/completions";
@@ -1086,12 +1126,15 @@ app.get("/api/computer/sessions", (req, res) => {
 });
 
 // ── Auth routes ──────────────────────────────────────────────────────────────
-app.get("/api/auth/me", requireAuth, (req, res) => {
+app.get("/api/auth/me", requireAuth, async (req, res) => {
   const email = req.user.email || "";
-  const isSuperAdmin = _CREATOR_EMAILS.has(email.toLowerCase());
-  if (isSuperAdmin) return res.json({ user: req.user, plan: "creator" });
-  const sub = loadSub(email);
-  res.json({ user: req.user, plan: sub?.plan || "free", sub: sub || null });
+  try {
+    const resolved = await resolvePlanForEmail(email);
+    res.json({ user: req.user, ...resolved });
+  } catch (err) {
+    _captureError("auth/me", err);
+    res.status(503).json({ error: "Could not verify account plan" });
+  }
 });
 
 // ── Backstage Pass — code redemption, no account needed ──────────────────────
@@ -1131,113 +1174,155 @@ app.post("/api/code/redeem", passLimit, express.json({ limit: "2kb" }), (req, re
              note: "Enjoy the show." });
 });
 
-// ── Stage Beta — capped seats, server-enforced ───────────────────────────────
-// Studio Stage Beta is limited to BETA_MAX_SEATS testers (default 10). Seats
-// are stored in a JSON file next to the server; on ephemeral hosts set
-// BETA_SEATS_PATH to a persistent volume (or swap for a Supabase table).
-const BETA_MAX_SEATS  = Math.max(1, parseInt(process.env.BETA_MAX_SEATS || "10", 10));
-const BETA_SEATS_PATH = process.env.BETA_SEATS_PATH || path.join(__dirname, "beta_seats.json");
+// ── Stage Beta — capped seats, durable on hosted deployments ────────────────
+const BETA_MAX_SEATS = Math.max(1, parseInt(process.env.BETA_MAX_SEATS || "10", 10));
+const _localBetaSeats = new Map();
 
-function loadBetaSeats() {
+async function listBetaSeats() {
+  if (!supabaseAdmin) return Array.from(_localBetaSeats.values());
+  const seats = [];
+  let page = 1;
+  for (;;) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    const users = data?.users || [];
+    for (const user of users) {
+      if (user.app_metadata?.studio_beta === true) {
+        seats.push({ id: user.id, email: user.email || "", joined_at: user.app_metadata?.studio_beta_joined_at || null });
+      }
+    }
+    if (users.length < 1000) break;
+    page++;
+  }
+  return seats;
+}
+
+async function setBetaSeat(user, enabled) {
+  if (!supabaseAdmin) {
+    if (enabled) _localBetaSeats.set(user.id, { id: user.id, email: user.email || "", joined_at: new Date().toISOString() });
+    else _localBetaSeats.delete(user.id);
+    return;
+  }
+  const nextMeta = {
+    ...(user.app_metadata || {}),
+    studio_beta: enabled,
+    studio_beta_joined_at: enabled ? (user.app_metadata?.studio_beta_joined_at || new Date().toISOString()) : null,
+  };
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, { app_metadata: nextMeta });
+  if (error) throw error;
+}
+
+app.get("/api/beta/status", requireAuth, async (req, res) => {
   try {
-    const data = JSON.parse(fs.readFileSync(BETA_SEATS_PATH, "utf-8"));
-    return Array.isArray(data) ? data : [];
-  } catch { return []; }
-}
-function saveBetaSeats(seats) {
-  fs.writeFileSync(BETA_SEATS_PATH, JSON.stringify(seats, null, 2));
-}
-
-app.get("/api/beta/status", requireAuth, (req, res) => {
-  const seats = loadBetaSeats();
-  res.json({
-    seats: seats.length,
-    max: BETA_MAX_SEATS,
-    joined: seats.some(s => s.id === req.user.id),
-  });
+    const seats = await listBetaSeats();
+    res.json({
+      seats: seats.length,
+      max: BETA_MAX_SEATS,
+      joined: seats.some((seat) => seat.id === req.user.id),
+    });
+  } catch (err) {
+    _captureError("beta/status", err);
+    res.status(503).json({ error: "Beta seat service unavailable" });
+  }
 });
 
-app.post("/api/beta/join", requireAuth, (req, res) => {
-  const seats = loadBetaSeats();
-  if (seats.some(s => s.id === req.user.id)) {
-    return res.json({ ok: true, joined: true, seats: seats.length, max: BETA_MAX_SEATS });
+app.post("/api/beta/join", requireAuth, async (req, res) => {
+  try {
+    const seats = await listBetaSeats();
+    if (seats.some((seat) => seat.id === req.user.id)) {
+      return res.json({ ok: true, joined: true, seats: seats.length, max: BETA_MAX_SEATS });
+    }
+    if (seats.length >= BETA_MAX_SEATS) {
+      return res.status(403).json({ error: "Stage Beta is full", seats: seats.length, max: BETA_MAX_SEATS });
+    }
+    await setBetaSeat(req.user, true);
+    res.json({ ok: true, joined: true, seats: seats.length + 1, max: BETA_MAX_SEATS });
+  } catch (err) {
+    _captureError("beta/join", err);
+    res.status(503).json({ error: "Could not reserve a beta seat" });
   }
-  if (seats.length >= BETA_MAX_SEATS) {
-    return res.status(403).json({ error: "Stage Beta is full", seats: seats.length, max: BETA_MAX_SEATS });
-  }
-  seats.push({ id: req.user.id, email: req.user.email || "", joined_at: new Date().toISOString() });
-  saveBetaSeats(seats);
-  res.json({ ok: true, joined: true, seats: seats.length, max: BETA_MAX_SEATS });
 });
 
-app.post("/api/beta/leave", requireAuth, (req, res) => {
-  const seats = loadBetaSeats().filter(s => s.id !== req.user.id);
-  saveBetaSeats(seats);
-  res.json({ ok: true, joined: false, seats: seats.length, max: BETA_MAX_SEATS });
+app.post("/api/beta/leave", requireAuth, async (req, res) => {
+  try {
+    await setBetaSeat(req.user, false);
+    const seats = await listBetaSeats();
+    res.json({ ok: true, joined: false, seats: seats.length, max: BETA_MAX_SEATS });
+  } catch (err) {
+    _captureError("beta/leave", err);
+    res.status(503).json({ error: "Could not release beta seat" });
+  }
 });
 
 // ── Stripe Checkout ──────────────────────────────────────────────────────────
 app.post("/api/stripe/create-checkout", requireAuth, async (req, res) => {
-  const { plan } = req.body || {};
+  const { plan, billing = "monthly" } = req.body || {};
   const email = req.user.email;
   if (!plan || !email) return res.status(400).json({ error: "plan required" });
-  const priceId = STRIPE_PRICES[plan];
-  if (!priceId) return res.status(400).json({ error: "Unknown plan" });
-  if (!process.env.STRIPE_SECRET_KEY) return res.status(500).json({ error: "Stripe not configured" });
+  if (!PLAN_ORDER.hasOwnProperty(plan) || ["free","team","enterprise","creator"].includes(plan)) {
+    return res.status(400).json({ error: "Unknown plan" });
+  }
+  if (!["monthly", "annual"].includes(billing)) {
+    return res.status(400).json({ error: "billing must be monthly or annual" });
+  }
+  if (!stripe) return res.status(503).json({ error: "Billing not configured" });
+
+  let lineItem;
+  if (billing === "monthly") {
+    const priceId = STRIPE_PRICES[plan];
+    if (!priceId) return res.status(503).json({ error: `Monthly Stripe price is not configured for ${plan}` });
+    lineItem = { price: priceId, quantity: 1 };
+  } else {
+    const annualUsd = ANNUAL_PLAN_USD[plan];
+    if (!annualUsd) return res.status(400).json({ error: "Annual billing unavailable for this plan" });
+    lineItem = {
+      price_data: {
+        currency: "usd",
+        unit_amount: annualUsd * 100,
+        recurring: { interval: "year" },
+        product_data: { name: PLAN_LABELS[plan] || `Studio ${plan}` },
+      },
+      quantity: 1,
+    };
+  }
 
   try {
     const host = `${req.protocol}://${req.get("host")}`;
-    if (!stripe) return res.status(503).json({ error: "Billing not configured" });
+    const metadata = { plan, email, billing, user_id: req.user.id };
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
-      mode:                 "subscription",
-      customer_email:       email,
-      line_items:           [{ price: priceId, quantity: 1 }],
-      success_url:          `${host}/pricing.html?success=1&plan=${plan}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:           `${host}/pricing.html?canceled=1`,
-      metadata:             { plan, email },
+      mode: "subscription",
+      customer_email: email,
+      client_reference_id: req.user.id,
+      line_items: [lineItem],
+      success_url: `${host}/pricing.html?success=1&plan=${encodeURIComponent(plan)}&billing=${billing}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${host}/pricing.html?canceled=1`,
+      metadata,
+      subscription_data: { metadata },
     });
     res.json({ url: session.url });
   } catch (err) {
+    _captureError("stripe/create-checkout", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 const _CREATOR_EMAILS = new Set(["applaudeai@gmail.com", "nifemifoxx@gmail.com"]);
 
-app.get("/api/stripe/plan", async (req, res) => {
-  const { email } = req.query;
-  if (!email) return res.status(400).json({ error: "email required" });
-
-  // Non-local callers must authenticate and can only check their own email
-  if (!isLocalRequest(req)) {
-    const token = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
-    if (!token) return res.status(401).json({ error: "Authentication required" });
-    if (!supabaseAdmin) return res.status(503).json({ error: "Auth not configured" });
-    const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user) return res.status(401).json({ error: "Invalid session" });
-    if (data.user.email?.toLowerCase() !== email.toLowerCase().trim()) {
-      return res.status(403).json({ error: "Forbidden — can only check your own plan" });
-    }
+app.get("/api/stripe/plan", requireAuth, async (req, res) => {
+  const email = req.user.email || "";
+  try {
+    const resolved = await resolvePlanForEmail(email);
+    res.json(resolved);
+  } catch (err) {
+    _captureError("stripe/plan", err);
+    res.status(503).json({ error: "Could not verify subscription" });
   }
-
-  if (_CREATOR_EMAILS.has(email.toLowerCase().trim())) {
-    return res.json({ plan: "creator", sub: { plan: "creator", credits: 1000000, updatedAt: new Date().toISOString() } });
-  }
-  const sub = loadSub(email);
-  res.json({ plan: sub?.plan || "free", sub: sub || null });
 });
 
 // ── Dedicated clean URLs ─────────────────────────────────────────────────────
-// /dashboard requires local access or valid Supabase JWT (usage data is private)
-app.get("/dashboard", async (req, res) => {
-  if (isLocalRequest(req)) return res.sendFile(path.join(__dirname, "public", "dashboard.html"));
-  // Remote: require auth token
-  const token = (req.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
-  if (!token) return res.status(401).send("Sign in required to view the dashboard.");
-  if (!supabaseAdmin) return res.status(503).send("Auth not configured.");
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user) return res.status(401).send("Invalid session — please sign in again.");
+// Dashboard is browser-local data, so normal navigation must not require an Authorization header.
+app.get("/dashboard", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "dashboard.html"));
 });
 app.get("/testing", (_req, res) => res.sendFile(path.join(__dirname, "public", "studiotesting.html")));

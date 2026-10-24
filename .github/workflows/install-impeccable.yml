@@ -1,0 +1,37 @@
+name: Install Impeccable
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/install-impeccable.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Impeccable for Claude and Codex
+        run: npx -y impeccable install --providers=claude,codex --scope=project --force
+
+      - name: Commit project-scoped skill and hooks
+        run: |
+          git config user.name "Studio CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Impeccable already current."
+            exit 0
+          fi
+          git commit -m "chore: install Impeccable design skill"
+          git push origin HEAD:main

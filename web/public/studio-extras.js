@@ -161,6 +161,116 @@
     };
   };
 
+  // ── Connections hub ─────────────────────────────────────────────────────────
+  var CONNECTOR_MARKS = { github: "GH", google: "G", vercel: "V" };
+
+  function connectorStatusText(state) {
+    if (!state.configured) return ["Needs setup", "missing"];
+    if (state.connected === true) return ["Connected", "connected"];
+    if (state.connected === false) return ["Ready", "ready"];
+    return ["Checking…", ""];
+  }
+
+  function renderConnectorHub(providers) {
+    var stack = document.getElementById("connectorStack");
+    if (!stack) return;
+    if (!providers || !providers.length) {
+      stack.innerHTML = '<div class="connector-skeleton">No connectors are configured yet.</div>';
+      return;
+    }
+    stack.innerHTML = providers.map(function (p) {
+      var st = connectorStatusText(p);
+      var action = !p.configured
+        ? '<button class="connector-action" disabled>Needs setup</button>'
+        : p.connected
+          ? '<button class="connector-action" onclick="loadConnectorHub(true)">Refresh</button>'
+          : '<button class="connector-action" onclick="connectStudioProvider(\'' + p.id + '\')">Connect</button>';
+      return '<div class="connector-card" data-provider="' + p.id + '">'
+        + '<div class="connector-mark">' + (CONNECTOR_MARKS[p.id] || '•') + '</div>'
+        + '<div class="connector-main"><div class="connector-name">' + escHtml(p.label)
+        + '<span class="connector-state ' + st[1] + '">' + st[0] + '</span></div>'
+        + '<div class="connector-desc">' + escHtml(p.description || '') + '</div></div>'
+        + action + '</div>';
+    }).join("");
+  }
+
+  function escHtml(value) {
+    return String(value == null ? "" : value).replace(/[&<>"]/g, function (ch) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch];
+    });
+  }
+
+  window.loadConnectorHub = async function (refresh) {
+    var stack = document.getElementById("connectorStack");
+    if (!stack) return;
+    var token = stageToken();
+    if (!token) {
+      stack.innerHTML = '<div class="connector-skeleton">Sign in to connect GitHub, Gmail, or Vercel. <a href="/login.html?next=%2Findex.html" style="color:var(--acc)">Sign in →</a></div>';
+      return;
+    }
+    if (!refresh && stack.dataset.loaded === "1") return;
+    stack.innerHTML = '<div class="connector-skeleton">Checking connections…</div>';
+    try {
+      var base = await fetch("/api/connectors", { headers: { Authorization: "Bearer " + token } });
+      if (!base.ok) throw new Error("Could not load connectors");
+      var data = await base.json();
+      var providers = data.providers || [];
+      renderConnectorHub(providers);
+      stack.dataset.loaded = "1";
+
+      await Promise.all(providers.filter(function (p) { return p.configured; }).map(async function (p) {
+        try {
+          var response = await fetch("/api/connectors/" + encodeURIComponent(p.id) + "/status", {
+            headers: { Authorization: "Bearer " + token }
+          });
+          var status = await response.json();
+          p.connected = response.ok ? !!status.connected : false;
+        } catch (_) { p.connected = false; }
+      }));
+      renderConnectorHub(providers);
+    } catch (err) {
+      stack.innerHTML = '<div class="connector-skeleton">Connections are unavailable right now.</div>';
+    }
+  };
+
+  window.connectStudioProvider = async function (provider) {
+    var token = stageToken();
+    if (!token) {
+      sessionStorage.setItem("studio_login_next", "/index.html");
+      location.href = "/login.html?next=%2Findex.html";
+      return;
+    }
+    try {
+      var response = await fetch("/api/connectors/" + encodeURIComponent(provider) + "/authorize", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }
+      });
+      var data = await response.json().catch(function () { return {}; });
+      if (!response.ok) {
+        toastMsg(data.error || "Could not start connector authorization.");
+        return;
+      }
+      if (data.url) location.href = data.url;
+    } catch (_) {
+      toastMsg("Could not start connector authorization.");
+    }
+  };
+
+  function connectorCallbackNotice() {
+    try {
+      var params = new URLSearchParams(location.search);
+      var provider = params.get("connector");
+      if (!provider) return;
+      var clean = new URL(location.href);
+      clean.searchParams.delete("connector");
+      history.replaceState({}, "", clean.pathname + clean.search + clean.hash);
+      setTimeout(function () {
+        toastMsg((provider === "google" ? "Google / Gmail" : provider.charAt(0).toUpperCase() + provider.slice(1)) + " authorization returned to Studio.");
+        window.loadConnectorHub(true);
+      }, 250);
+    } catch (_) {}
+  }
+
   // ── build dock + shortcuts modal ────────────────────────────────────────────
   function build() {
     if (document.getElementById("qdock")) return;
@@ -217,6 +327,9 @@
     } catch (e) {}
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", build);
-  else build();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { build(); connectorCallbackNotice(); });
+  } else {
+    build(); connectorCallbackNotice();
+  }
 })();

@@ -31,6 +31,19 @@
     if (html != null) e.innerHTML = html;
     return e;
   }
+  function stageToken() {
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        if (key && key.indexOf("sb-") === 0 && key.endsWith("-auth-token")) {
+          var value = JSON.parse(localStorage.getItem(key));
+          return (value && (value.access_token || (value.currentSession && value.currentSession.access_token))) || null;
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
   function toastMsg(m) { try { if (window.toast) return window.toast(m); } catch (e) {} }
 
   // ── conversation helpers (from localStorage) ────────────────────────────────
@@ -127,12 +140,24 @@
     ov.querySelector(".qfb-send").onclick = function () {
       var msg = ov.querySelector("#qfbm").value.trim();
       if (!msg) { ov.querySelector("#qfbe").textContent = "Please write something first."; return; }
-      var email = ""; try { email = JSON.parse(localStorage.getItem("studioSettings") || "{}").email || ""; } catch (e) {}
-      fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: msg, kind: kind, email: email, page: location.pathname }) })
-        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      var token = stageToken();
+      var headers = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = "Bearer " + token;
+      fetch("/api/feedback", { method: "POST", headers: headers,
+        body: JSON.stringify({ message: msg, kind: kind, page: location.pathname }) })
+        .then(function (r) {
+          if (r.ok) return r.json();
+          if (r.status === 401) throw new Error("signin");
+          throw new Error("http");
+        })
         .then(function () { ov.remove(); toastMsg("💬 Thanks — feedback sent!"); })
-        .catch(function () { ov.querySelector("#qfbe").textContent = "Couldn't send (is the server running?)."; });
+        .catch(function (err) {
+          if (err && err.message === "signin") {
+            ov.querySelector("#qfbe").innerHTML = 'Sign in to send hosted feedback. <a href="/login.html?next=%2Findex.html" style="color:inherit;text-decoration:underline">Sign in</a>';
+          } else {
+            ov.querySelector("#qfbe").textContent = "Couldn't send feedback right now.";
+          }
+        });
     };
   };
 
@@ -179,14 +204,12 @@
       cin.addEventListener("input", upd); upd();
     }
 
-    // Inbox unread badge (internal testers only)
+    // Inbox unread badge — server decides whether the signed-in user is an admin.
     try {
-      var allow = ["jasminefoxx799@gmail.com", "studio@foxxia.dev"];
-      var email = (localStorage.getItem("studioEmail") || "").trim().toLowerCase();
-      var internal = localStorage.getItem("zeroAccess") === "1" || allow.indexOf(email) >= 0;
+      var token = stageToken();
       var badge = document.getElementById("inboxBadge");
-      if (internal && badge) {
-        fetch("/api/feedback", { headers: { "X-Internal": "ZERO-2026" } })
+      if (token && badge) {
+        fetch("/api/feedback", { headers: { "Authorization": "Bearer " + token } })
           .then(function (r) { return r.ok ? r.json() : null; })
           .then(function (d) { if (d && d.unread > 0) { badge.textContent = d.unread; badge.style.display = "inline-flex"; } })
           .catch(function () {});

@@ -35,3 +35,25 @@ jobs:
       - name: Validate Termux setup script syntax
         if: runner.os == 'Linux'
         run: bash -n termux_setup.sh
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Stage dependencies
+        run: npm install --prefix web --ignore-scripts
+
+      - name: Validate Stage JavaScript
+        run: |
+          node --check web/server.js
+          node --check web/public/studio-extras.js
+          node --check web/public/service-worker.js
+          node --check web/public/extension/background.js
+          node --check web/public/extension/popup.js
+
+      - name: Run Stage production smoke checks
+        run: node web/smoke-test.mjs
+
+      - name: Audit Stage production dependencies
+        run: npm audit --omit=dev --prefix web

@@ -1,6 +1,6 @@
 name: Deploy Studio Stage
 
-# Deploys web/ to the existing Vercel project ("web", foxxed909's projects)
+# Deploys web/ to the production Vercel project ("studio-cli-pro", foxxed909's projects)
 # on every push to main that touches web/. Requires ONE repo secret:
 #   VERCEL_TOKEN — create at https://vercel.com/account/tokens
 # Org and project IDs are not secrets; they are pinned below.
@@ -13,7 +13,7 @@ on:
 
 env:
   VERCEL_ORG_ID: team_nnj5MNKwGpt3MY6YnuRulsMt
-  VERCEL_PROJECT_ID: prj_WpfiOqHI8bb3eco4jCzooal2hSRW
+  VERCEL_PROJECT_ID: prj_c0s24Rq3Vt30OIVv452CUBnWk8fg
 
 jobs:
   deploy:

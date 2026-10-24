@@ -1502,6 +1502,9 @@ async function feedbackUser(req) {
 
 async function appendUserFeedback(user, item) {
   if (user.local || !supabaseAdmin) {
+    if (process.env.VERCEL && !user.local) {
+      throw new Error("Durable feedback storage requires SUPABASE_SERVICE_KEY");
+    }
     FEEDBACK.push(item);
     if (FEEDBACK.length > 200) FEEDBACK.splice(0, FEEDBACK.length - 200);
     return;
@@ -1560,6 +1563,7 @@ app.post("/api/feedback", async (req, res) => {
 app.get("/api/feedback", requireAdmin, async (_req, res) => {
   try {
     if (!supabaseAdmin) {
+      if (process.env.VERCEL) return res.status(503).json({ error: "Durable feedback storage is not configured" });
       return res.json({ items: FEEDBACK.slice().reverse(), count: FEEDBACK.length, unread: FEEDBACK.filter((f) => !f.read).length });
     }
     const users = await listAllAuthUsers();
@@ -1578,6 +1582,7 @@ app.post("/api/feedback/read", requireAdmin, async (req, res) => {
   const { id, all } = req.body || {};
   try {
     if (!supabaseAdmin) {
+      if (process.env.VERCEL) return res.status(503).json({ error: "Durable feedback storage is not configured" });
       if (all) FEEDBACK.forEach((f) => (f.read = true));
       else {
         const item = FEEDBACK.find((f) => f.id === id);

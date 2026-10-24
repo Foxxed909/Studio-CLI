@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="theme-color" content="#131211"/>
+<title>Studio — Offline</title>
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{display:grid;place-items:center;background:#131211;color:#eee7e2;font:16px/1.55 system-ui,-apple-system,sans-serif;padding:24px}
+main{width:min(520px,100%);border:1px solid #35302d;border-radius:18px;padding:26px;background:#191715;box-shadow:0 14px 40px rgba(0,0,0,.3)}
+mark{background:#d97757;color:#131211;border-radius:7px;padding:3px 7px;font-weight:800}
+h1{font-size:24px;letter-spacing:-.03em;margin:16px 0 8px}
+p{color:#b8afa9;margin:0 0 20px}
+button{min-height:44px;border:0;border-radius:11px;background:#d97757;color:#131211;font-weight:750;padding:0 16px;font:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #f3aa8f;outline-offset:3px}
+</style>
+</head>
+<body>
+<main><mark>STUDIO</mark><h1>You’re offline.</h1><p>Your local conversations stay on this device. Reconnect to send a model request.</p><button onclick="location.reload()">Try again</button></main>
+</body>
+</html>

@@ -62,7 +62,7 @@ jobs:
           vcurl() {
             local path="$1"
             local out="$2"
-            vercel curl "$path" --deployment "$DEPLOYMENT_URL" --token="$VERCEL_TOKEN" --               --silent --show-error --output "$out"
+            vercel curl "$path" --deployment "$DEPLOYMENT_URL" -- --silent --show-error --output "$out"
           }
 
           vcurl "/api/health" /tmp/health.json

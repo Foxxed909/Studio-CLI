@@ -42,12 +42,21 @@ jobs:
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to production
-        run: vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }})"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed: $url"
 
       - name: Smoke-test production
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
         run: |
           node <<'NODE'
-          const base = "https://studio-cli-pro.vercel.app";
+          const base = process.env.DEPLOYMENT_URL;
+          if (!base || !base.startsWith("https://")) throw new Error("Missing deployment URL");
           const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
           async function expect(path, status, check) {

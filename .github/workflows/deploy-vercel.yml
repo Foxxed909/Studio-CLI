@@ -53,45 +53,38 @@ jobs:
       - name: Smoke-test production
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
         run: |
-          node <<'NODE'
-          const base = process.env.DEPLOYMENT_URL;
-          if (!base || !base.startsWith("https://")) throw new Error("Missing deployment URL");
-          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          set -euo pipefail
+          test -n "$DEPLOYMENT_URL"
 
-          async function expect(path, status, check) {
-            let last = "no response";
-            for (let attempt = 1; attempt <= 6; attempt++) {
-              try {
-                const response = await fetch(base + path, {
-                  cache: "no-store",
-                  redirect: "follow",
-                  signal: AbortSignal.timeout(20_000),
-                });
-                const body = await response.text();
-                last = `HTTP ${response.status}: ${body.slice(0, 300)}`;
-                if (response.status === status) {
-                  if (check) check(body);
-                  console.log(`✓ ${path} -> ${status}`);
-                  return;
-                }
-              } catch (error) {
-                last = error?.message || String(error);
-              }
-              await sleep(2_000);
-            }
-            throw new Error(`Expected HTTP ${status} from ${path}; last result: ${last}`);
+          vcurl() {
+            local path="$1"
+            local out="$2"
+            vercel curl "$path" --deployment "$DEPLOYMENT_URL" --token="$VERCEL_TOKEN" --               --silent --show-error --output "$out"
           }
 
-          await expect("/api/health", 200, (body) => {
-            const data = JSON.parse(body);
-            if (data.ok !== true) throw new Error("health response did not contain ok=true");
-          });
-          await expect("/", 200);
-          await expect("/dashboard.html", 200);
-          await expect("/pricing.html", 200);
-          await expect("/api/community/history", 200);
-          await expect("/api/stripe/plan", 401);
-          await expect("/api/feedback", 401);
-          await expect("/api/computer/sessions", 403);
-          NODE
+          vcurl "/api/health" /tmp/health.json
+          node -e 'const d=require(process.argv[1]); if(d.ok!==true) process.exit(1)' /tmp/health.json
+
+          vcurl "/" /tmp/root.html
+          vcurl "/dashboard.html" /tmp/dashboard.html
+          vcurl "/pricing.html" /tmp/pricing.html
+          test -s /tmp/root.html
+          test -s /tmp/dashboard.html
+          test -s /tmp/pricing.html
+
+          vcurl "/api/community/history" /tmp/community.json
+          node -e 'const d=require(process.argv[1]); if(!Array.isArray(d.messages)) process.exit(1)' /tmp/community.json
+
+          vcurl "/api/stripe/plan" /tmp/plan.json
+          node -e 'const d=require(process.argv[1]); if(d.error!=="Not authenticated") process.exit(1)' /tmp/plan.json
+
+          vcurl "/api/feedback" /tmp/feedback.json
+          node -e 'const d=require(process.argv[1]); if(d.error!=="Not authenticated") process.exit(1)' /tmp/feedback.json
+
+          vcurl "/api/computer/sessions" /tmp/computer.json
+          node -e 'const d=require(process.argv[1]); if(d.error!=="Forbidden") process.exit(1)' /tmp/computer.json
+
+          echo "✓ production smoke checks passed for $DEPLOYMENT_URL"

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'studio-stage-v1';
+const CACHE_NAME = 'studio-stage-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
